@@ -145,7 +145,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
 
     match format {
         "json" => {
-            let report = slices::reporter::JsonReport::from_audit(&result, &snapshot.id);
+            let report = slices::reporter::JsonReport::from_audit(&modules, &result, &snapshot.id);
             let content = report.to_json()?;
             let file_path = report_dir.join("report.json");
             std::fs::write(&file_path, &content)?;
