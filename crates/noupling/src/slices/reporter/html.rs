@@ -430,15 +430,10 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 } else {
                     "<span class=\"circular\">Circular</span>".to_string()
                 };
-                let dir_note = v
-                    .circular_direction
-                    .as_ref()
-                    .map(|d| format!("<br><small class=\"circular-note\">{}</small>", d))
-                    .unwrap_or_default();
                 (
                     from_dir.to_string(),
                     to_dir.to_string(),
-                    format!("{}{}", cycle_display, dir_note),
+                    cycle_display,
                 )
             } else {
                 // For coupling: show file names, type is "Coupling"
