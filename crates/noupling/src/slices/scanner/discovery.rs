@@ -41,14 +41,19 @@ fn walk_directory(
         let rel_path = path.strip_prefix(root).unwrap_or(&path);
         let rel_str = rel_path.to_string_lossy().to_string();
 
-        // Check if this path matches any ignore pattern
-        if ignore_set.is_match(&rel_str) {
-            continue;
-        }
-
         if path.is_dir() {
+            // Check both "build" and "build/x" forms to match patterns like **/build/**
+            let with_trailing = format!("{}/x", rel_str);
+            if ignore_set.is_match(&rel_str) || ignore_set.is_match(&with_trailing) {
+                continue;
+            }
             walk_directory(&path, snapshot_id, root, modules, settings, ignore_set)?;
         } else {
+            // Check if this file matches any ignore pattern
+            if ignore_set.is_match(&rel_str) {
+                continue;
+            }
+
             let is_source = path
                 .extension()
                 .and_then(|e| e.to_str())
