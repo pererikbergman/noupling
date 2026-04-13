@@ -1,7 +1,63 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "noupling", about = "Architecture auditing tool")]
+#[command(
+    name = "noupling",
+    about = "Architecture auditing CLI that detects coupling violations and circular dependencies in source code.",
+    long_about = "\
+noupling scans source code projects, extracts import/dependency relationships \
+using Tree-sitter, and analyzes the architectural health by detecting:
+
+  - Coupling violations: sibling modules that depend on each other
+  - Circular dependencies: dependency chains that form loops (A -> B -> C -> A)
+
+SUPPORTED LANGUAGES:
+  C# (.cs), Go (.go), Haskell (.hs), Java (.java), JavaScript (.js, .jsx),
+  Kotlin (.kt, .kts), Python (.py), Rust (.rs), Swift (.swift),
+  TypeScript (.ts, .tsx), Zig (.zig)
+
+TYPICAL WORKFLOW:
+  1. noupling scan <PATH>                   Scan project and store results
+  2. noupling audit <PATH>                  View health score and violations
+  3. noupling report <PATH> --format html   Generate navigable HTML report
+
+DATA STORAGE:
+  All data is stored in <PATH>/.noupling/ including:
+  - history.db       SQLite database with snapshots, modules, and dependencies
+  - settings.json    Configurable thresholds and ignore patterns (auto-created)
+  - report.*         Generated report files
+
+CONFIGURATION (.noupling/settings.json):
+  {
+    \"thresholds\": {
+      \"score_green\": 90.0,       // Score >= this is green (healthy)
+      \"score_yellow\": 70.0,      // Score >= this is yellow (warning)
+      \"critical_severity\": 0.5,  // Violations above this are critical
+      \"minimum_severity\": 0.2    // Hide violations below this threshold
+    },
+    \"ignore_patterns\": [          // Glob patterns (gitignore-style)
+      \"**/build/**\",
+      \"**/generated/**\"
+    ],
+    \"source_extensions\": [\"kt\", \"java\", \"ts\", \"rs\"]  // File types to scan
+  }
+
+HEALTH SCORE:
+  Score = 100 * (1 - sum_of_severities / total_modules)
+  Coupling severity = 1 / (depth + 1)    (deeper = less severe)
+  Circular severity = modules / (depth + 1) / 10   (always significant)
+
+EXAMPLES:
+  noupling init .                           Create default settings.json
+  noupling scan /path/to/android/app        Scan an Android project
+  noupling audit /path/to/android/app       Show health score and violations
+  noupling report . --format json           JSON report (comprehensive)
+  noupling report . --format xml            XML report (comprehensive)
+  noupling report . --format md             Multi-file Markdown report
+  noupling report . --format html           Interactive HTML report with drill-down
+  noupling report . --format sonar          SonarCloud generic issue import format",
+    version
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -9,32 +65,48 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Initialize .noupling/settings.json with default configuration
+    /// Create .noupling/settings.json with default thresholds, ignore patterns, and extensions.
+    /// Settings are auto-created on first run of any command, but init lets you customize before scanning.
     Init {
-        /// Path to the project root (defaults to current directory)
-        #[arg(default_value = ".")]
-        path: String,
-    },
-    /// Scan a project directory for dependencies
-    Scan {
         /// Path to the project root
-        path: String,
-    },
-    /// Audit the dependency graph for coupling violations
-    Audit {
-        /// Path to the project root (defaults to current directory)
         #[arg(default_value = ".")]
         path: String,
-        /// Specific snapshot ID to audit (defaults to latest)
+    },
+
+    /// Scan a project directory: discover source files, parse imports via Tree-sitter,
+    /// resolve dependencies, and store results in .noupling/history.db.
+    /// Each scan creates a new snapshot with a unique ID.
+    Scan {
+        /// Path to the project root to scan
+        path: String,
+    },
+
+    /// Run the coupling and circular dependency analysis on the latest (or specified) snapshot.
+    /// Displays health score, violation count, and detailed violation list to stdout.
+    Audit {
+        /// Path to the project root (reads from .noupling/history.db)
+        #[arg(default_value = ".")]
+        path: String,
+
+        /// Audit a specific snapshot by ID instead of the latest one
         #[arg(long)]
         snapshot: Option<String>,
     },
-    /// Generate a report from the latest audit
+
+    /// Generate a report file from the latest snapshot's audit results.
+    /// The report is saved to .noupling/ (or .noupling/report/ for html/md).
     Report {
-        /// Path to the project root (defaults to current directory)
+        /// Path to the project root (reads from .noupling/history.db)
         #[arg(default_value = ".")]
         path: String,
-        /// Output format: json or md
+
+        /// Output format: json, xml, md, html, or sonar.
+        ///
+        /// json  - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
+        /// xml   - Same structure as JSON but in XML format.
+        /// md    - Multi-file Markdown with navigable README.md per directory.
+        /// html  - Interactive static HTML with drill-down navigation and color-coded scores.
+        /// sonar - SonarCloud/SonarQube generic issue import format (sonar.externalIssuesReportPaths).
         #[arg(long)]
         format: String,
     },
