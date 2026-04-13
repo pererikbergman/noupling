@@ -16,17 +16,17 @@ Declare all required dependencies in the workspace root `Cargo.toml` and referen
 
 ### Acceptance Criteria
 
-- [ ] clap (with derive feature) added for CLI parsing.
-- [ ] tree-sitter and tree-sitter-rust added for AST parsing.
-- [ ] rusqlite (with bundled feature) added for SQLite.
-- [ ] rayon added for parallelism.
-- [ ] fxhash added for efficient hashing.
-- [ ] uuid (with v4 feature) added for ID generation.
-- [ ] serde_json added for JSON output.
-- [ ] `cargo build` compiles with all dependencies resolved.
+- [x] clap (with derive feature) added for CLI parsing.
+- [x] tree-sitter and tree-sitter-rust added for AST parsing.
+- [x] rusqlite (with bundled feature) added for SQLite.
+- [x] rayon added for parallelism.
+- [x] fxhash added for efficient hashing.
+- [x] uuid (with v4 feature) added for ID generation.
+- [x] serde_json added for JSON output.
+- [x] `cargo build` compiles with all dependencies resolved.
 
 ### Implementation Steps
 
-- [ ] 1. Add new dependencies to `[workspace.dependencies]` in root `Cargo.toml`.
-- [ ] 2. Reference them in `crates/noupling/Cargo.toml`.
-- [ ] 3. Verify `cargo build` succeeds.
+- [x] 1. Add new dependencies to `[workspace.dependencies]` in root `Cargo.toml`.
+- [x] 2. Reference them in `crates/noupling/Cargo.toml`.
+- [x] 3. Verify `cargo build` succeeds.

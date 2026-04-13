@@ -7,25 +7,30 @@ type: Knowledge
 
 ## Purpose
 
-A modular Rust workspace project using Cargo Workspaces, designed with agent-ready decoupling principles.
+**noupling** is a high-performance CLI tool that audits software architecture by quantifying coupling and cohesion through hierarchical dependency analysis.
 
 ## Domain
 
-General-purpose service architecture with a binary API application backed by shared business logic and common data types.
+Architecture auditing: scans source code, extracts import dependencies via Tree-sitter, builds a project tree, and computes coupling violations using bottom-up aggregation and top-down BFS.
 
-## Architectural Boundaries
+## Architectural Boundaries (Vertical Slices)
 
-| Crate | Type | Responsibility |
+| Module | Type | Responsibility |
 | :--- | :--- | :--- |
-| `api_app` | Binary | Primary HTTP service entry point, routing, and request handling |
-| `core_logic` | Library | Internal business logic, domain rules, and error definitions |
-| `shared_types` | Library | Common DTOs, models, and serialization structures |
+| `cli` | Module | Clap CLI argument parsing (scan, audit, report commands) |
+| `core` | Module | Shared domain types: Node, NodeType, Dependency, Snapshot |
+| `slices/scanner` | Slice | File discovery (Rayon) and Tree-sitter AST parsing |
+| `slices/storage` | Slice | SQLite persistence, schema migrations, repository patterns |
+| `slices/analyzer` | Slice | Bottom-up D_acc aggregation, top-down BFS coupling audit |
+| `slices/reporter` | Slice | JSON and Markdown report generation |
+| `utils` | Module | Error handling and logging utilities |
 
 ## Key Directories
 
-- `crates/`: All internal Rust crates (workspace members)
+- `crates/noupling/`: Single binary crate (vertical slice architecture)
 - `deploy/`: Dockerfile and docker-compose for containerization
-- `docs/`: Design documents, API specs, and product specifications
+- `docs/`: Design documents, specifications, epics, stories, roadmap
 - `scripts/`: Development and automation scripts
-- `tests/`: Integration and common test utilities
+- `tests/`: Integration tests and fixtures
+- `tasks/`: Backlog and completed task files
 - `.agent/`: Agent rules, skills, workflows, and knowledge base

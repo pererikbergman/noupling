@@ -16,11 +16,11 @@ Create the CLI argument structure so that `noupling --help` and all subcommand h
 
 ### Acceptance Criteria
 
-- [ ] `noupling scan <PATH>` accepts a path argument.
-- [ ] `noupling audit` works with optional `--snapshot <ID>`.
-- [ ] `noupling report --format <json|md>` accepts format flag.
-- [ ] `--help` works for root and all subcommands.
-- [ ] Subcommands print "Not yet implemented" placeholder messages.
+- [x] `noupling scan <PATH>` accepts a path argument.
+- [x] `noupling audit` works with optional `--snapshot <ID>`.
+- [x] `noupling report --format <json|md>` accepts format flag.
+- [x] `--help` works for root and all subcommands.
+- [x] Subcommands print "Not yet implemented" placeholder messages.
 
 ### TDD Strategy
 
@@ -30,7 +30,7 @@ Create the CLI argument structure so that `noupling --help` and all subcommand h
 
 ### Implementation Steps
 
-- [ ] 1. Write failing tests for CLI arg parsing.
-- [ ] 2. Define Cli, Commands enum, ScanArgs, AuditArgs, ReportArgs with clap derive.
-- [ ] 3. Wire main.rs to match on commands and print placeholders.
-- [ ] 4. Verify tests pass and `cargo run -- --help` works.
+- [x] 1. Write failing tests for CLI arg parsing.
+- [x] 2. Define Cli, Commands enum, ScanArgs, AuditArgs, ReportArgs with clap derive.
+- [x] 3. Wire main.rs to match on commands and print placeholders.
+- [x] 4. Verify tests pass and `cargo run -- --help` works.

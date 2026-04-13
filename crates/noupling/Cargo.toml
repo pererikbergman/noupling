@@ -9,3 +9,10 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+clap = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+rusqlite = { workspace = true }
+rayon = { workspace = true }
+fxhash = { workspace = true }
+uuid = { workspace = true }
