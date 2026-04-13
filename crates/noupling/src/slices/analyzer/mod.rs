@@ -343,7 +343,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         let first_dir = &cycle.dir_path[0];
         let last_target = &cycle.dir_path[cycle.dir_path.len() - 2]; // second-to-last (before closing)
         // Convert full paths to short names for the cycle display
-        let cycle_names: Vec<String> = cycle.dir_path.iter().map(|p| short_dir_name(p)).collect();
+        let cycle_names: Vec<String> = cycle.dir_path.iter().map(|p| p.clone()).collect();
         violations.push(CouplingViolation {
             dir_a: first_dir.clone(),
             dir_b: last_target.clone(),
