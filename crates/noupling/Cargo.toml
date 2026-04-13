@@ -16,3 +16,6 @@ rusqlite = { workspace = true }
 rayon = { workspace = true }
 fxhash = { workspace = true }
 uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
