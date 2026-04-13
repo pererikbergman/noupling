@@ -12,6 +12,7 @@ tracing = { workspace = true }
 clap = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-rust = { workspace = true }
+tree-sitter-kotlin-ng = { workspace = true }
 rusqlite = { workspace = true }
 rayon = { workspace = true }
 fxhash = { workspace = true }

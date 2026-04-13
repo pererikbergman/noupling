@@ -27,12 +27,14 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
         .par_iter()
         .filter_map(|module| {
             let rel_path = Path::new(&module.path);
-            if rel_path.extension().and_then(|e| e.to_str()) != Some("rs") {
-                return None;
-            }
+            let ext = rel_path.extension().and_then(|e| e.to_str()).unwrap_or("");
             let abs_path = root.join(rel_path);
             let source = std::fs::read_to_string(&abs_path).ok()?;
-            let imports = parse_rust_imports(&source);
+            let imports = match ext {
+                "rs" => parse_rust_imports(&source),
+                "kt" | "kts" => parser::parse_kotlin_imports(&source),
+                _ => return None,
+            };
             let deps: Vec<Dependency> = imports
                 .iter()
                 .filter_map(|entry| {
