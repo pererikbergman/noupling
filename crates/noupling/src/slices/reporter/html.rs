@@ -363,23 +363,21 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     let mut children_rows = String::new();
     for child_path in &dir.children_dirs {
         if let Some(child) = data.dirs.get(child_path) {
-            let rel_path = child_path
-                .strip_prefix(&format!("{}/", data.root_path))
-                .unwrap_or(child_path);
             let warning = if child.has_deep_violations || !child.violations_here.is_empty() {
                 "<span class=\"warning\" title=\"Contains violations\">&#9888;</span>"
             } else {
                 ""
             };
             let child_score_clr = score_color(child.score);
+            // Use relative link: child name + /index.html
             children_rows.push_str(&format!(
                 "<tr>
-                    <td><a href=\"/{}/index.html\" class=\"dir-link\">&#128193; {}</a> {}</td>
+                    <td><a href=\"{}/index.html\" class=\"dir-link\">&#128193; {}</a> {}</td>
                     <td class=\"center\">{}</td>
                     <td class=\"center\"><span class=\"score-badge\" style=\"background:{}\">{:.1}</span></td>
                     <td class=\"center\">{}</td>
                 </tr>\n",
-                rel_path,
+                child.name,
                 child.name,
                 warning,
                 child.module_count,
@@ -534,39 +532,42 @@ tr:hover {{ background: #f8fafc; }}
 }
 
 fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
-    let mut parts = Vec::new();
-    let mut path = std::path::Path::new(current_path);
-
-    loop {
-        let name = path
+    if current_path == root_path {
+        let name = std::path::Path::new(root_path)
             .file_name()
             .and_then(|f| f.to_str())
-            .unwrap_or("");
-        let path_str = path.to_string_lossy().to_string();
+            .unwrap_or("root");
+        return format!("<strong>{}</strong>", name);
+    }
 
-        if path_str == current_path {
-            parts.push(format!("<strong>{}</strong>", name));
-        } else if path_str.len() >= root_path.len() {
-            let rel = path_str
-                .strip_prefix(&format!("{}/", root_path))
-                .unwrap_or(&path_str);
-            if path_str == root_path {
-                parts.push(format!("<a href=\"/index.html\">{}</a>", name));
-            } else {
-                parts.push(format!("<a href=\"/{}/index.html\">{}</a>", rel, name));
-            }
-        }
+    // Calculate how many levels deep we are from root
+    let relative = current_path
+        .strip_prefix(&format!("{}/", root_path))
+        .unwrap_or(current_path);
+    let segments: Vec<&str> = relative.split('/').collect();
+    let depth = segments.len();
 
-        if path_str == root_path || path_str.len() <= root_path.len() {
-            break;
-        }
-        match path.parent() {
-            Some(p) => path = p,
-            None => break,
+    let mut parts = Vec::new();
+
+    // Root link: go up `depth` levels
+    let root_name = std::path::Path::new(root_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("root");
+    let up = "../".repeat(depth);
+    parts.push(format!("<a href=\"{}index.html\">{}</a>", up, root_name));
+
+    // Intermediate segments: each one fewer ../
+    for (i, seg) in segments.iter().enumerate() {
+        if i == segments.len() - 1 {
+            parts.push(format!("<strong>{}</strong>", seg));
+        } else {
+            let levels_up = depth - i - 1;
+            let up = "../".repeat(levels_up);
+            parts.push(format!("<a href=\"{}index.html\">{}</a>", up, seg));
         }
     }
 
-    parts.reverse();
     parts.join(" / ")
 }
 
