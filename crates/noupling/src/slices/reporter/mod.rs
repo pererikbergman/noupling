@@ -420,6 +420,119 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+pub fn format_sonar(result: &AuditResult) -> String {
+    let mut rules = Vec::new();
+    let mut issues = Vec::new();
+
+    // Define rules
+    rules.push(serde_json::json!({
+        "id": "noupling:coupling",
+        "name": "Coupling Violation",
+        "description": "A module has a dependency on a sibling module, creating coupling between independent architectural boundaries.",
+        "engineId": "noupling",
+        "cleanCodeAttribute": "MODULAR",
+        "impacts": [
+            { "softwareQuality": "MAINTAINABILITY", "severity": "MEDIUM" }
+        ]
+    }));
+
+    rules.push(serde_json::json!({
+        "id": "noupling:circular-dependency",
+        "name": "Circular Dependency",
+        "description": "A circular dependency chain exists between modules, creating a structural loop that prevents independent deployment and testing.",
+        "engineId": "noupling",
+        "cleanCodeAttribute": "MODULAR",
+        "impacts": [
+            { "softwareQuality": "MAINTAINABILITY", "severity": "HIGH" },
+            { "softwareQuality": "RELIABILITY", "severity": "MEDIUM" }
+        ]
+    }));
+
+    // Map violations to issues
+    for v in &result.violations {
+        if v.is_circular {
+            // Create issue on the first file in the cycle
+            let file_path = if !v.cycle_hop_files.is_empty() {
+                v.cycle_hop_files[0].0.clone()
+            } else {
+                v.from_module.clone()
+            };
+
+            let short_dirs: Vec<String> = v.cycle_path.iter().map(|p| {
+                std::path::Path::new(p)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(p)
+                    .to_string()
+            }).collect();
+            let cycle_desc = short_dirs.join(" -> ");
+
+            let mut secondary = Vec::new();
+            for (i, (from_file, _to_file)) in v.cycle_hop_files.iter().enumerate() {
+                if i == 0 { continue; } // skip primary
+                let dir_name = if i < v.cycle_path.len() {
+                    std::path::Path::new(&v.cycle_path[i])
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or("")
+                } else { "" };
+                secondary.push(serde_json::json!({
+                    "message": format!("Part of circular dependency chain ({})", dir_name),
+                    "filePath": from_file,
+                    "textRange": { "startLine": 1 }
+                }));
+            }
+
+            let effort = (v.cycle_order as i32) * 30; // 30 min per hop to break
+            let mut issue = serde_json::json!({
+                "ruleId": "noupling:circular-dependency",
+                "effortMinutes": effort,
+                "primaryLocation": {
+                    "message": format!("Circular dependency: {}", cycle_desc),
+                    "filePath": file_path,
+                    "textRange": { "startLine": 1 }
+                }
+            });
+            if !secondary.is_empty() {
+                issue["secondaryLocations"] = serde_json::json!(secondary);
+            }
+            issues.push(issue);
+        } else {
+            let severity_effort = if v.severity >= 0.5 { 20 } else { 10 };
+            let dir_a_short = std::path::Path::new(&v.dir_a)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.dir_a);
+            let dir_b_short = std::path::Path::new(&v.dir_b)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.dir_b);
+
+            issues.push(serde_json::json!({
+                "ruleId": "noupling:coupling",
+                "effortMinutes": severity_effort,
+                "primaryLocation": {
+                    "message": format!("Coupling violation: {} depends on {} (severity {:.2})", dir_a_short, dir_b_short, v.severity),
+                    "filePath": v.from_module,
+                    "textRange": { "startLine": 1 }
+                },
+                "secondaryLocations": [{
+                    "message": format!("Coupled target in {}", dir_b_short),
+                    "filePath": v.to_module,
+                    "textRange": { "startLine": 1 }
+                }]
+            }));
+        }
+    }
+
+    let report = serde_json::json!({
+        "rules": rules,
+        "issues": issues,
+    });
+
+    serde_json::to_string_pretty(&report).unwrap_or_default()
+}
+
 pub fn format_text(result: &AuditResult) -> String {
     let mut output = String::new();
 
