@@ -421,37 +421,10 @@ fn xml_escape(s: &str) -> String {
 }
 
 pub fn format_sonar(result: &AuditResult) -> String {
-    let mut rules = Vec::new();
     let mut issues = Vec::new();
 
-    // Define rules
-    rules.push(serde_json::json!({
-        "id": "noupling:coupling",
-        "name": "Coupling Violation",
-        "description": "A module has a dependency on a sibling module, creating coupling between independent architectural boundaries.",
-        "engineId": "noupling",
-        "cleanCodeAttribute": "MODULAR",
-        "impacts": [
-            { "softwareQuality": "MAINTAINABILITY", "severity": "MEDIUM" }
-        ]
-    }));
-
-    rules.push(serde_json::json!({
-        "id": "noupling:circular-dependency",
-        "name": "Circular Dependency",
-        "description": "A circular dependency chain exists between modules, creating a structural loop that prevents independent deployment and testing.",
-        "engineId": "noupling",
-        "cleanCodeAttribute": "MODULAR",
-        "impacts": [
-            { "softwareQuality": "MAINTAINABILITY", "severity": "HIGH" },
-            { "softwareQuality": "RELIABILITY", "severity": "MEDIUM" }
-        ]
-    }));
-
-    // Map violations to issues
     for v in &result.violations {
         if v.is_circular {
-            // Create issue on the first file in the cycle
             let (file_path, first_line) = if !v.cycle_hop_files.is_empty() {
                 (v.cycle_hop_files[0].0.clone(), v.cycle_hop_files[0].2)
             } else {
@@ -479,18 +452,21 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 secondary.push(serde_json::json!({
                     "message": format!("Part of circular dependency chain ({})", dir_name),
                     "filePath": from_file,
-                    "textRange": { "startLine": line }
+                    "textRange": { "startLine": line, "endLine": line }
                 }));
             }
 
             let effort = (v.cycle_order as i32) * 30;
             let mut issue = serde_json::json!({
+                "engineId": "noupling",
                 "ruleId": "noupling:circular-dependency",
+                "severity": "CRITICAL",
+                "type": "CODE_SMELL",
                 "effortMinutes": effort,
                 "primaryLocation": {
                     "message": format!("Circular dependency: {}", cycle_desc),
                     "filePath": file_path,
-                    "textRange": { "startLine": first_line }
+                    "textRange": { "startLine": first_line, "endLine": first_line }
                 }
             });
             if !secondary.is_empty() {
@@ -498,7 +474,14 @@ pub fn format_sonar(result: &AuditResult) -> String {
             }
             issues.push(issue);
         } else {
-            let severity_effort = if v.severity >= 0.5 { 20 } else { 10 };
+            let (sonar_severity, effort) = if v.severity >= 0.5 {
+                ("CRITICAL", 20)
+            } else if v.severity >= 0.2 {
+                ("MAJOR", 10)
+            } else {
+                ("MINOR", 5)
+            };
+
             let dir_a_short = std::path::Path::new(&v.dir_a)
                 .file_name()
                 .and_then(|f| f.to_str())
@@ -509,24 +492,26 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 .unwrap_or(&v.dir_b);
 
             issues.push(serde_json::json!({
+                "engineId": "noupling",
                 "ruleId": "noupling:coupling",
-                "effortMinutes": severity_effort,
+                "severity": sonar_severity,
+                "type": "CODE_SMELL",
+                "effortMinutes": effort,
                 "primaryLocation": {
                     "message": format!("Coupling violation: {} depends on {} (severity {:.2})", dir_a_short, dir_b_short, v.severity),
                     "filePath": v.from_module,
-                    "textRange": { "startLine": v.line_number }
+                    "textRange": { "startLine": v.line_number, "endLine": v.line_number }
                 },
                 "secondaryLocations": [{
                     "message": format!("Coupled target in {}", dir_b_short),
                     "filePath": v.to_module,
-                    "textRange": { "startLine": v.line_number }
+                    "textRange": { "startLine": v.line_number, "endLine": v.line_number }
                 }]
             }));
         }
     }
 
     let report = serde_json::json!({
-        "rules": rules,
         "issues": issues,
     });
 
