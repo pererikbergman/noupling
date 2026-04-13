@@ -19,6 +19,7 @@ pub struct JsonViolation {
     pub dir_b: String,
     pub depth: i32,
     pub severity: f64,
+    pub is_circular: bool,
 }
 
 impl JsonReport {
@@ -39,6 +40,7 @@ impl JsonReport {
                 dir_b: v.dir_b.clone(),
                 depth: v.depth,
                 severity: v.severity,
+                is_circular: v.is_circular,
             })
             .collect();
 
@@ -66,9 +68,10 @@ pub fn format_text(result: &AuditResult) -> String {
     if !result.violations.is_empty() {
         output.push('\n');
         for v in &result.violations {
+            let label = if v.is_circular { " CIRCULAR" } else { "" };
             output.push_str(&format!(
-                "  [{:.2}] {} -> {} (depth {})\n",
-                v.severity, v.from_module, v.to_module, v.depth
+                "  [{:.2}]{} {} -> {} (depth {})\n",
+                v.severity, label, v.from_module, v.to_module, v.depth
             ));
             output.push_str(&format!(
                 "         {} <> {}\n",
@@ -78,6 +81,43 @@ pub fn format_text(result: &AuditResult) -> String {
     }
 
     output
+}
+
+pub fn format_markdown(result: &AuditResult, snapshot_id: &str) -> String {
+    let mut md = String::new();
+
+    md.push_str("# noupling Audit Report\n\n");
+    md.push_str(&format!("**Snapshot:** `{}`\n\n", snapshot_id));
+
+    md.push_str("## Summary\n\n");
+    md.push_str(&format!("| Metric | Value |\n"));
+    md.push_str(&format!("| :--- | :--- |\n"));
+    md.push_str(&format!("| Health Score | {:.1}/100 |\n", result.score));
+    md.push_str(&format!("| Total Modules | {} |\n", result.total_modules));
+    md.push_str(&format!("| Violations | {} |\n", result.violations.len()));
+
+    let critical = result.violations.iter().filter(|v| v.severity >= 0.5).count();
+    md.push_str(&format!("| Critical (severity >= 0.5) | {} |\n", critical));
+
+    let circular = result.violations.iter().filter(|v| v.is_circular).count();
+    if circular > 0 {
+        md.push_str(&format!("| Structural Loops | {} |\n", circular));
+    }
+
+    if !result.violations.is_empty() {
+        md.push_str("\n## Violations\n\n");
+        md.push_str("| Severity | From | To | Depth | Type |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
+        for v in &result.violations {
+            let vtype = if v.is_circular { "Structural Loop" } else { "Coupling" };
+            md.push_str(&format!(
+                "| {:.2} | `{}` | `{}` | {} | {} |\n",
+                v.severity, v.from_module, v.to_module, v.depth, vtype
+            ));
+        }
+    }
+
+    md
 }
 
 #[cfg(test)]
@@ -92,6 +132,7 @@ mod tests {
             to_module: to.to_string(),
             depth,
             severity,
+            is_circular: false,
         }
     }
 
@@ -185,5 +226,52 @@ mod tests {
         let text = format_text(&result);
         assert!(text.contains("Health Score: 100.0/100"));
         assert!(text.contains("Violations: 0"));
+    }
+
+    // ── Markdown reporter ──
+
+    #[test]
+    fn markdown_has_heading_and_summary_table() {
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            total_modules: 5,
+        };
+
+        let md = format_markdown(&result, "snap-1");
+        assert!(md.contains("# noupling Audit Report"));
+        assert!(md.contains("**Snapshot:** `snap-1`"));
+        assert!(md.contains("| Health Score | 100.0/100 |"));
+        assert!(md.contains("| Total Modules | 5 |"));
+        assert!(md.contains("| Violations | 0 |"));
+    }
+
+    #[test]
+    fn markdown_has_violation_table() {
+        let result = AuditResult {
+            violations: vec![make_violation("a.rs", "b.rs", 1.0, 0)],
+            score: 50.0,
+            total_modules: 2,
+        };
+
+        let md = format_markdown(&result, "snap-2");
+        assert!(md.contains("## Violations"));
+        assert!(md.contains("| Severity |"));
+        assert!(md.contains("| 1.00 | `a.rs` | `b.rs` | 0 | Coupling |"));
+    }
+
+    #[test]
+    fn markdown_shows_structural_loop() {
+        let mut v = make_violation("a.rs", "b.rs", 1.0, 0);
+        v.is_circular = true;
+        let result = AuditResult {
+            violations: vec![v],
+            score: 50.0,
+            total_modules: 2,
+        };
+
+        let md = format_markdown(&result, "snap-3");
+        assert!(md.contains("Structural Loop"));
+        assert!(md.contains("| Structural Loops | 1 |"));
     }
 }

@@ -11,6 +11,7 @@ pub struct CouplingViolation {
     pub to_module: String,
     pub depth: i32,
     pub severity: f64,
+    pub is_circular: bool,
 }
 
 #[derive(Debug)]
@@ -168,6 +169,66 @@ fn compute_dacc(
     dacc
 }
 
+/// Detect circular dependencies in the module dependency graph.
+/// Returns pairs of (from_module_id, to_module_id) that form cycles.
+fn detect_cycles(modules: &[Module], dependencies: &[Dependency]) -> Vec<(String, String)> {
+    let module_ids: FxHashSet<&str> = modules.iter().map(|m| m.id.as_str()).collect();
+
+    // Build adjacency list
+    let mut adj: FxHashMap<&str, Vec<&str>> = FxHashMap::default();
+    for dep in dependencies {
+        if module_ids.contains(dep.from_module_id.as_str())
+            && module_ids.contains(dep.to_module_id.as_str())
+        {
+            adj.entry(dep.from_module_id.as_str())
+                .or_default()
+                .push(dep.to_module_id.as_str());
+        }
+    }
+
+    // DFS-based cycle detection
+    let mut visited: FxHashSet<&str> = FxHashSet::default();
+    let mut in_stack: FxHashSet<&str> = FxHashSet::default();
+    let mut cycle_edges: Vec<(String, String)> = Vec::new();
+
+    for module in modules {
+        if !visited.contains(module.id.as_str()) {
+            dfs_detect(
+                module.id.as_str(),
+                &adj,
+                &mut visited,
+                &mut in_stack,
+                &mut cycle_edges,
+            );
+        }
+    }
+
+    cycle_edges
+}
+
+fn dfs_detect<'a>(
+    node: &'a str,
+    adj: &FxHashMap<&'a str, Vec<&'a str>>,
+    visited: &mut FxHashSet<&'a str>,
+    in_stack: &mut FxHashSet<&'a str>,
+    cycle_edges: &mut Vec<(String, String)>,
+) {
+    visited.insert(node);
+    in_stack.insert(node);
+
+    if let Some(neighbors) = adj.get(node) {
+        for &next in neighbors {
+            if !visited.contains(next) {
+                dfs_detect(next, adj, visited, in_stack, cycle_edges);
+            } else if in_stack.contains(next) {
+                cycle_edges.push((node.to_string(), next.to_string()));
+            }
+        }
+    }
+
+    in_stack.remove(node);
+}
+
 /// Run the full audit: D_acc aggregation, BFS coupling detection, severity, and health score.
 pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     if modules.is_empty() {
@@ -199,6 +260,24 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         .collect();
 
     let mut violations = Vec::new();
+
+    // Detect circular dependencies (module-level cycles)
+    let circular = detect_cycles(modules, dependencies);
+    for (from_id, to_id) in &circular {
+        let from_path = id_to_path.get(from_id.as_str()).unwrap_or(&"");
+        let to_path = id_to_path.get(to_id.as_str()).unwrap_or(&"");
+        let from_dir = id_to_dir.get(from_id.as_str()).cloned().unwrap_or_default();
+        let to_dir = id_to_dir.get(to_id.as_str()).cloned().unwrap_or_default();
+        violations.push(CouplingViolation {
+            dir_a: from_dir,
+            dir_b: to_dir,
+            from_module: from_path.to_string(),
+            to_module: to_path.to_string(),
+            depth: 0,
+            severity: 1.0,
+            is_circular: true,
+        });
+    }
 
     // BFS: for each parent directory, check sibling pairs
     for (parent, children) in &dir_tree {
@@ -236,6 +315,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
+                                                    is_circular: false,
                                                 });
                                             }
                                         }
@@ -265,6 +345,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
+                                                    is_circular: false,
                                                 });
                                             }
                                         }
@@ -540,5 +621,63 @@ mod tests {
         if result.violations.len() >= 2 {
             assert!(result.violations[0].severity >= result.violations[1].severity);
         }
+    }
+
+    // ── Circular dependencies ──
+
+    #[test]
+    fn detects_circular_dependency() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        // A -> B and B -> A = cycle
+        let deps = vec![make_dep("a", "b", 1), make_dep("b", "a", 5)];
+
+        let result = audit(&modules, &deps);
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
+        assert!(
+            !circular.is_empty(),
+            "Should detect circular dependency between a and b"
+        );
+        assert!((circular[0].severity - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn no_circular_when_one_direction() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![make_dep("a", "b", 1)];
+
+        let result = audit(&modules, &deps);
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
+        assert!(circular.is_empty());
+    }
+
+    #[test]
+    fn detects_transitive_cycle() {
+        let modules = vec![
+            make_module("a", "src/x/mod.rs"),
+            make_module("b", "src/y/mod.rs"),
+            make_module("c", "src/z/mod.rs"),
+        ];
+        // A -> B -> C -> A = transitive cycle
+        let deps = vec![
+            make_dep("a", "b", 1),
+            make_dep("b", "c", 1),
+            make_dep("c", "a", 1),
+        ];
+
+        let result = audit(&modules, &deps);
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
+        assert!(
+            !circular.is_empty(),
+            "Should detect transitive circular dependency"
+        );
     }
 }

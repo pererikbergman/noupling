@@ -118,7 +118,7 @@ fn run_report(format: &str) -> anyhow::Result<()> {
             println!("{}", report.to_json()?);
         }
         "md" => {
-            println!("Markdown reporter not yet implemented.");
+            println!("{}", slices::reporter::format_markdown(&result, &snapshot.id));
         }
         _ => {
             anyhow::bail!("Unknown format: {}. Use 'json' or 'md'.", format);
