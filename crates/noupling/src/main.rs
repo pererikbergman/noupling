@@ -112,13 +112,24 @@ fn run_report(format: &str) -> anyhow::Result<()> {
 
     let result = slices::analyzer::audit(&modules, &dependencies);
 
+    let report_dir = Path::new(".noupling");
+    std::fs::create_dir_all(report_dir)?;
+
     match format {
         "json" => {
             let report = slices::reporter::JsonReport::from_audit(&result, &snapshot.id);
-            println!("{}", report.to_json()?);
+            let content = report.to_json()?;
+            let file_path = report_dir.join("report.json");
+            std::fs::write(&file_path, &content)?;
+            println!("{}", content);
+            println!("\nReport saved to {}", file_path.display());
         }
         "md" => {
-            println!("{}", slices::reporter::format_markdown(&result, &snapshot.id));
+            let content = slices::reporter::format_markdown(&result, &snapshot.id);
+            let file_path = report_dir.join("report.md");
+            std::fs::write(&file_path, &content)?;
+            println!("{}", content);
+            println!("Report saved to {}", file_path.display());
         }
         _ => {
             anyhow::bail!("Unknown format: {}. Use 'json' or 'md'.", format);
