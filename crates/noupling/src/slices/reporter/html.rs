@@ -473,11 +473,20 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                             .unwrap_or(dir);
                         hops.push_str(&format!("<strong title=\"{}\">{}</strong>", dir, dir_short));
                         if i < v.cycle_hop_files.len() {
+                            // Show from_file for this hop
                             let (from_file, _) = &v.cycle_hop_files[i];
                             let file_short = std::path::Path::new(from_file)
                                 .file_name()
                                 .and_then(|f| f.to_str())
                                 .unwrap_or(from_file);
+                            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+                        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
+                            // Last entry (closing the cycle): show to_file of the last hop
+                            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+                            let file_short = std::path::Path::new(to_file)
+                                .file_name()
+                                .and_then(|f| f.to_str())
+                                .unwrap_or(to_file);
                             hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
                         }
                     }
@@ -494,6 +503,9 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                         if i < v.cycle_hop_files.len() {
                             let (from_file, _) = &v.cycle_hop_files[i];
                             full_paths.push_str(&format!("<strong>{}</strong>: {} &#8594;", dir_short, from_file));
+                        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
+                            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+                            full_paths.push_str(&format!("<strong>{}</strong>: {}", dir_short, to_file));
                         } else {
                             full_paths.push_str(&format!("<strong>{}</strong>", dir_short));
                         }
