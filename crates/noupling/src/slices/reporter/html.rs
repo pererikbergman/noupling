@@ -461,7 +461,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
                 let cycle_display = if !v.cycle_path.is_empty() {
-                    // Build cycle display with file names per hop
+                    // Build cycle display with short names, file names, and full paths
                     let mut hops = String::new();
                     for (i, dir) in v.cycle_path.iter().enumerate() {
                         if i > 0 {
@@ -471,8 +471,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                             .file_name()
                             .and_then(|f| f.to_str())
                             .unwrap_or(dir);
-                        hops.push_str(dir_short);
-                        // Show the file that causes this hop (if not the last entry)
+                        hops.push_str(&format!("<strong title=\"{}\">{}</strong>", dir, dir_short));
                         if i < v.cycle_hop_files.len() {
                             let (from_file, _) = &v.cycle_hop_files[i];
                             let file_short = std::path::Path::new(from_file)
@@ -482,7 +481,30 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                             hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
                         }
                     }
-                    format!("<span class=\"circular\">Circular</span><br><span class=\"cycle-path\">{}</span>", hops)
+                    // Full path details below
+                    let mut full_paths = String::new();
+                    for (i, dir) in v.cycle_path.iter().enumerate() {
+                        if i > 0 {
+                            full_paths.push_str("<br>");
+                        }
+                        let dir_short = std::path::Path::new(dir)
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or(dir);
+                        if i < v.cycle_hop_files.len() {
+                            let (from_file, _) = &v.cycle_hop_files[i];
+                            full_paths.push_str(&format!("<strong>{}</strong>: {} &#8594;", dir_short, from_file));
+                        } else {
+                            full_paths.push_str(&format!("<strong>{}</strong>", dir_short));
+                        }
+                    }
+                    format!(
+                        "<span class=\"circular\">Circular</span><br>\
+                        <span class=\"cycle-path\">{}</span><br>\
+                        <details><summary class=\"hop-file\">Show full paths</summary>\
+                        <div class=\"full-paths\">{}</div></details>",
+                        hops, full_paths
+                    )
                 } else {
                     "<span class=\"circular\">Circular</span>".to_string()
                 };
@@ -562,7 +584,12 @@ tr:hover {{ background: #f8fafc; }}
 .circular {{ background: #fef2f2; color: #dc2626; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }}
 .circular-note {{ color: #dc2626; font-style: italic; }}
 .cycle-path {{ display: inline-block; margin-top: 0.3rem; padding: 0.3rem 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 0.85rem; font-weight: 500; color: #991b1b; line-height: 1.6; }}
-.hop-file {{ color: #6b7280; font-weight: 400; }}
+.hop-file {{ color: #6b7280; font-weight: 400; cursor: pointer; }}
+.full-paths {{ margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.78rem; color: #64748b; line-height: 1.7; word-break: break-all; }}
+.full-paths strong {{ color: #991b1b; }}
+details summary {{ list-style: none; }}
+details summary::marker {{ display: none; content: ''; }}
+details summary::before {{ content: ''; }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
