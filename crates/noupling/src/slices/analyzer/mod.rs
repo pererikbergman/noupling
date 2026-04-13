@@ -29,10 +29,37 @@ pub struct AuditResult {
 }
 
 impl AuditResult {
+    /// Keep only violations involving at least one changed file and recalculate the score.
+    pub fn filter_by_changed_files(&mut self, changed_files: &[String]) {
+        self.violations.retain(|v| {
+            // Coupling: check if from_module or to_module is a changed file
+            if !v.is_circular {
+                return changed_files.iter().any(|f| v.from_module.ends_with(f) || f.ends_with(&v.from_module))
+                    || changed_files.iter().any(|f| v.to_module.ends_with(f) || f.ends_with(&v.to_module));
+            }
+            // Circular: check if any hop file in the cycle is a changed file
+            for (from_file, to_file, _) in &v.cycle_hop_files {
+                if changed_files.iter().any(|f| from_file.ends_with(f) || f.ends_with(from_file)) {
+                    return true;
+                }
+                if changed_files.iter().any(|f| to_file.ends_with(f) || f.ends_with(to_file)) {
+                    return true;
+                }
+            }
+            false
+        });
+        self.recalculate_score();
+    }
+
+    /// Remove violations below the given severity threshold and recalculate the score.
     /// Remove violations below the given severity threshold and recalculate the score.
     pub fn filter_by_severity(&mut self, minimum_severity: f64) {
         // Circular violations are always kept regardless of severity
         self.violations.retain(|v| v.is_circular || v.severity >= minimum_severity);
+        self.recalculate_score();
+    }
+
+    fn recalculate_score(&mut self) {
         let sum_severity: f64 = self.violations.iter().map(|v| v.severity).sum();
         self.score = if self.total_modules > 0 {
             (100.0 * (1.0 - sum_severity / self.total_modules as f64)).max(0.0)

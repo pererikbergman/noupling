@@ -1,5 +1,6 @@
 mod cli;
 mod core;
+mod diff;
 pub mod settings;
 mod slices;
 mod utils;
@@ -14,7 +15,7 @@ fn main() {
     // Ensure settings.json exists for any command that takes a path
     match &cli.command {
         Commands::Init { path }
-        | Commands::Scan { path }
+        | Commands::Scan { path, .. }
         | Commands::Audit { path, .. }
         | Commands::Report { path, .. } => {
             let settings_path = Path::new(path).join(".noupling").join("settings.json");
@@ -26,7 +27,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { path } => run_init(&path),
-        Commands::Scan { path } => run_scan(&path),
+        Commands::Scan { path, diff_base } => run_scan(&path, diff_base.as_deref()),
         Commands::Audit { path, snapshot } => run_audit(&path, snapshot.as_deref()),
         Commands::Report { path, format } => run_report(&path, &format),
     };
@@ -46,6 +47,26 @@ fn run_init(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Load diff metadata if a diff scan was performed.
+fn load_diff_meta(path: &str) -> Option<Vec<String>> {
+    let meta_path = Path::new(path).join(".noupling").join("diff-meta.json");
+    if !meta_path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&meta_path).ok()?;
+    let meta: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let files = meta["changed_files"]
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+    let base = meta["diff_base"].as_str().unwrap_or("");
+    if !base.is_empty() {
+        println!("Diff mode: filtered to changes against {}", base);
+    }
+    Some(files)
+}
+
 fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
     let db_path = Path::new(project_path).join(".noupling").join("history.db");
     if !db_path.exists() {
@@ -54,11 +75,20 @@ fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
     slices::storage::Database::open(&db_path)
 }
 
-fn run_scan(path: &str) -> anyhow::Result<()> {
+fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     let project_path = Path::new(path);
     if !project_path.exists() {
         anyhow::bail!("Path does not exist: {}", path);
     }
+
+    // Get changed files if diff mode
+    let changed_files = if let Some(base) = diff_base {
+        let files = diff::get_changed_files(project_path, base)?;
+        println!("Diff mode: {} files changed compared to {}", files.len(), base);
+        Some(files)
+    } else {
+        None
+    };
 
     println!("Scanning: {}", path);
 
@@ -69,6 +99,7 @@ fn run_scan(path: &str) -> anyhow::Result<()> {
     let snapshot = snap_repo.create(path)?;
     println!("Created snapshot: {}", snapshot.id);
 
+    // Always scan the full project (needed for dependency resolution)
     let result = slices::scanner::scan_project(project_path, &snapshot.id)?;
     println!("Discovered {} modules", result.modules.len());
 
@@ -89,6 +120,21 @@ fn run_scan(path: &str) -> anyhow::Result<()> {
     let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
     dep_repo.bulk_insert(&unique_deps)?;
     println!("Found {} dependencies", unique_deps.len());
+
+    // Store diff metadata alongside the snapshot
+    if let Some(ref files) = changed_files {
+        let diff_meta = serde_json::json!({
+            "diff_base": diff_base.unwrap_or(""),
+            "changed_files": files,
+            "changed_count": files.len(),
+        });
+        let meta_path = project_path.join(".noupling").join("diff-meta.json");
+        std::fs::write(&meta_path, serde_json::to_string_pretty(&diff_meta)?)?;
+    } else {
+        // Remove old diff metadata if doing a full scan
+        let meta_path = project_path.join(".noupling").join("diff-meta.json");
+        let _ = std::fs::remove_file(&meta_path);
+    }
 
     println!("Scan complete. Database: {}", db_path.display());
     Ok(())
@@ -117,6 +163,11 @@ fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
     let mut result = slices::analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
 
+    // Apply diff filter if a diff scan was performed
+    if let Some(changed_files) = load_diff_meta(path) {
+        result.filter_by_changed_files(&changed_files);
+    }
+
     print!("{}", slices::reporter::format_text(&result));
 
     Ok(())
@@ -139,6 +190,11 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let project_settings = settings::Settings::load(Path::new(path))?;
     let mut result = slices::analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+
+    // Apply diff filter if a diff scan was performed
+    if let Some(changed_files) = load_diff_meta(path) {
+        result.filter_by_changed_files(&changed_files);
+    }
 
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;

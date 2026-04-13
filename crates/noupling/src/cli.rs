@@ -79,6 +79,13 @@ pub enum Commands {
     Scan {
         /// Path to the project root to scan
         path: String,
+
+        /// Only report violations involving files changed compared to this branch.
+        /// Uses git diff to detect changes. Scans the full project for dependency
+        /// resolution but filters results to changed files only.
+        /// Example: --diff-base main, --diff-base origin/develop
+        #[arg(long)]
+        diff_base: Option<String>,
     },
 
     /// Run the coupling and circular dependency analysis on the latest (or specified) snapshot.
@@ -121,7 +128,10 @@ mod tests {
     fn parse_scan_command() {
         let cli = Cli::parse_from(["noupling", "scan", "/path/to/project"]);
         match cli.command {
-            Commands::Scan { path } => assert_eq!(path, "/path/to/project"),
+            Commands::Scan { path, diff_base } => {
+                assert_eq!(path, "/path/to/project");
+                assert!(diff_base.is_none());
+            }
             _ => panic!("Expected Scan command"),
         }
     }
