@@ -14,3 +14,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Runtime
+.noupling/
+.claude/
