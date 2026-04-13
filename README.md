@@ -4,11 +4,17 @@ A high-performance CLI tool that audits software architecture by quantifying cou
 
 ## Supported Languages
 
-- Rust (`.rs`)
-- Kotlin (`.kt`, `.kts`)
-- TypeScript (`.ts`, `.tsx`)
-- Swift (`.swift`)
 - C# (`.cs`)
+- Go (`.go`)
+- Haskell (`.hs`)
+- Java (`.java`)
+- JavaScript (`.js`, `.jsx`)
+- Kotlin (`.kt`, `.kts`)
+- Python (`.py`)
+- Rust (`.rs`)
+- Swift (`.swift`)
+- TypeScript (`.ts`, `.tsx`)
+- Zig (`.zig`)
 
 ## Installation
 

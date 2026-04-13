@@ -15,6 +15,12 @@ pub fn resolve_import(
         "ts" | "tsx" => resolve_typescript_import(import_path, source_file, known_paths),
         "swift" => resolve_swift_import(import_path, known_paths),
         "cs" => resolve_csharp_import(import_path, known_paths),
+        "go" => resolve_go_import(import_path, known_paths),
+        "hs" => resolve_haskell_import(import_path, known_paths),
+        "java" => resolve_java_import(import_path, known_paths),
+        "js" | "jsx" => resolve_typescript_import(import_path, source_file, known_paths),
+        "py" => resolve_python_import(import_path, source_file, known_paths),
+        "zig" => resolve_zig_import(import_path, source_file, known_paths),
         _ => None,
     }
 }
@@ -158,6 +164,135 @@ fn resolve_csharp_import(
         }
     }
 
+    None
+}
+
+/// Resolves a Go import path to a project file.
+/// Go imports are package paths like "myproject/pkg/utils".
+fn resolve_go_import(import_path: &str, known_paths: &[String]) -> Option<String> {
+    // Try matching the import path suffix against known .go files
+    let segments = import_path.replace('/', "/");
+    for ext in &["go"] {
+        // Look for any .go file under a directory matching the import path
+        let dir_suffix = format!("/{}/", segments);
+        if let Some(found) = known_paths.iter().find(|p| p.contains(&dir_suffix) && p.ends_with(ext)) {
+            return Some(found.clone());
+        }
+        // Try direct file match
+        let candidate = format!("{}.{}", segments, ext);
+        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+            return Some(found.clone());
+        }
+    }
+    None
+}
+
+/// Resolves a Haskell import (module name) to a project file.
+/// e.g., "Data.List" -> "src/Data/List.hs"
+fn resolve_haskell_import(import_path: &str, known_paths: &[String]) -> Option<String> {
+    let file_path = import_path.replace('.', "/");
+    let candidate = format!("{}.hs", file_path);
+    known_paths.iter().find(|p| p.ends_with(&candidate)).cloned()
+}
+
+/// Resolves a Java import to a project file.
+/// e.g., "com.example.MyClass" -> "src/main/java/com/example/MyClass.java"
+fn resolve_java_import(import_path: &str, known_paths: &[String]) -> Option<String> {
+    let segments: Vec<&str> = import_path.split('.').collect();
+    if segments.is_empty() {
+        return None;
+    }
+
+    let file_path = segments.join("/");
+    let candidate = format!("{}.java", file_path);
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        return Some(found.clone());
+    }
+
+    // Try without last segment (class name)
+    if segments.len() > 1 {
+        let parent = segments[..segments.len() - 1].join("/");
+        let candidate = format!("{}.java", parent);
+        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+            return Some(found.clone());
+        }
+    }
+    None
+}
+
+/// Resolves a Python import to a project file.
+/// e.g., "myapp.utils.helpers" -> "myapp/utils/helpers.py"
+fn resolve_python_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    // Handle relative imports (starts with .)
+    if import_path.starts_with('.') {
+        let source_dir = Path::new(source_file).parent()?;
+        let dots = import_path.chars().take_while(|c| *c == '.').count();
+        let mut base = source_dir.to_path_buf();
+        for _ in 1..dots {
+            base = base.parent()?.to_path_buf();
+        }
+        let remainder = &import_path[dots..];
+        if remainder.is_empty() {
+            let candidate = base.join("__init__.py").to_string_lossy().to_string();
+            if known_paths.contains(&candidate) {
+                return Some(candidate);
+            }
+            return None;
+        }
+        let file_path = remainder.replace('.', "/");
+        let candidate = format!("{}/{}.py", base.display(), file_path);
+        if known_paths.contains(&candidate) {
+            return Some(candidate);
+        }
+        let candidate = format!("{}/{}/__init__.py", base.display(), file_path);
+        if known_paths.contains(&candidate) {
+            return Some(candidate);
+        }
+        return None;
+    }
+
+    // Absolute import
+    let file_path = import_path.replace('.', "/");
+    let candidate = format!("{}.py", file_path);
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        return Some(found.clone());
+    }
+    let candidate = format!("{}/__init__.py", file_path);
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        return Some(found.clone());
+    }
+    None
+}
+
+/// Resolves a Zig @import path to a project file.
+fn resolve_zig_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    if import_path == "std" || import_path == "builtin" {
+        return None;
+    }
+    // Zig imports are relative file paths like "utils.zig" or "../lib.zig"
+    let source_dir = Path::new(source_file).parent()?;
+    let resolved = source_dir.join(import_path);
+    let mut components: Vec<String> = Vec::new();
+    for comp in resolved.components() {
+        match comp {
+            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
+            _ => {}
+        }
+    }
+    let candidate = components.join("/");
+    if known_paths.contains(&candidate) {
+        return Some(candidate);
+    }
     None
 }
 

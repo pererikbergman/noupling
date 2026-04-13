@@ -37,6 +37,12 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
                 "tsx" => parser::parse_tsx_imports(&source),
                 "swift" => parser::parse_swift_imports(&source),
                 "cs" => parser::parse_csharp_imports(&source),
+                "go" => parser::parse_go_imports(&source),
+                "hs" => parser::parse_haskell_imports(&source),
+                "java" => parser::parse_java_imports(&source),
+                "js" | "jsx" => parser::parse_javascript_imports(&source),
+                "py" => parser::parse_python_imports(&source),
+                "zig" => parser::parse_zig_imports(&source),
                 _ => return None,
             };
             let deps: Vec<Dependency> = imports
