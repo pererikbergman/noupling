@@ -185,8 +185,13 @@ fn build_report_data(
 
     // Assign violations to directories
     for violation in &result.violations {
-        // Find the parent directory where both dir_a and dir_b are siblings
-        let parent = find_common_parent(&violation.dir_a, &violation.dir_b);
+        // For circular violations, find the common ancestor of ALL dirs in the cycle
+        // For coupling violations, find the parent where dir_a and dir_b are siblings
+        let parent = if violation.is_circular && !violation.cycle_path.is_empty() {
+            find_common_ancestor_of_all(&violation.cycle_path)
+        } else {
+            find_common_parent(&violation.dir_a, &violation.dir_b)
+        };
 
         let circular_direction = if violation.is_circular {
             let forward = circular_counts
@@ -309,6 +314,35 @@ fn find_common_root(modules: &[Module]) -> String {
             common = std::path::Path::new(&common)
                 .parent()
                 .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+        }
+    }
+    common
+}
+
+/// Find the common ancestor directory of all paths in the list.
+fn find_common_ancestor_of_all(paths: &[String]) -> String {
+    if paths.is_empty() {
+        return String::new();
+    }
+    // Start with the parent of the first path
+    let mut common = std::path::Path::new(&paths[0])
+        .parent()
+        .unwrap_or(std::path::Path::new(""))
+        .to_string_lossy()
+        .to_string();
+
+    for path in &paths[1..] {
+        let p = std::path::Path::new(path)
+            .parent()
+            .unwrap_or(std::path::Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        // Shrink common until it's a prefix of this path's parent
+        while !p.starts_with(&common) && !common.is_empty() {
+            common = std::path::Path::new(&common)
+                .parent()
+                .map(|pp| pp.to_string_lossy().to_string())
                 .unwrap_or_default();
         }
     }
