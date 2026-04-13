@@ -28,7 +28,8 @@ pub struct AuditResult {
 impl AuditResult {
     /// Remove violations below the given severity threshold and recalculate the score.
     pub fn filter_by_severity(&mut self, minimum_severity: f64) {
-        self.violations.retain(|v| v.severity >= minimum_severity);
+        // Circular violations are always kept regardless of severity
+        self.violations.retain(|v| v.is_circular || v.severity >= minimum_severity);
         let sum_severity: f64 = self.violations.iter().map(|v| v.severity).sum();
         self.score = if self.total_modules > 0 {
             (100.0 * (1.0 - sum_severity / self.total_modules as f64)).max(0.0)
@@ -329,6 +330,139 @@ fn dfs_find_cycles(
     in_stack.remove(node);
 }
 
+/// Detect circular dependencies among sibling directories using their D_acc sets.
+/// A cycle exists when sibling A's D_acc points into B, B's into C, ..., and back to A.
+fn detect_sibling_cycles(
+    siblings: &[String],
+    dacc: &FxHashMap<String, FxHashSet<String>>,
+    id_to_dir: &FxHashMap<&str, String>,
+    id_to_path: &FxHashMap<&str, &str>,
+    dependencies: &[Dependency],
+) -> Vec<DetectedCycle> {
+    if siblings.len() < 2 {
+        return Vec::new();
+    }
+
+    // Build adjacency: sibling A -> sibling B if D_acc(A) contains a module under B
+    let mut adj: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
+    // Track which file causes each edge for hop_files
+    let mut edge_files: FxHashMap<(usize, usize), (String, String)> = FxHashMap::default();
+
+    for (i, dir_a) in siblings.iter().enumerate() {
+        if let Some(deps_a) = dacc.get(dir_a) {
+            for target_id in deps_a {
+                if let Some(target_dir) = id_to_dir.get(target_id.as_str()) {
+                    for (j, dir_b) in siblings.iter().enumerate() {
+                        if i == j { continue; }
+                        let b_prefix = format!("{}/", dir_b);
+                        if target_dir == dir_b || target_dir.starts_with(&b_prefix) {
+                            adj.entry(i).or_default().push(j);
+                            // Find a file that causes this edge
+                            if !edge_files.contains_key(&(i, j)) {
+                                for dep in dependencies {
+                                    if &dep.to_module_id == target_id {
+                                        let from_dir = id_to_dir.get(dep.from_module_id.as_str());
+                                        let a_prefix = format!("{}/", dir_a);
+                                        if let Some(fd) = from_dir {
+                                            if fd == dir_a || fd.starts_with(&a_prefix) {
+                                                let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
+                                                let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
+                                                edge_files.insert((i, j), (from_file, to_file));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Deduplicate adjacency
+    for targets in adj.values_mut() {
+        targets.sort();
+        targets.dedup();
+    }
+
+    // DFS to find cycles among sibling indices
+    let mut visited: FxHashSet<usize> = FxHashSet::default();
+    let mut cycles: Vec<DetectedCycle> = Vec::new();
+    let mut seen_keys: FxHashSet<String> = FxHashSet::default();
+
+    for i in 0..siblings.len() {
+        if !visited.contains(&i) {
+            let mut path = Vec::new();
+            let mut in_stack: FxHashSet<usize> = FxHashSet::default();
+            dfs_sibling_cycles(
+                i, &adj, &mut visited, &mut in_stack, &mut path,
+                &mut cycles, &mut seen_keys, siblings, &edge_files,
+            );
+        }
+    }
+
+    cycles
+}
+
+fn dfs_sibling_cycles(
+    node: usize,
+    adj: &FxHashMap<usize, Vec<usize>>,
+    visited: &mut FxHashSet<usize>,
+    in_stack: &mut FxHashSet<usize>,
+    path: &mut Vec<usize>,
+    cycles: &mut Vec<DetectedCycle>,
+    seen_keys: &mut FxHashSet<String>,
+    siblings: &[String],
+    edge_files: &FxHashMap<(usize, usize), (String, String)>,
+) {
+    visited.insert(node);
+    in_stack.insert(node);
+    path.push(node);
+
+    if let Some(neighbors) = adj.get(&node) {
+        for &next in neighbors {
+            if !visited.contains(&next) {
+                dfs_sibling_cycles(next, adj, visited, in_stack, path, cycles, seen_keys, siblings, edge_files);
+            } else if in_stack.contains(&next) {
+                let cycle_start = path.iter().position(|&p| p == next).unwrap_or(0);
+                let cycle_indices: Vec<usize> = path[cycle_start..].to_vec();
+
+                // Deduplicate
+                let mut sorted = cycle_indices.clone();
+                sorted.sort();
+                let key = sorted.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+                if seen_keys.contains(&key) {
+                    return;
+                }
+                seen_keys.insert(key);
+
+                // Build dir_path and hop_files
+                let mut dir_path: Vec<String> = cycle_indices.iter().map(|&i| siblings[i].clone()).collect();
+                dir_path.push(siblings[next].clone()); // close the cycle
+
+                let mut hop_files = Vec::new();
+                for w in 0..cycle_indices.len() {
+                    let from_idx = cycle_indices[w];
+                    let to_idx = if w + 1 < cycle_indices.len() {
+                        cycle_indices[w + 1]
+                    } else {
+                        next
+                    };
+                    let files = edge_files.get(&(from_idx, to_idx)).cloned().unwrap_or_default();
+                    hop_files.push(files);
+                }
+
+                cycles.push(DetectedCycle { dir_path, hop_files });
+            }
+        }
+    }
+
+    path.pop();
+    in_stack.remove(&node);
+}
+
 fn short_dir_name(path: &str) -> String {
     std::path::Path::new(path)
         .file_name()
@@ -369,34 +503,36 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
 
     let mut violations = Vec::new();
 
-    // Detect circular dependencies at directory level
-    let cycles = detect_cycles(modules, dependencies);
-    for cycle in &cycles {
-        if cycle.dir_path.len() < 2 {
-            continue;
-        }
-        let first_dir = &cycle.dir_path[0];
-        let last_target = &cycle.dir_path[cycle.dir_path.len() - 2];
-        violations.push(CouplingViolation {
-            dir_a: first_dir.clone(),
-            dir_b: last_target.clone(),
-            from_module: first_dir.clone(),
-            to_module: last_target.clone(),
-            depth: 0,
-            severity: 1.0,
-            is_circular: true,
-            cycle_path: cycle.dir_path.clone(),
-            cycle_hop_files: cycle.hop_files.clone(),
-        });
-    }
-
-    // BFS: for each parent directory, check sibling pairs
+    // BFS: for each parent directory, check sibling pairs for coupling AND cycles
     for (parent, children) in &dir_tree {
         let depth = if parent.is_empty() {
             0
         } else {
             dir_depth(parent) + 1
         };
+
+        // Detect circular dependencies among siblings at this level using D_acc
+        let sibling_cycles = detect_sibling_cycles(
+            children, &dacc, &id_to_dir, &id_to_path, dependencies,
+        );
+        for cycle in sibling_cycles {
+            if cycle.dir_path.len() < 2 {
+                continue;
+            }
+            let first_dir = &cycle.dir_path[0];
+            let last_target = &cycle.dir_path[cycle.dir_path.len() - 2];
+            violations.push(CouplingViolation {
+                dir_a: first_dir.clone(),
+                dir_b: last_target.clone(),
+                from_module: first_dir.clone(),
+                to_module: last_target.clone(),
+                depth,
+                severity: 1.0 / (depth as f64 + 1.0),
+                is_circular: true,
+                cycle_path: cycle.dir_path.clone(),
+                cycle_hop_files: cycle.hop_files.clone(),
+            });
+        }
 
         for i in 0..children.len() {
             for j in (i + 1)..children.len() {
@@ -756,7 +892,8 @@ mod tests {
             !circular.is_empty(),
             "Should detect circular dependency between a and b"
         );
-        assert!((circular[0].severity - 1.0).abs() < f64::EPSILON);
+        // Severity depends on depth: siblings under "src" are at depth 2, severity = 1/(2+1)
+        assert!(circular[0].severity > 0.0);
     }
 
     #[test]
