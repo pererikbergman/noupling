@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NodeType {
+pub enum ModuleType {
     #[serde(rename = "FILE")]
     File,
     #[serde(rename = "DIR")]
@@ -9,20 +9,20 @@ pub enum NodeType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Node {
+pub struct Module {
     pub id: String,
     pub snapshot_id: String,
     pub parent_id: Option<String>,
     pub name: String,
     pub path: String,
-    pub node_type: NodeType,
+    pub module_type: ModuleType,
     pub depth: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dependency {
-    pub from_node_id: String,
-    pub to_node_id: String,
+    pub from_module_id: String,
+    pub to_module_id: String,
     pub line_number: i32,
 }
 
@@ -38,69 +38,69 @@ mod tests {
     use serde_json;
 
     #[test]
-    fn node_type_serializes_to_string() {
-        let file_type = super::NodeType::File;
-        let dir_type = super::NodeType::Dir;
+    fn module_type_serializes_to_string() {
+        let file_type = super::ModuleType::File;
+        let dir_type = super::ModuleType::Dir;
         assert_eq!(serde_json::to_string(&file_type).unwrap(), "\"FILE\"");
         assert_eq!(serde_json::to_string(&dir_type).unwrap(), "\"DIR\"");
     }
 
     #[test]
-    fn node_type_roundtrip() {
-        let original = super::NodeType::File;
+    fn module_type_roundtrip() {
+        let original = super::ModuleType::File;
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: super::NodeType = serde_json::from_str(&json).unwrap();
+        let deserialized: super::ModuleType = serde_json::from_str(&json).unwrap();
         assert_eq!(format!("{:?}", original), format!("{:?}", deserialized));
     }
 
     #[test]
-    fn node_roundtrip() {
-        let node = super::Node {
-            id: "node-001".to_string(),
+    fn module_roundtrip() {
+        let module = super::Module {
+            id: "mod-001".to_string(),
             snapshot_id: "snap-001".to_string(),
             parent_id: None,
             name: "src".to_string(),
-            path: "/project/src".to_string(),
-            node_type: super::NodeType::Dir,
+            path: "src".to_string(),
+            module_type: super::ModuleType::Dir,
             depth: 0,
         };
-        let json = serde_json::to_string(&node).unwrap();
-        let deserialized: super::Node = serde_json::from_str(&json).unwrap();
-        assert_eq!(node.id, deserialized.id);
-        assert_eq!(node.snapshot_id, deserialized.snapshot_id);
+        let json = serde_json::to_string(&module).unwrap();
+        let deserialized: super::Module = serde_json::from_str(&json).unwrap();
+        assert_eq!(module.id, deserialized.id);
+        assert_eq!(module.snapshot_id, deserialized.snapshot_id);
         assert!(deserialized.parent_id.is_none());
-        assert_eq!(node.name, deserialized.name);
-        assert_eq!(node.path, deserialized.path);
-        assert_eq!(node.depth, deserialized.depth);
+        assert_eq!(module.name, deserialized.name);
+        assert_eq!(module.path, deserialized.path);
+        assert_eq!(module.depth, deserialized.depth);
     }
 
     #[test]
-    fn node_with_parent_roundtrip() {
-        let node = super::Node {
-            id: "node-002".to_string(),
+    fn module_with_parent_roundtrip() {
+        let module = super::Module {
+            id: "mod-002".to_string(),
             snapshot_id: "snap-001".to_string(),
-            parent_id: Some("node-001".to_string()),
+            parent_id: Some("mod-001".to_string()),
             name: "main.rs".to_string(),
-            path: "/project/src/main.rs".to_string(),
-            node_type: super::NodeType::File,
+            path: "src/main.rs".to_string(),
+            module_type: super::ModuleType::File,
             depth: 1,
         };
-        let json = serde_json::to_string(&node).unwrap();
-        let deserialized: super::Node = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.parent_id, Some("node-001".to_string()));
+        let json = serde_json::to_string(&module).unwrap();
+        let deserialized: super::Module = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.parent_id, Some("mod-001".to_string()));
     }
 
     #[test]
     fn dependency_roundtrip() {
         let dep = super::Dependency {
-            from_node_id: "node-002".to_string(),
-            to_node_id: "node-003".to_string(),
+            from_module_id: "mod-002".to_string(),
+            to_module_id: "mod-003".to_string(),
             line_number: 5,
         };
         let json = serde_json::to_string(&dep).unwrap();
         let deserialized: super::Dependency = serde_json::from_str(&json).unwrap();
-        assert_eq!(dep.from_node_id, deserialized.from_node_id);
-        assert_eq!(dep.to_node_id, deserialized.to_node_id);
+        assert_eq!(dep.from_module_id, deserialized.from_module_id);
+        assert_eq!(dep.to_module_id, deserialized.to_module_id);
         assert_eq!(dep.line_number, deserialized.line_number);
     }
 

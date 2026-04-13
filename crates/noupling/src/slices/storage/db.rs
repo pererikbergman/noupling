@@ -32,21 +32,21 @@ impl Database {
                 root_path TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS nodes (
+            CREATE TABLE IF NOT EXISTS modules (
                 id TEXT PRIMARY KEY,
                 snapshot_id TEXT REFERENCES snapshots(id),
-                parent_id TEXT REFERENCES nodes(id),
+                parent_id TEXT REFERENCES modules(id),
                 name TEXT NOT NULL,
                 path TEXT NOT NULL,
-                node_type TEXT CHECK(node_type IN ('FILE', 'DIR')),
+                module_type TEXT CHECK(module_type IN ('FILE', 'DIR')),
                 depth INTEGER NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS dependencies (
-                from_node_id TEXT REFERENCES nodes(id),
-                to_node_id TEXT REFERENCES nodes(id),
+                from_module_id TEXT REFERENCES modules(id),
+                to_module_id TEXT REFERENCES modules(id),
                 line_number INTEGER,
-                PRIMARY KEY (from_node_id, to_node_id, line_number)
+                PRIMARY KEY (from_module_id, to_module_id, line_number)
             );",
         )?;
         Ok(())
@@ -69,7 +69,7 @@ mod tests {
             .filter_map(|r| r.ok())
             .collect();
         assert!(tables.contains(&"snapshots".to_string()));
-        assert!(tables.contains(&"nodes".to_string()));
+        assert!(tables.contains(&"modules".to_string()));
         assert!(tables.contains(&"dependencies".to_string()));
     }
 
@@ -111,11 +111,11 @@ mod tests {
     }
 
     #[test]
-    fn nodes_table_has_correct_columns() {
+    fn modules_table_has_correct_columns() {
         let db = Database::open_in_memory().unwrap();
         let columns: Vec<String> = db
             .conn
-            .prepare("PRAGMA table_info(nodes)")
+            .prepare("PRAGMA table_info(modules)")
             .unwrap()
             .query_map([], |row| row.get::<_, String>(1))
             .unwrap()
@@ -123,7 +123,7 @@ mod tests {
             .collect();
         assert_eq!(
             columns,
-            vec!["id", "snapshot_id", "parent_id", "name", "path", "node_type", "depth"]
+            vec!["id", "snapshot_id", "parent_id", "name", "path", "module_type", "depth"]
         );
     }
 
@@ -138,6 +138,6 @@ mod tests {
             .unwrap()
             .filter_map(|r| r.ok())
             .collect();
-        assert_eq!(columns, vec!["from_node_id", "to_node_id", "line_number"]);
+        assert_eq!(columns, vec!["from_module_id", "to_module_id", "line_number"]);
     }
 }

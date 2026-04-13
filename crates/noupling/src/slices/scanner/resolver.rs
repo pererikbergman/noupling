@@ -1,15 +1,13 @@
 use std::path::Path;
 
-/// Resolves a Rust import path to a file path within the project.
+/// Resolves a Rust import path to a relative file path within the project.
 /// Returns None if the import refers to an external crate.
 pub fn resolve_import(
     import_path: &str,
     source_file: &str,
-    project_root: &Path,
+    _project_root: &Path,
     known_paths: &[String],
 ) -> Option<String> {
-    let root_str = project_root.to_string_lossy();
-
     // Only resolve crate-internal imports
     let segments: Vec<&str> = if import_path.starts_with("crate::") {
         import_path.strip_prefix("crate::")?.split("::").collect()
@@ -22,24 +20,22 @@ pub fn resolve_import(
         return None;
     };
 
-    // Find the src/ root within the project
-    let src_root = find_src_root(source_file, &root_str)?;
+    // Find the src/ root within the source file path
+    let src_root = find_src_root(source_file)?;
 
     // Try to resolve the path segments to a file
     try_resolve_segments(&segments, &src_root, known_paths)
 }
 
-fn find_src_root(source_file: &str, root_str: &str) -> Option<String> {
-    // Walk up from source file to find the nearest "src" directory
+fn find_src_root(source_file: &str) -> Option<String> {
     let source_path = Path::new(source_file);
     let mut current = source_path.parent()?;
-    while current.to_string_lossy().len() >= root_str.len() {
+    loop {
         if current.file_name()?.to_str()? == "src" {
             return Some(current.to_string_lossy().to_string());
         }
         current = current.parent()?;
     }
-    None
 }
 
 fn try_resolve_segments(
@@ -53,15 +49,10 @@ fn try_resolve_segments(
 
     let base = Path::new(src_root);
 
-    // Build candidate paths from segments
-    // For "core::Node", try: src/core/Node.rs, src/core.rs
-    // For "core", try: src/core/mod.rs, src/core.rs
-
     // Try as a file: segments joined as directories, last segment as .rs file
     let mut file_path = base.to_path_buf();
     for (i, seg) in segments.iter().enumerate() {
         if i == segments.len() - 1 {
-            // Last segment: try as .rs file
             file_path.push(format!("{}.rs", seg));
         } else {
             file_path.push(seg);
@@ -100,8 +91,6 @@ fn resolve_super_import(
     let source_dir = Path::new(source_file).parent()?;
     let remaining = import_path.strip_prefix("super::")?;
 
-    // From mod.rs, super refers to the parent of the module's directory
-    // From other files, super refers to the parent directory
     let is_mod_rs = Path::new(source_file)
         .file_name()
         .map(|f| f == "mod.rs" || f == "lib.rs")
@@ -139,82 +128,68 @@ mod tests {
 
     fn project_paths() -> Vec<String> {
         vec![
-            "/project/src/main.rs".to_string(),
-            "/project/src/core/mod.rs".to_string(),
-            "/project/src/core/error.rs".to_string(),
-            "/project/src/utils.rs".to_string(),
-            "/project/src/slices/scanner/mod.rs".to_string(),
-            "/project/src/slices/scanner/parser.rs".to_string(),
+            "src/main.rs".to_string(),
+            "src/core/mod.rs".to_string(),
+            "src/core/error.rs".to_string(),
+            "src/utils.rs".to_string(),
+            "src/slices/scanner/mod.rs".to_string(),
+            "src/slices/scanner/parser.rs".to_string(),
         ]
     }
 
     #[test]
     fn resolves_crate_module_path() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        let result = resolve_import("crate::core", "/project/src/main.rs", root, &paths);
-        assert_eq!(result, Some("/project/src/core/mod.rs".to_string()));
+        let root = Path::new("");
+        let result = resolve_import("crate::core", "src/main.rs", root, &paths);
+        assert_eq!(result, Some("src/core/mod.rs".to_string()));
     }
 
     #[test]
     fn resolves_crate_file_path() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        let result = resolve_import("crate::utils", "/project/src/main.rs", root, &paths);
-        assert_eq!(result, Some("/project/src/utils.rs".to_string()));
+        let root = Path::new("");
+        let result = resolve_import("crate::utils", "src/main.rs", root, &paths);
+        assert_eq!(result, Some("src/utils.rs".to_string()));
     }
 
     #[test]
     fn resolves_crate_nested_path() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        let result =
-            resolve_import("crate::core::error", "/project/src/main.rs", root, &paths);
-        assert_eq!(result, Some("/project/src/core/error.rs".to_string()));
+        let root = Path::new("");
+        let result = resolve_import("crate::core::error", "src/main.rs", root, &paths);
+        assert_eq!(result, Some("src/core/error.rs".to_string()));
     }
 
     #[test]
     fn resolves_crate_type_to_parent_file() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        // "crate::core::error::CoreError" should resolve to error.rs (type stripped)
-        let result = resolve_import(
-            "crate::core::error::CoreError",
-            "/project/src/main.rs",
-            root,
-            &paths,
-        );
-        assert_eq!(result, Some("/project/src/core/error.rs".to_string()));
+        let root = Path::new("");
+        let result = resolve_import("crate::core::error::CoreError", "src/main.rs", root, &paths);
+        assert_eq!(result, Some("src/core/error.rs".to_string()));
     }
 
     #[test]
     fn returns_none_for_external_crate() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        let result =
-            resolve_import("std::collections::HashMap", "/project/src/main.rs", root, &paths);
+        let root = Path::new("");
+        let result = resolve_import("std::collections::HashMap", "src/main.rs", root, &paths);
         assert!(result.is_none());
     }
 
     #[test]
     fn returns_none_for_serde() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        let result = resolve_import("serde::Deserialize", "/project/src/main.rs", root, &paths);
+        let root = Path::new("");
+        let result = resolve_import("serde::Deserialize", "src/main.rs", root, &paths);
         assert!(result.is_none());
     }
 
     #[test]
     fn resolves_super_import_from_file() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        // From parser.rs inside scanner/, super::mod resolves to scanner/mod.rs
-        let result = resolve_import(
-            "super::parser",
-            "/project/src/slices/scanner/mod.rs",
-            root,
-            &paths,
-        );
+        let root = Path::new("");
+        let result = resolve_import("super::parser", "src/slices/scanner/mod.rs", root, &paths);
         // super from mod.rs goes up to slices/, no parser there
         assert!(result.is_none());
     }
@@ -222,17 +197,8 @@ mod tests {
     #[test]
     fn resolves_self_import() {
         let paths = project_paths();
-        let root = Path::new("/project");
-        // self::parser from scanner/mod.rs resolves to scanner/parser.rs
-        let result = resolve_import(
-            "self::parser",
-            "/project/src/slices/scanner/mod.rs",
-            root,
-            &paths,
-        );
-        assert_eq!(
-            result,
-            Some("/project/src/slices/scanner/parser.rs".to_string())
-        );
+        let root = Path::new("");
+        let result = resolve_import("self::parser", "src/slices/scanner/mod.rs", root, &paths);
+        assert_eq!(result, Some("src/slices/scanner/parser.rs".to_string()));
     }
 }

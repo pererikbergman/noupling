@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::core::{Dependency, Node, NodeType, Snapshot};
+use crate::core::{Dependency, Module, ModuleType, Snapshot};
 
 pub struct SnapshotRepository<'a> {
     conn: &'a Connection,
@@ -65,34 +65,34 @@ impl<'a> SnapshotRepository<'a> {
     }
 }
 
-pub struct NodeRepository<'a> {
+pub struct ModuleRepository<'a> {
     conn: &'a Connection,
 }
 
-impl<'a> NodeRepository<'a> {
+impl<'a> ModuleRepository<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
     }
 
-    pub fn bulk_insert(&self, nodes: &[Node]) -> Result<()> {
+    pub fn bulk_insert(&self, modules: &[Module]) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO nodes (id, snapshot_id, parent_id, name, path, node_type, depth) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO modules (id, snapshot_id, parent_id, name, path, module_type, depth) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;
-            for node in nodes {
-                let node_type_str = match node.node_type {
-                    NodeType::File => "FILE",
-                    NodeType::Dir => "DIR",
+            for module in modules {
+                let module_type_str = match module.module_type {
+                    ModuleType::File => "FILE",
+                    ModuleType::Dir => "DIR",
                 };
                 stmt.execute(rusqlite::params![
-                    node.id,
-                    node.snapshot_id,
-                    node.parent_id,
-                    node.name,
-                    node.path,
-                    node_type_str,
-                    node.depth,
+                    module.id,
+                    module.snapshot_id,
+                    module.parent_id,
+                    module.name,
+                    module.path,
+                    module_type_str,
+                    module.depth,
                 ])?;
             }
         }
@@ -100,46 +100,46 @@ impl<'a> NodeRepository<'a> {
         Ok(())
     }
 
-    pub fn get_by_snapshot(&self, snapshot_id: &str) -> Result<Vec<Node>> {
+    pub fn get_by_snapshot(&self, snapshot_id: &str) -> Result<Vec<Module>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, snapshot_id, parent_id, name, path, node_type, depth FROM nodes WHERE snapshot_id = ?1",
+            "SELECT id, snapshot_id, parent_id, name, path, module_type, depth FROM modules WHERE snapshot_id = ?1",
         )?;
         let rows = stmt.query_map(rusqlite::params![snapshot_id], |row| {
-            let node_type_str: String = row.get(5)?;
-            let node_type = match node_type_str.as_str() {
-                "FILE" => NodeType::File,
-                _ => NodeType::Dir,
+            let module_type_str: String = row.get(5)?;
+            let module_type = match module_type_str.as_str() {
+                "FILE" => ModuleType::File,
+                _ => ModuleType::Dir,
             };
-            Ok(Node {
+            Ok(Module {
                 id: row.get(0)?,
                 snapshot_id: row.get(1)?,
                 parent_id: row.get(2)?,
                 name: row.get(3)?,
                 path: row.get(4)?,
-                node_type,
+                module_type,
                 depth: row.get(6)?,
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    pub fn get_children(&self, parent_id: &str) -> Result<Vec<Node>> {
+    pub fn get_children(&self, parent_id: &str) -> Result<Vec<Module>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, snapshot_id, parent_id, name, path, node_type, depth FROM nodes WHERE parent_id = ?1",
+            "SELECT id, snapshot_id, parent_id, name, path, module_type, depth FROM modules WHERE parent_id = ?1",
         )?;
         let rows = stmt.query_map(rusqlite::params![parent_id], |row| {
-            let node_type_str: String = row.get(5)?;
-            let node_type = match node_type_str.as_str() {
-                "FILE" => NodeType::File,
-                _ => NodeType::Dir,
+            let module_type_str: String = row.get(5)?;
+            let module_type = match module_type_str.as_str() {
+                "FILE" => ModuleType::File,
+                _ => ModuleType::Dir,
             };
-            Ok(Node {
+            Ok(Module {
                 id: row.get(0)?,
                 snapshot_id: row.get(1)?,
                 parent_id: row.get(2)?,
                 name: row.get(3)?,
                 path: row.get(4)?,
-                node_type,
+                module_type,
                 depth: row.get(6)?,
             })
         })?;
@@ -160,12 +160,12 @@ impl<'a> DependencyRepository<'a> {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO dependencies (from_node_id, to_node_id, line_number) VALUES (?1, ?2, ?3)",
+                "INSERT INTO dependencies (from_module_id, to_module_id, line_number) VALUES (?1, ?2, ?3)",
             )?;
             for dep in deps {
                 stmt.execute(rusqlite::params![
-                    dep.from_node_id,
-                    dep.to_node_id,
+                    dep.from_module_id,
+                    dep.to_module_id,
                     dep.line_number,
                 ])?;
             }
@@ -176,15 +176,15 @@ impl<'a> DependencyRepository<'a> {
 
     pub fn get_by_snapshot(&self, snapshot_id: &str) -> Result<Vec<Dependency>> {
         let mut stmt = self.conn.prepare(
-            "SELECT d.from_node_id, d.to_node_id, d.line_number
+            "SELECT d.from_module_id, d.to_module_id, d.line_number
              FROM dependencies d
-             JOIN nodes n ON d.from_node_id = n.id
-             WHERE n.snapshot_id = ?1",
+             JOIN modules m ON d.from_module_id = m.id
+             WHERE m.snapshot_id = ?1",
         )?;
         let rows = stmt.query_map(rusqlite::params![snapshot_id], |row| {
             Ok(Dependency {
-                from_node_id: row.get(0)?,
-                to_node_id: row.get(1)?,
+                from_module_id: row.get(0)?,
+                to_module_id: row.get(1)?,
                 line_number: row.get(2)?,
             })
         })?;
@@ -251,90 +251,90 @@ mod tests {
         assert!(latest.is_none());
     }
 
-    // ── NodeRepository ──
+    // ── ModuleRepository ──
 
     #[test]
-    fn node_bulk_insert_and_get_by_snapshot() {
+    fn module_bulk_insert_and_get_by_snapshot() {
         let db = setup_db();
         let snap_repo = SnapshotRepository::new(&db.conn);
         let snap = snap_repo.create("/project").unwrap();
 
-        let nodes = vec![
-            Node {
-                id: "n1".to_string(),
+        let modules = vec![
+            Module {
+                id: "m1".to_string(),
                 snapshot_id: snap.id.clone(),
                 parent_id: None,
                 name: "src".to_string(),
-                path: "/project/src".to_string(),
-                node_type: NodeType::Dir,
+                path: "src".to_string(),
+                module_type: ModuleType::Dir,
                 depth: 0,
             },
-            Node {
-                id: "n2".to_string(),
+            Module {
+                id: "m2".to_string(),
                 snapshot_id: snap.id.clone(),
-                parent_id: Some("n1".to_string()),
+                parent_id: Some("m1".to_string()),
                 name: "main.rs".to_string(),
-                path: "/project/src/main.rs".to_string(),
-                node_type: NodeType::File,
+                path: "src/main.rs".to_string(),
+                module_type: ModuleType::File,
                 depth: 1,
             },
         ];
 
-        let node_repo = NodeRepository::new(&db.conn);
-        node_repo.bulk_insert(&nodes).unwrap();
+        let module_repo = ModuleRepository::new(&db.conn);
+        module_repo.bulk_insert(&modules).unwrap();
 
-        let result = node_repo.get_by_snapshot(&snap.id).unwrap();
+        let result = module_repo.get_by_snapshot(&snap.id).unwrap();
         assert_eq!(result.len(), 2);
     }
 
     #[test]
-    fn node_get_children() {
+    fn module_get_children() {
         let db = setup_db();
         let snap_repo = SnapshotRepository::new(&db.conn);
         let snap = snap_repo.create("/project").unwrap();
 
-        let nodes = vec![
-            Node {
-                id: "n1".to_string(),
+        let modules = vec![
+            Module {
+                id: "m1".to_string(),
                 snapshot_id: snap.id.clone(),
                 parent_id: None,
                 name: "src".to_string(),
-                path: "/project/src".to_string(),
-                node_type: NodeType::Dir,
+                path: "src".to_string(),
+                module_type: ModuleType::Dir,
                 depth: 0,
             },
-            Node {
-                id: "n2".to_string(),
+            Module {
+                id: "m2".to_string(),
                 snapshot_id: snap.id.clone(),
-                parent_id: Some("n1".to_string()),
+                parent_id: Some("m1".to_string()),
                 name: "main.rs".to_string(),
-                path: "/project/src/main.rs".to_string(),
-                node_type: NodeType::File,
+                path: "src/main.rs".to_string(),
+                module_type: ModuleType::File,
                 depth: 1,
             },
-            Node {
-                id: "n3".to_string(),
+            Module {
+                id: "m3".to_string(),
                 snapshot_id: snap.id.clone(),
-                parent_id: Some("n1".to_string()),
+                parent_id: Some("m1".to_string()),
                 name: "lib.rs".to_string(),
-                path: "/project/src/lib.rs".to_string(),
-                node_type: NodeType::File,
+                path: "src/lib.rs".to_string(),
+                module_type: ModuleType::File,
                 depth: 1,
             },
         ];
 
-        let node_repo = NodeRepository::new(&db.conn);
-        node_repo.bulk_insert(&nodes).unwrap();
+        let module_repo = ModuleRepository::new(&db.conn);
+        module_repo.bulk_insert(&modules).unwrap();
 
-        let children = node_repo.get_children("n1").unwrap();
+        let children = module_repo.get_children("m1").unwrap();
         assert_eq!(children.len(), 2);
     }
 
     #[test]
-    fn node_get_children_empty() {
+    fn module_get_children_empty() {
         let db = setup_db();
-        let node_repo = NodeRepository::new(&db.conn);
-        let children = node_repo.get_children("nonexistent").unwrap();
+        let module_repo = ModuleRepository::new(&db.conn);
+        let children = module_repo.get_children("nonexistent").unwrap();
         assert!(children.is_empty());
     }
 
@@ -346,31 +346,31 @@ mod tests {
         let snap_repo = SnapshotRepository::new(&db.conn);
         let snap = snap_repo.create("/project").unwrap();
 
-        let nodes = vec![
-            Node {
-                id: "n1".to_string(),
+        let modules = vec![
+            Module {
+                id: "m1".to_string(),
                 snapshot_id: snap.id.clone(),
                 parent_id: None,
                 name: "a.rs".to_string(),
-                path: "/project/a.rs".to_string(),
-                node_type: NodeType::File,
+                path: "a.rs".to_string(),
+                module_type: ModuleType::File,
                 depth: 0,
             },
-            Node {
-                id: "n2".to_string(),
+            Module {
+                id: "m2".to_string(),
                 snapshot_id: snap.id.clone(),
                 parent_id: None,
                 name: "b.rs".to_string(),
-                path: "/project/b.rs".to_string(),
-                node_type: NodeType::File,
+                path: "b.rs".to_string(),
+                module_type: ModuleType::File,
                 depth: 0,
             },
         ];
-        NodeRepository::new(&db.conn).bulk_insert(&nodes).unwrap();
+        ModuleRepository::new(&db.conn).bulk_insert(&modules).unwrap();
 
         let deps = vec![Dependency {
-            from_node_id: "n1".to_string(),
-            to_node_id: "n2".to_string(),
+            from_module_id: "m1".to_string(),
+            to_module_id: "m2".to_string(),
             line_number: 3,
         }];
 
@@ -379,8 +379,8 @@ mod tests {
 
         let result = dep_repo.get_by_snapshot(&snap.id).unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].from_node_id, "n1");
-        assert_eq!(result[0].to_node_id, "n2");
+        assert_eq!(result[0].from_module_id, "m1");
+        assert_eq!(result[0].to_module_id, "m2");
         assert_eq!(result[0].line_number, 3);
     }
 

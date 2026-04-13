@@ -7,44 +7,40 @@ pub use parser::parse_rust_imports;
 pub use parser::ImportEntry;
 pub use resolver::resolve_import;
 
-use crate::core::{Dependency, Node};
+use crate::core::{Dependency, Module};
 use anyhow::Result;
 use rayon::prelude::*;
 use std::path::Path;
 
 pub struct ScanResult {
-    pub nodes: Vec<Node>,
+    pub modules: Vec<Module>,
     pub dependencies: Vec<Dependency>,
 }
 
 pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
     let root = root.canonicalize()?;
-    let nodes = discover_files(&root, snapshot_id)?;
+    let modules = discover_files(&root, snapshot_id)?;
 
-    let file_nodes: Vec<&Node> = nodes
-        .iter()
-        .filter(|n| matches!(n.node_type, crate::core::NodeType::File))
-        .collect();
+    let all_paths: Vec<String> = modules.iter().map(|m| m.path.clone()).collect();
 
-    let all_paths: Vec<String> = nodes.iter().map(|n| n.path.clone()).collect();
-
-    let dependencies: Vec<Dependency> = file_nodes
+    let dependencies: Vec<Dependency> = modules
         .par_iter()
-        .filter_map(|node| {
-            let path = Path::new(&node.path);
-            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+        .filter_map(|module| {
+            let rel_path = Path::new(&module.path);
+            if rel_path.extension().and_then(|e| e.to_str()) != Some("rs") {
                 return None;
             }
-            let source = std::fs::read_to_string(path).ok()?;
+            let abs_path = root.join(rel_path);
+            let source = std::fs::read_to_string(&abs_path).ok()?;
             let imports = parse_rust_imports(&source);
             let deps: Vec<Dependency> = imports
                 .iter()
                 .filter_map(|entry| {
-                    let resolved = resolve_import(&entry.path, &node.path, &root, &all_paths)?;
-                    let to_node = nodes.iter().find(|n| n.path == resolved)?;
+                    let resolved = resolve_import(&entry.path, &module.path, Path::new(""), &all_paths)?;
+                    let to_module = modules.iter().find(|m| m.path == resolved)?;
                     Some(Dependency {
-                        from_node_id: node.id.clone(),
-                        to_node_id: to_node.id.clone(),
+                        from_module_id: module.id.clone(),
+                        to_module_id: to_module.id.clone(),
                         line_number: entry.line_number,
                     })
                 })
@@ -55,7 +51,7 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
         .collect();
 
     Ok(ScanResult {
-        nodes,
+        modules,
         dependencies,
     })
 }
@@ -63,30 +59,18 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::NodeType;
+    use crate::core::ModuleType;
 
     #[test]
-    fn scan_project_discovers_nodes_and_deps() {
+    fn scan_project_discovers_modules_and_deps() {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/fixtures/mock_rust_project");
         let result = scan_project(&fixture, "test-snap").unwrap();
 
-        // Should have dirs and files
-        let dirs: Vec<&Node> = result
-            .nodes
-            .iter()
-            .filter(|n| matches!(n.node_type, NodeType::Dir))
-            .collect();
-        let files: Vec<&Node> = result
-            .nodes
-            .iter()
-            .filter(|n| matches!(n.node_type, NodeType::File))
-            .collect();
-
-        // root, src, modules = 3 dirs
-        assert_eq!(dirs.len(), 3, "dirs: {:?}", dirs.iter().map(|n| &n.name).collect::<Vec<_>>());
+        // Only source files, no directories
+        assert!(result.modules.iter().all(|m| matches!(m.module_type, ModuleType::File)));
         // main.rs, mod.rs, helper.rs = 3 files
-        assert_eq!(files.len(), 3, "files: {:?}", files.iter().map(|n| &n.name).collect::<Vec<_>>());
+        assert_eq!(result.modules.len(), 3, "files: {:?}", result.modules.iter().map(|m| &m.name).collect::<Vec<_>>());
 
         // main.rs has `use crate::modules::helper` which should resolve to helper.rs
         assert!(
@@ -100,11 +84,10 @@ mod tests {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/fixtures/mock_rust_project");
 
-        // Run twice and verify consistent node/dep counts
         let r1 = scan_project(&fixture, "snap-1").unwrap();
         let r2 = scan_project(&fixture, "snap-2").unwrap();
 
-        assert_eq!(r1.nodes.len(), r2.nodes.len());
+        assert_eq!(r1.modules.len(), r2.modules.len());
         assert_eq!(r1.dependencies.len(), r2.dependencies.len());
     }
 }

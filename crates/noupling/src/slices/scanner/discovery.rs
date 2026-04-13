@@ -2,42 +2,24 @@ use anyhow::Result;
 use std::path::Path;
 use uuid::Uuid;
 
-use crate::core::{Node, NodeType};
+use crate::core::{Module, ModuleType};
 
 const IGNORED_DIRS: &[&str] = &[".git", "target", "node_modules", ".noupling", ".agent"];
+const SOURCE_EXTENSIONS: &[&str] = &["rs"];
 
-pub fn discover_files(root: &Path, snapshot_id: &str) -> Result<Vec<Node>> {
+pub fn discover_files(root: &Path, snapshot_id: &str) -> Result<Vec<Module>> {
     let mut nodes = Vec::new();
     let root_canonical = root.canonicalize()?;
-    walk_directory(&root_canonical, snapshot_id, None, 0, &mut nodes)?;
+    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut nodes)?;
     Ok(nodes)
 }
 
 fn walk_directory(
     dir: &Path,
     snapshot_id: &str,
-    parent_id: Option<&str>,
-    depth: i32,
-    nodes: &mut Vec<Node>,
+    root: &Path,
+    modules: &mut Vec<Module>,
 ) -> Result<()> {
-    let dir_name = dir
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-
-    let dir_id = Uuid::new_v4().to_string();
-
-    nodes.push(Node {
-        id: dir_id.clone(),
-        snapshot_id: snapshot_id.to_string(),
-        parent_id: parent_id.map(|s| s.to_string()),
-        name: dir_name,
-        path: dir.to_string_lossy().to_string(),
-        node_type: NodeType::Dir,
-        depth,
-    });
-
     let mut entries: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
         .collect();
@@ -51,17 +33,32 @@ fn walk_directory(
             if IGNORED_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            walk_directory(&path, snapshot_id, Some(&dir_id), depth + 1, nodes)?;
+            walk_directory(&path, snapshot_id, root, modules)?;
         } else {
-            let file_id = Uuid::new_v4().to_string();
-            nodes.push(Node {
-                id: file_id,
+            let is_source = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|ext| SOURCE_EXTENSIONS.contains(&ext))
+                .unwrap_or(false);
+
+            if !is_source {
+                continue;
+            }
+
+            let rel_path = path
+                .strip_prefix(root)
+                .unwrap_or(&path);
+
+            let depth = rel_path.components().count() as i32;
+
+            modules.push(Module {
+                id: Uuid::new_v4().to_string(),
                 snapshot_id: snapshot_id.to_string(),
-                parent_id: Some(dir_id.clone()),
+                parent_id: None,
                 name,
-                path: path.to_string_lossy().to_string(),
-                node_type: NodeType::File,
-                depth: depth + 1,
+                path: rel_path.to_string_lossy().to_string(),
+                module_type: ModuleType::File,
+                depth,
             });
         }
     }
@@ -84,6 +81,9 @@ mod tests {
         fs::create_dir_all(&utils).unwrap();
         fs::write(utils.join("mod.rs"), "").unwrap();
 
+        // Non-source files should be excluded
+        fs::write(src.join("README.md"), "# Readme").unwrap();
+
         // Should be ignored
         let git = dir.join(".git");
         fs::create_dir_all(&git).unwrap();
@@ -91,47 +91,39 @@ mod tests {
     }
 
     #[test]
-    fn discovers_all_files_and_dirs() {
+    fn discovers_only_rs_files() {
         let tmp = tempfile::tempdir().unwrap();
         create_mock_project(tmp.path());
 
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
 
-        let dirs: Vec<&Node> = nodes
-            .iter()
-            .filter(|n| matches!(n.node_type, NodeType::Dir))
-            .collect();
-        let files: Vec<&Node> = nodes
-            .iter()
-            .filter(|n| matches!(n.node_type, NodeType::File))
-            .collect();
-
-        // root, src, utils (not .git)
-        assert_eq!(dirs.len(), 3, "Expected 3 dirs, got: {:?}", dirs.iter().map(|n| &n.name).collect::<Vec<_>>());
-        // main.rs, lib.rs, mod.rs
-        assert_eq!(files.len(), 3, "Expected 3 files, got: {:?}", files.iter().map(|n| &n.name).collect::<Vec<_>>());
+        assert_eq!(nodes.len(), 3, "Expected 3 .rs files, got: {:?}", nodes.iter().map(|n| &n.name).collect::<Vec<_>>());
+        assert!(nodes.iter().all(|n| n.name.ends_with(".rs")));
+        assert!(nodes.iter().all(|n| matches!(n.module_type, ModuleType::File)));
     }
 
     #[test]
-    fn root_node_has_no_parent() {
+    fn no_directory_nodes() {
         let tmp = tempfile::tempdir().unwrap();
         create_mock_project(tmp.path());
+
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
-        let root = &nodes[0];
-        assert!(root.parent_id.is_none());
-        assert_eq!(root.depth, 0);
+        let dirs: Vec<&Module> = nodes.iter().filter(|n| matches!(n.module_type, ModuleType::Dir)).collect();
+        assert!(dirs.is_empty());
     }
 
     #[test]
-    fn child_nodes_reference_parent() {
+    fn depth_is_relative_to_root() {
         let tmp = tempfile::tempdir().unwrap();
         create_mock_project(tmp.path());
+
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
 
-        let root_id = &nodes[0].id;
-        let src_node = nodes.iter().find(|n| n.name == "src").unwrap();
-        assert_eq!(src_node.parent_id.as_ref().unwrap(), root_id);
-        assert_eq!(src_node.depth, 1);
+        let main_rs = nodes.iter().find(|n| n.name == "main.rs").unwrap();
+        assert_eq!(main_rs.depth, 2); // src/main.rs = depth 2
+
+        let mod_rs = nodes.iter().find(|n| n.name == "mod.rs").unwrap();
+        assert_eq!(mod_rs.depth, 3); // src/utils/mod.rs = depth 3
     }
 
     #[test]
@@ -139,17 +131,6 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         create_mock_project(tmp.path());
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
-        let git_nodes: Vec<&Node> = nodes.iter().filter(|n| n.name == ".git").collect();
-        assert!(git_nodes.is_empty());
-    }
-
-    #[test]
-    fn depth_increases_with_nesting() {
-        let tmp = tempfile::tempdir().unwrap();
-        create_mock_project(tmp.path());
-        let nodes = discover_files(tmp.path(), "snap-1").unwrap();
-
-        let mod_rs = nodes.iter().find(|n| n.name == "mod.rs").unwrap();
-        assert_eq!(mod_rs.depth, 3); // root(0) -> src(1) -> utils(2) -> mod.rs(3)
+        assert!(nodes.iter().all(|n| !n.path.contains(".git")));
     }
 }
