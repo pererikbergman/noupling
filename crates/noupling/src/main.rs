@@ -11,6 +11,19 @@ use std::path::Path;
 fn main() {
     let cli = Cli::parse();
 
+    // Ensure settings.json exists for any command that takes a path
+    match &cli.command {
+        Commands::Init { path }
+        | Commands::Scan { path }
+        | Commands::Audit { path, .. }
+        | Commands::Report { path, .. } => {
+            let settings_path = Path::new(path).join(".noupling").join("settings.json");
+            if !settings_path.exists() {
+                let _ = settings::Settings::write_defaults(Path::new(path));
+            }
+        }
+    }
+
     let result = match cli.command {
         Commands::Init { path } => run_init(&path),
         Commands::Scan { path } => run_scan(&path),
