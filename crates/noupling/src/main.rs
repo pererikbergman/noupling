@@ -152,10 +152,9 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             println!("Report saved to {}", file_path.display());
         }
         "md" => {
-            let content = slices::reporter::format_markdown(&modules, &result, &snapshot.id);
-            let file_path = report_dir.join("report.md");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
+            let md_dir = report_dir.join("report-md");
+            slices::reporter::generate_markdown_report(&modules, &result, &snapshot.id, &md_dir)?;
+            println!("Report saved to {}/README.md", md_dir.display());
         }
         "xml" => {
             let content = slices::reporter::format_xml(&modules, &result, &snapshot.id);

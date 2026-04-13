@@ -1,4 +1,5 @@
 mod html;
+mod md;
 
 use std::collections::BTreeMap;
 use serde::Serialize;
@@ -7,6 +8,7 @@ use crate::core::Module;
 use crate::slices::analyzer::{AuditResult, CouplingViolation};
 
 pub use html::generate_html_report;
+pub use md::generate_markdown_report;
 
 // ── Comprehensive JSON Report ──
 
@@ -443,7 +445,8 @@ pub fn format_text(result: &AuditResult) -> String {
     output
 }
 
-pub fn format_markdown(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
+// Single-file markdown kept for backward compat in tests
+fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
     let report = JsonReport::from_audit(modules, result, snapshot_id);
     let mut md = String::new();
 
@@ -657,7 +660,7 @@ mod tests {
             total_modules: 5,
         };
 
-        let md = format_markdown(&modules, &result, "snap-1");
+        let md = _format_markdown_single(&modules, &result, "snap-1");
         assert!(md.contains("# noupling Audit Report"));
         assert!(md.contains("| Health Score | 100.0/100 |"));
     }
@@ -675,7 +678,7 @@ mod tests {
             total_modules: 2,
         };
 
-        let md = format_markdown(&modules, &result, "snap-3");
+        let md = _format_markdown_single(&modules, &result, "snap-3");
         assert!(md.contains("## Circular Dependencies"));
         assert!(md.contains("Mutual Dependencies (Order 2)"));
     }
@@ -689,7 +692,7 @@ mod tests {
             total_modules: 3,
         };
 
-        let md = format_markdown(&modules, &result, "snap-4");
+        let md = _format_markdown_single(&modules, &result, "snap-4");
         assert!(md.contains("## Directory Tree"));
     }
 }
