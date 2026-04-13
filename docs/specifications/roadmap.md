@@ -8,33 +8,33 @@ type: Spec
 ### 1. Phased Execution View
 
 *   **Phase 1: Foundation & MVP (Must-Haves):**
-    - [ ] 01-01 - Restructure workspace into vertical slice architecture (Epic: Project Foundation)
-    - [ ] 01-02 - Define core domain types: Node, Dependency, Snapshot (Epic: Project Foundation)
-    - [ ] 01-03 - Add all workspace dependencies (Epic: Project Foundation)
-    - [ ] 01-04 - Implement clap CLI skeleton with scan/audit/report stubs (Epic: Project Foundation)
-    - [ ] 02-01 - Auto-initialize SQLite database with schema (Epic: Storage Slice)
-    - [ ] 02-02 - Implement SnapshotRepository (Epic: Storage Slice)
-    - [ ] 02-03 - Implement NodeRepository (Epic: Storage Slice)
-    - [ ] 02-04 - Implement DependencyRepository (Epic: Storage Slice)
-    - [ ] 03-01 - Recursive file discovery with tree building (Epic: Scanner Slice)
-    - [ ] 03-02 - Tree-sitter Rust grammar: parse `use` declarations (Epic: Scanner Slice)
-    - [ ] 03-03 - Map Rust imports to project file paths (Epic: Scanner Slice)
-    - [ ] 03-04 - Parallel scanning with Rayon (Epic: Scanner Slice)
-    - [ ] 04-01 - Bottom-up D_acc aggregation (Epic: Analyzer Slice)
-    - [ ] 04-02 - Top-down BFS sibling coupling detection (Epic: Analyzer Slice)
-    - [ ] 04-03 - Severity calculation: S = 1/(depth+1) (Epic: Analyzer Slice)
-    - [ ] 04-04 - Health score computation (Epic: Analyzer Slice)
-    - [ ] 05-01 - JSON reporter with critical_violations and score (Epic: Reporter Slice)
-    - [ ] 06-01 - Wire scan command: scanner -> storage pipeline (Epic: CLI Integration)
-    - [ ] 06-02 - Wire audit command: storage -> analyzer -> display (Epic: CLI Integration)
-    - [ ] 06-03 - Wire report command: audit -> JSON output (Epic: CLI Integration)
+    - [x] 01-01 - Restructure workspace into vertical slice architecture (Epic: Project Foundation)
+    - [x] 01-02 - Define core domain types: Node, Dependency, Snapshot (Epic: Project Foundation)
+    - [x] 01-03 - Add all workspace dependencies (Epic: Project Foundation)
+    - [x] 01-04 - Implement clap CLI skeleton with scan/audit/report stubs (Epic: Project Foundation)
+    - [x] 02-01 - Auto-initialize SQLite database with schema (Epic: Storage Slice)
+    - [x] 02-02 - Implement SnapshotRepository (Epic: Storage Slice)
+    - [x] 02-03 - Implement NodeRepository (Epic: Storage Slice)
+    - [x] 02-04 - Implement DependencyRepository (Epic: Storage Slice)
+    - [x] 03-01 - Recursive file discovery with tree building (Epic: Scanner Slice)
+    - [x] 03-02 - Tree-sitter Rust grammar: parse `use` declarations (Epic: Scanner Slice)
+    - [x] 03-03 - Map Rust imports to project file paths (Epic: Scanner Slice)
+    - [x] 03-04 - Parallel scanning with Rayon (Epic: Scanner Slice)
+    - [x] 04-01 - Bottom-up D_acc aggregation (Epic: Analyzer Slice)
+    - [x] 04-02 - Top-down BFS sibling coupling detection (Epic: Analyzer Slice)
+    - [x] 04-03 - Severity calculation: S = 1/(depth+1) (Epic: Analyzer Slice)
+    - [x] 04-04 - Health score computation (Epic: Analyzer Slice)
+    - [x] 05-01 - JSON reporter with critical_violations and score (Epic: Reporter Slice)
+    - [x] 06-01 - Wire scan command: scanner -> storage pipeline (Epic: CLI Integration)
+    - [x] 06-02 - Wire audit command: storage -> analyzer -> display (Epic: CLI Integration)
+    - [x] 06-03 - Wire report command: audit -> JSON output (Epic: CLI Integration)
 
 *   **Phase 2: Core Expansion (Should-Haves):**
-    - [ ] 04-05 - Circular dependency detection (Structural Loop, Severity 1.0) (Epic: Analyzer Slice)
-    - [ ] 05-02 - Markdown reporter with tables and sections (Epic: Reporter Slice)
-    - [ ] 06-04 - Wire report --format md command (Epic: CLI Integration)
-    - [ ] 06-05 - Audit --snapshot <ID> for historical snapshots (Epic: CLI Integration)
-    - [ ] 03-05 - Graceful skip for unsupported file types with warning (Epic: Scanner Slice)
+    - [x] 04-05 - Circular dependency detection (Structural Loop, Severity 1.0) (Epic: Analyzer Slice)
+    - [x] 05-02 - Markdown reporter with tables and sections (Epic: Reporter Slice)
+    - [x] 06-04 - Wire report --format md command (Epic: CLI Integration)
+    - [x] 06-05 - Audit --snapshot <ID> for historical snapshots (Epic: CLI Integration)
+    - [x] 03-05 - Graceful skip for unsupported file types with warning (Epic: Scanner Slice)
 
 *   **Phase 3: Scaling & Polish (Could-Haves):**
     - [ ] 03-06 - Kotlin grammar parser (Epic: Scanner Slice)
@@ -47,31 +47,31 @@ type: Spec
 
 | Done | Priority | Story ID | Title | Epic Reference | Business Value / Impact |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| - [ ] | Must | 01-01 | Restructure workspace | Project Foundation | Prerequisite for all development |
-| - [ ] | Must | 01-02 | Core domain types | Project Foundation | Common vocabulary for all slices |
-| - [ ] | Must | 01-03 | Workspace dependencies | Project Foundation | Enables compilation of all slices |
-| - [ ] | Must | 01-04 | CLI skeleton | Project Foundation | Entry point for user interaction |
-| - [ ] | Must | 02-01 | SQLite auto-init | Storage Slice | Persistence prerequisite |
-| - [ ] | Must | 02-02 | SnapshotRepository | Storage Slice | Snapshot lifecycle management |
-| - [ ] | Must | 02-03 | NodeRepository | Storage Slice | Tree structure persistence |
-| - [ ] | Must | 02-04 | DependencyRepository | Storage Slice | Import relationship storage |
-| - [ ] | Must | 03-01 | File discovery | Scanner Slice | Core scanning capability |
-| - [ ] | Must | 03-02 | Rust Tree-sitter parser | Scanner Slice | First language: Rust (user priority) |
-| - [ ] | Must | 03-03 | Rust import resolution | Scanner Slice | Maps imports to project files |
-| - [ ] | Must | 03-04 | Parallel scanning (Rayon) | Scanner Slice | Performance requirement |
-| - [ ] | Must | 04-01 | D_acc aggregation | Analyzer Slice | Core analysis algorithm |
-| - [ ] | Must | 04-02 | BFS coupling detection | Analyzer Slice | Core violation detection |
-| - [ ] | Must | 04-03 | Severity calculation | Analyzer Slice | Quantifies violation impact |
-| - [ ] | Must | 04-04 | Health score | Analyzer Slice | Summary metric for users |
-| - [ ] | Must | 05-01 | JSON reporter | Reporter Slice | CI-consumable output |
-| - [ ] | Must | 06-01 | Wire scan command | CLI Integration | End-to-end scan flow |
-| - [ ] | Must | 06-02 | Wire audit command | CLI Integration | End-to-end audit flow |
-| - [ ] | Must | 06-03 | Wire report (JSON) | CLI Integration | End-to-end report flow |
-| - [ ] | Should | 04-05 | Circular dependency detection | Analyzer Slice | Catches structural loops |
-| - [ ] | Should | 05-02 | Markdown reporter | Reporter Slice | Human-readable output |
-| - [ ] | Should | 06-04 | Wire report (Markdown) | CLI Integration | Format choice for users |
-| - [ ] | Should | 06-05 | Historical snapshot audit | CLI Integration | Trend analysis capability |
-| - [ ] | Should | 03-05 | Unsupported file skip | Scanner Slice | Robustness for mixed repos |
+| - [x] | Must | 01-01 | Restructure workspace | Project Foundation | Prerequisite for all development |
+| - [x] | Must | 01-02 | Core domain types | Project Foundation | Common vocabulary for all slices |
+| - [x] | Must | 01-03 | Workspace dependencies | Project Foundation | Enables compilation of all slices |
+| - [x] | Must | 01-04 | CLI skeleton | Project Foundation | Entry point for user interaction |
+| - [x] | Must | 02-01 | SQLite auto-init | Storage Slice | Persistence prerequisite |
+| - [x] | Must | 02-02 | SnapshotRepository | Storage Slice | Snapshot lifecycle management |
+| - [x] | Must | 02-03 | NodeRepository | Storage Slice | Tree structure persistence |
+| - [x] | Must | 02-04 | DependencyRepository | Storage Slice | Import relationship storage |
+| - [x] | Must | 03-01 | File discovery | Scanner Slice | Core scanning capability |
+| - [x] | Must | 03-02 | Rust Tree-sitter parser | Scanner Slice | First language: Rust (user priority) |
+| - [x] | Must | 03-03 | Rust import resolution | Scanner Slice | Maps imports to project files |
+| - [x] | Must | 03-04 | Parallel scanning (Rayon) | Scanner Slice | Performance requirement |
+| - [x] | Must | 04-01 | D_acc aggregation | Analyzer Slice | Core analysis algorithm |
+| - [x] | Must | 04-02 | BFS coupling detection | Analyzer Slice | Core violation detection |
+| - [x] | Must | 04-03 | Severity calculation | Analyzer Slice | Quantifies violation impact |
+| - [x] | Must | 04-04 | Health score | Analyzer Slice | Summary metric for users |
+| - [x] | Must | 05-01 | JSON reporter | Reporter Slice | CI-consumable output |
+| - [x] | Must | 06-01 | Wire scan command | CLI Integration | End-to-end scan flow |
+| - [x] | Must | 06-02 | Wire audit command | CLI Integration | End-to-end audit flow |
+| - [x] | Must | 06-03 | Wire report (JSON) | CLI Integration | End-to-end report flow |
+| - [x] | Should | 04-05 | Circular dependency detection | Analyzer Slice | Catches structural loops |
+| - [x] | Should | 05-02 | Markdown reporter | Reporter Slice | Human-readable output |
+| - [x] | Should | 06-04 | Wire report (Markdown) | CLI Integration | Format choice for users |
+| - [x] | Should | 06-05 | Historical snapshot audit | CLI Integration | Trend analysis capability |
+| - [x] | Should | 03-05 | Unsupported file skip | Scanner Slice | Robustness for mixed repos |
 | - [ ] | Could | 03-06 | Kotlin parser | Scanner Slice | Multi-language expansion |
 | - [ ] | Could | 03-07 | TypeScript parser | Scanner Slice | Multi-language expansion |
 | - [ ] | Could | 03-08 | Swift parser | Scanner Slice | Multi-language expansion |
