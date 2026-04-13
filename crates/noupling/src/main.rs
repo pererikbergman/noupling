@@ -12,8 +12,8 @@ fn main() {
 
     let result = match cli.command {
         Commands::Scan { path } => run_scan(&path),
-        Commands::Audit { snapshot } => run_audit(snapshot.as_deref()),
-        Commands::Report { format } => run_report(&format),
+        Commands::Audit { path, snapshot } => run_audit(&path, snapshot.as_deref()),
+        Commands::Report { path, format } => run_report(&path, &format),
     };
 
     if let Err(e) = result {
@@ -22,10 +22,10 @@ fn main() {
     }
 }
 
-fn find_db() -> anyhow::Result<slices::storage::Database> {
-    let db_path = Path::new(".noupling").join("history.db");
+fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
+    let db_path = Path::new(project_path).join(".noupling").join("history.db");
     if !db_path.exists() {
-        anyhow::bail!("No database found. Run `noupling scan <PATH>` first.");
+        anyhow::bail!("No database found at {}. Run `noupling scan <PATH>` first.", db_path.display());
     }
     slices::storage::Database::open(&db_path)
 }
@@ -70,8 +70,8 @@ fn run_scan(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_audit(snapshot_id: Option<&str>) -> anyhow::Result<()> {
-    let db = find_db()?;
+fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
+    let db = find_db(path)?;
     let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = match snapshot_id {
@@ -96,8 +96,8 @@ fn run_audit(snapshot_id: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_report(format: &str) -> anyhow::Result<()> {
-    let db = find_db()?;
+fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
+    let db = find_db(path)?;
     let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = snap_repo
@@ -112,8 +112,8 @@ fn run_report(format: &str) -> anyhow::Result<()> {
 
     let result = slices::analyzer::audit(&modules, &dependencies);
 
-    let report_dir = Path::new(".noupling");
-    std::fs::create_dir_all(report_dir)?;
+    let report_dir = Path::new(path).join(".noupling");
+    std::fs::create_dir_all(&report_dir)?;
 
     match format {
         "json" => {
