@@ -1,6 +1,10 @@
+mod html;
+
 use serde::Serialize;
 
 use crate::slices::analyzer::{AuditResult, CouplingViolation};
+
+pub use html::generate_html_report;
 
 #[derive(Serialize)]
 pub struct JsonReport {

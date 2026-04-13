@@ -47,6 +47,7 @@ Use `--snapshot <ID>` to audit a specific historical snapshot instead of the lat
 ```bash
 noupling report /path/to/project --format json
 noupling report /path/to/project --format md
+noupling report /path/to/project --format html
 ```
 
 Outputs a structured report to stdout and saves it to `.noupling/report.json` or `.noupling/report.md`.
