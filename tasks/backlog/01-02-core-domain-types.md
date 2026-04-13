@@ -16,12 +16,12 @@ Define the core data structures that represent the project tree, import dependen
 
 ### Acceptance Criteria
 
-- [ ] `NodeType` enum with FILE and DIR variants.
-- [ ] `Node` struct with id, snapshot_id, parent_id, name, path, node_type, depth.
-- [ ] `Dependency` struct with from_node_id, to_node_id, line_number.
-- [ ] `Snapshot` struct with id, timestamp, root_path.
-- [ ] All types derive Debug, Serialize, Deserialize.
-- [ ] Unit tests verify serialization roundtrip.
+- [x] `NodeType` enum with FILE and DIR variants.
+- [x] `Node` struct with id, snapshot_id, parent_id, name, path, node_type, depth.
+- [x] `Dependency` struct with from_node_id, to_node_id, line_number.
+- [x] `Snapshot` struct with id, timestamp, root_path.
+- [x] All types derive Debug, Serialize, Deserialize.
+- [x] Unit tests verify serialization roundtrip.
 
 ### TDD Strategy
 
@@ -31,7 +31,7 @@ Define the core data structures that represent the project tree, import dependen
 
 ### Implementation Steps
 
-- [ ] 1. Write failing tests for Node, Dependency, Snapshot serialization.
-- [ ] 2. Define NodeType enum.
-- [ ] 3. Define Node, Dependency, Snapshot structs.
-- [ ] 4. Verify all tests pass.
+- [x] 1. Write failing tests for Node, Dependency, Snapshot serialization.
+- [x] 2. Define NodeType enum.
+- [x] 3. Define Node, Dependency, Snapshot structs.
+- [x] 4. Verify all tests pass.
