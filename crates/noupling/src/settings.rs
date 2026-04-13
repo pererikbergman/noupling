@@ -20,6 +20,8 @@ pub struct Thresholds {
     pub score_yellow: f64,
     #[serde(default = "default_critical_severity")]
     pub critical_severity: f64,
+    #[serde(default = "default_minimum_severity")]
+    pub minimum_severity: f64,
 }
 
 fn default_thresholds() -> Thresholds {
@@ -27,12 +29,14 @@ fn default_thresholds() -> Thresholds {
         score_green: default_score_green(),
         score_yellow: default_score_yellow(),
         critical_severity: default_critical_severity(),
+        minimum_severity: default_minimum_severity(),
     }
 }
 
 fn default_score_green() -> f64 { 90.0 }
 fn default_score_yellow() -> f64 { 70.0 }
 fn default_critical_severity() -> f64 { 0.5 }
+fn default_minimum_severity() -> f64 { 0.2 }
 
 fn default_ignored_dirs() -> Vec<String> {
     vec![

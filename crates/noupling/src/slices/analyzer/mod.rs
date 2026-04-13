@@ -21,6 +21,19 @@ pub struct AuditResult {
     pub total_modules: usize,
 }
 
+impl AuditResult {
+    /// Remove violations below the given severity threshold and recalculate the score.
+    pub fn filter_by_severity(&mut self, minimum_severity: f64) {
+        self.violations.retain(|v| v.severity >= minimum_severity);
+        let sum_severity: f64 = self.violations.iter().map(|v| v.severity).sum();
+        self.score = if self.total_modules > 0 {
+            (100.0 * (1.0 - sum_severity / self.total_modules as f64)).max(0.0)
+        } else {
+            100.0
+        };
+    }
+}
+
 /// Derive virtual directory tree from module file paths.
 /// Returns a map of directory path -> list of child directory paths.
 fn build_dir_tree(modules: &[Module]) -> BTreeMap<String, Vec<String>> {

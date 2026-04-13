@@ -113,7 +113,9 @@ fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
-    let result = slices::analyzer::audit(&modules, &dependencies);
+    let project_settings = settings::Settings::load(Path::new(path))?;
+    let mut result = slices::analyzer::audit(&modules, &dependencies);
+    result.filter_by_severity(project_settings.thresholds.minimum_severity);
 
     print!("{}", slices::reporter::format_text(&result));
 
@@ -134,7 +136,9 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
-    let result = slices::analyzer::audit(&modules, &dependencies);
+    let project_settings = settings::Settings::load(Path::new(path))?;
+    let mut result = slices::analyzer::audit(&modules, &dependencies);
+    result.filter_by_severity(project_settings.thresholds.minimum_severity);
 
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
@@ -156,7 +160,6 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             println!("Report saved to {}", file_path.display());
         }
         "html" => {
-            let project_settings = settings::Settings::load(Path::new(path))?;
             let html_dir = report_dir.join("report");
             slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir, &project_settings)?;
             println!("HTML report generated at {}/index.html", html_dir.display());
