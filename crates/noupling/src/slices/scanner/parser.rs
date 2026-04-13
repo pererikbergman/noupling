@@ -198,6 +198,72 @@ fn collect_kotlin_imports(
     }
 }
 
+pub fn parse_typescript_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    let ts_lang: tree_sitter::Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
+    parser
+        .set_language(&ts_lang)
+        .expect("Failed to set TypeScript language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_typescript_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+pub fn parse_tsx_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    let tsx_lang: tree_sitter::Language = tree_sitter_typescript::LANGUAGE_TSX.into();
+    parser
+        .set_language(&tsx_lang)
+        .expect("Failed to set TSX language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_typescript_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_typescript_imports(
+    node: tree_sitter::Node,
+    source: &str,
+    imports: &mut Vec<ImportEntry>,
+) {
+    if node.kind() == "import_statement" {
+        let line_number = (node.start_position().row + 1) as i32;
+        // Find the string/string_fragment child which contains the module path
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "string" {
+                // Strip quotes from the string
+                let text = node_text(child, source);
+                let path = text.trim_matches(|c| c == '"' || c == '\'').to_string();
+                if !path.is_empty() {
+                    imports.push(ImportEntry {
+                        path,
+                        line_number,
+                    });
+                }
+                return;
+            }
+        }
+        return;
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_typescript_imports(child, source, imports);
+    }
+}
+
 fn node_text(node: tree_sitter::Node, source: &str) -> String {
     source[node.byte_range()].to_string()
 }
@@ -322,5 +388,72 @@ mod tests {
         let source = "fun main() { println(\"hello\") }";
         let imports = parse_kotlin_imports(source);
         assert!(imports.is_empty());
+    }
+
+    // ── TypeScript parser ──
+
+    #[test]
+    fn ts_parses_simple_import() {
+        let source = "import { Component } from './component';";
+        let imports = parse_typescript_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "./component");
+        assert_eq!(imports[0].line_number, 1);
+    }
+
+    #[test]
+    fn ts_parses_default_import() {
+        let source = "import React from 'react';";
+        let imports = parse_typescript_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "react");
+    }
+
+    #[test]
+    fn ts_parses_namespace_import() {
+        let source = "import * as utils from '../utils';";
+        let imports = parse_typescript_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "../utils");
+    }
+
+    #[test]
+    fn ts_parses_multiple_imports() {
+        let source = "import { Foo } from './foo';\nimport { Bar } from './bar';\nimport { Baz } from '../baz';\n";
+        let imports = parse_typescript_imports(source);
+        assert_eq!(imports.len(), 3);
+        assert_eq!(imports[0].line_number, 1);
+        assert_eq!(imports[1].line_number, 2);
+        assert_eq!(imports[2].line_number, 3);
+    }
+
+    #[test]
+    fn ts_parses_relative_path() {
+        let source = "import { helper } from '../../shared/helper';";
+        let imports = parse_typescript_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "../../shared/helper");
+    }
+
+    #[test]
+    fn ts_handles_empty_source() {
+        let imports = parse_typescript_imports("");
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn ts_ignores_non_import_code() {
+        let source = "const x = 42;\nfunction hello() {}";
+        let imports = parse_typescript_imports(source);
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn tsx_parses_imports() {
+        let source = "import { useState } from 'react';\nimport { Button } from './Button';";
+        let imports = parse_tsx_imports(source);
+        assert_eq!(imports.len(), 2);
+        assert_eq!(imports[0].path, "react");
+        assert_eq!(imports[1].path, "./Button");
     }
 }

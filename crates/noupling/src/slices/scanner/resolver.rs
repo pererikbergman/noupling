@@ -12,6 +12,7 @@ pub fn resolve_import(
     match ext {
         "rs" => resolve_rust_import(import_path, source_file, known_paths),
         "kt" | "kts" => resolve_kotlin_import(import_path, known_paths),
+        "ts" | "tsx" => resolve_typescript_import(import_path, source_file, known_paths),
         _ => None,
     }
 }
@@ -65,6 +66,52 @@ fn resolve_kotlin_import(
             if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
                 return Some(found.clone());
             }
+        }
+    }
+
+    None
+}
+
+/// Resolves a TypeScript/TSX import (relative path) to a project file path.
+/// e.g., "./component" from "src/pages/Home.ts" -> "src/pages/component.ts"
+fn resolve_typescript_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    // Only resolve relative imports (starts with . or ..)
+    if !import_path.starts_with('.') {
+        return None;
+    }
+
+    let source_dir = Path::new(source_file).parent()?;
+    let resolved = source_dir.join(import_path);
+
+    // Normalize the path (handle ../)
+    let mut components: Vec<String> = Vec::new();
+    for comp in resolved.components() {
+        match comp {
+            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
+            _ => {}
+        }
+    }
+    let base = components.join("/");
+
+    // Try with various extensions
+    for ext in &["ts", "tsx", "js", "jsx"] {
+        let candidate = format!("{}.{}", base, ext);
+        if known_paths.contains(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    // Try as index file in directory
+    for ext in &["ts", "tsx", "js", "jsx"] {
+        let candidate = format!("{}/index.{}", base, ext);
+        if known_paths.contains(&candidate) {
+            return Some(candidate);
         }
     }
 
@@ -301,5 +348,83 @@ mod tests {
             &paths,
         );
         assert!(result.is_none());
+    }
+
+    // ── TypeScript resolver ──
+
+    fn ts_paths() -> Vec<String> {
+        vec![
+            "src/components/Button.tsx".to_string(),
+            "src/components/Input.tsx".to_string(),
+            "src/pages/Home.ts".to_string(),
+            "src/utils/helpers.ts".to_string(),
+            "src/shared/index.ts".to_string(),
+        ]
+    }
+
+    #[test]
+    fn ts_resolves_relative_import() {
+        let paths = ts_paths();
+        let root = Path::new("");
+        let result = resolve_import(
+            "./helpers",
+            "src/utils/helpers.ts", // importing from same dir
+            root,
+            &paths,
+        );
+        // ./helpers from src/utils/ -> src/utils/helpers.ts
+        assert_eq!(result, Some("src/utils/helpers.ts".to_string()));
+    }
+
+    #[test]
+    fn ts_resolves_sibling_import() {
+        let paths = ts_paths();
+        let root = Path::new("");
+        let result = resolve_import(
+            "../utils/helpers",
+            "src/pages/Home.ts",
+            root,
+            &paths,
+        );
+        assert_eq!(result, Some("src/utils/helpers.ts".to_string()));
+    }
+
+    #[test]
+    fn ts_resolves_index_file() {
+        let paths = ts_paths();
+        let root = Path::new("");
+        let result = resolve_import(
+            "../shared",
+            "src/pages/Home.ts",
+            root,
+            &paths,
+        );
+        assert_eq!(result, Some("src/shared/index.ts".to_string()));
+    }
+
+    #[test]
+    fn ts_returns_none_for_npm_package() {
+        let paths = ts_paths();
+        let root = Path::new("");
+        let result = resolve_import(
+            "react",
+            "src/pages/Home.ts",
+            root,
+            &paths,
+        );
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn ts_resolves_tsx_extension() {
+        let paths = ts_paths();
+        let root = Path::new("");
+        let result = resolve_import(
+            "../components/Button",
+            "src/pages/Home.ts",
+            root,
+            &paths,
+        );
+        assert_eq!(result, Some("src/components/Button.tsx".to_string()));
     }
 }

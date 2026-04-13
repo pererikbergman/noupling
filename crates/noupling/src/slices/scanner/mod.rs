@@ -33,6 +33,8 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
             let imports = match ext {
                 "rs" => parse_rust_imports(&source),
                 "kt" | "kts" => parser::parse_kotlin_imports(&source),
+                "ts" => parser::parse_typescript_imports(&source),
+                "tsx" => parser::parse_tsx_imports(&source),
                 _ => return None,
             };
             let deps: Vec<Dependency> = imports

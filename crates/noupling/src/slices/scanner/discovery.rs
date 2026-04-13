@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::core::{Module, ModuleType};
 
 const IGNORED_DIRS: &[&str] = &[".git", "target", "node_modules", ".noupling", ".agent"];
-const SOURCE_EXTENSIONS: &[&str] = &["rs", "kt", "kts"];
+const SOURCE_EXTENSIONS: &[&str] = &["rs", "kt", "kts", "ts", "tsx"];
 
 pub fn discover_files(root: &Path, snapshot_id: &str) -> Result<Vec<Module>> {
     let mut nodes = Vec::new();
