@@ -4,5 +4,5 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /usr/src/app/target/release/api_app /usr/local/bin/api_app
-CMD ["api_app"]
+COPY --from=builder /usr/src/app/target/release/noupling /usr/local/bin/noupling
+CMD ["noupling"]

@@ -16,13 +16,13 @@ Replace the placeholder crates with the noupling binary crate containing the ver
 
 ### Acceptance Criteria
 
-- [ ] Placeholder crates (api_app, core_logic, shared_types) are removed.
-- [ ] A single `noupling` binary crate exists at `crates/noupling/`.
-- [ ] Vertical slice modules exist: `slices/scanner/mod.rs`, `slices/storage/mod.rs`, `slices/analyzer/mod.rs`, `slices/reporter/mod.rs`.
-- [ ] Core module exists: `core/mod.rs`.
-- [ ] Utils module exists: `utils/mod.rs`.
-- [ ] `cargo build` compiles successfully.
-- [ ] `cargo clippy` passes.
+- [x] Placeholder crates (api_app, core_logic, shared_types) are removed.
+- [x] A single `noupling` binary crate exists at `crates/noupling/`.
+- [x] Vertical slice modules exist: `slices/scanner/mod.rs`, `slices/storage/mod.rs`, `slices/analyzer/mod.rs`, `slices/reporter/mod.rs`.
+- [x] Core module exists: `core/mod.rs`.
+- [x] Utils module exists: `utils/mod.rs`.
+- [x] `cargo build` compiles successfully.
+- [x] `cargo clippy` passes.
 
 ### Technical Details
 
@@ -46,9 +46,9 @@ Replace the placeholder crates with the noupling binary crate containing the ver
 
 ### Implementation Steps
 
-- [ ] 1. Remove placeholder crate directories.
-- [ ] 2. Create noupling crate directory structure.
-- [ ] 3. Write `crates/noupling/Cargo.toml` with workspace references.
-- [ ] 4. Write stub `main.rs` with module declarations.
-- [ ] 5. Write stub `mod.rs` files for each slice and core/utils.
-- [ ] 6. Verify `cargo build` and `cargo clippy`.
+- [x] 1. Remove placeholder crate directories.
+- [x] 2. Create noupling crate directory structure.
+- [x] 3. Write `crates/noupling/Cargo.toml` with workspace references.
+- [x] 4. Write stub `main.rs` with module declarations.
+- [x] 5. Write stub `mod.rs` files for each slice and core/utils.
+- [x] 6. Verify `cargo build` and `cargo clippy`.
