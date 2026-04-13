@@ -530,7 +530,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 // Circular deps scale inversely with depth:
                 // Root level (depth 0): severity = total_modules (can zero the score)
                 // Deeper: severity = total_modules / (depth + 1)
-                severity: modules.len() as f64 / (depth as f64 + 1.0),
+                severity: modules.len() as f64 / (depth as f64 + 1.0) / 10.0,
                 is_circular: true,
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
