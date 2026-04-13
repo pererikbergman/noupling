@@ -16,6 +16,8 @@ pub struct CouplingViolation {
     pub cycle_path: Vec<String>,
     /// For circular deps: the files causing each hop (from_file, to_file) per edge
     pub cycle_hop_files: Vec<(String, String)>,
+    /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.)
+    pub cycle_order: usize,
 }
 
 #[derive(Debug)]
@@ -387,80 +389,68 @@ fn detect_sibling_cycles(
         targets.dedup();
     }
 
-    // DFS to find cycles among sibling indices
-    let mut visited: FxHashSet<usize> = FxHashSet::default();
+    // Find all elementary cycles using DFS from each node
     let mut cycles: Vec<DetectedCycle> = Vec::new();
     let mut seen_keys: FxHashSet<String> = FxHashSet::default();
 
-    for i in 0..siblings.len() {
-        if !visited.contains(&i) {
-            let mut path = Vec::new();
-            let mut in_stack: FxHashSet<usize> = FxHashSet::default();
-            dfs_sibling_cycles(
-                i, &adj, &mut visited, &mut in_stack, &mut path,
-                &mut cycles, &mut seen_keys, siblings, &edge_files,
-            );
-        }
+    for start in 0..siblings.len() {
+        let mut path = vec![start];
+        let mut visited_in_path: FxHashSet<usize> = FxHashSet::default();
+        visited_in_path.insert(start);
+        find_all_cycles_from(
+            start, start, &adj, &mut path, &mut visited_in_path,
+            &mut cycles, &mut seen_keys, siblings, &edge_files,
+        );
     }
 
     cycles
 }
 
-fn dfs_sibling_cycles(
-    node: usize,
+fn find_all_cycles_from(
+    start: usize,
+    current: usize,
     adj: &FxHashMap<usize, Vec<usize>>,
-    visited: &mut FxHashSet<usize>,
-    in_stack: &mut FxHashSet<usize>,
     path: &mut Vec<usize>,
+    visited: &mut FxHashSet<usize>,
     cycles: &mut Vec<DetectedCycle>,
     seen_keys: &mut FxHashSet<String>,
     siblings: &[String],
     edge_files: &FxHashMap<(usize, usize), (String, String)>,
 ) {
-    visited.insert(node);
-    in_stack.insert(node);
-    path.push(node);
-
-    if let Some(neighbors) = adj.get(&node) {
+    if let Some(neighbors) = adj.get(&current) {
         for &next in neighbors {
-            if !visited.contains(&next) {
-                dfs_sibling_cycles(next, adj, visited, in_stack, path, cycles, seen_keys, siblings, edge_files);
-            } else if in_stack.contains(&next) {
-                let cycle_start = path.iter().position(|&p| p == next).unwrap_or(0);
-                let cycle_indices: Vec<usize> = path[cycle_start..].to_vec();
-
-                // Deduplicate
-                let mut sorted = cycle_indices.clone();
+            if next == start && path.len() >= 2 {
+                // Found a cycle back to start
+                let mut sorted = path.clone();
                 sorted.sort();
                 let key = sorted.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
-                if seen_keys.contains(&key) {
-                    return;
+                if !seen_keys.contains(&key) {
+                    seen_keys.insert(key);
+
+                    let mut dir_path: Vec<String> = path.iter().map(|&i| siblings[i].clone()).collect();
+                    dir_path.push(siblings[start].clone());
+
+                    let mut hop_files = Vec::new();
+                    for w in 0..path.len() {
+                        let from_idx = path[w];
+                        let to_idx = if w + 1 < path.len() { path[w + 1] } else { start };
+                        let files = edge_files.get(&(from_idx, to_idx)).cloned().unwrap_or_default();
+                        hop_files.push(files);
+                    }
+
+                    cycles.push(DetectedCycle { dir_path, hop_files });
                 }
-                seen_keys.insert(key);
-
-                // Build dir_path and hop_files
-                let mut dir_path: Vec<String> = cycle_indices.iter().map(|&i| siblings[i].clone()).collect();
-                dir_path.push(siblings[next].clone()); // close the cycle
-
-                let mut hop_files = Vec::new();
-                for w in 0..cycle_indices.len() {
-                    let from_idx = cycle_indices[w];
-                    let to_idx = if w + 1 < cycle_indices.len() {
-                        cycle_indices[w + 1]
-                    } else {
-                        next
-                    };
-                    let files = edge_files.get(&(from_idx, to_idx)).cloned().unwrap_or_default();
-                    hop_files.push(files);
-                }
-
-                cycles.push(DetectedCycle { dir_path, hop_files });
+            } else if !visited.contains(&next) && next > start {
+                // Only explore nodes with index > start to avoid finding the same cycle
+                // from different starting points
+                visited.insert(next);
+                path.push(next);
+                find_all_cycles_from(start, next, adj, path, visited, cycles, seen_keys, siblings, edge_files);
+                path.pop();
+                visited.remove(&next);
             }
         }
     }
-
-    path.pop();
-    in_stack.remove(&node);
 }
 
 fn short_dir_name(path: &str) -> String {
@@ -534,6 +524,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 is_circular: true,
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
+                cycle_order: cycle.dir_path.len() - 1, // -1 because last entry closes the cycle
             });
         }
 
@@ -568,6 +559,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
+                                                    cycle_order: 0,
                                                 });
                                             }
                                         }
@@ -600,6 +592,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
+                                                    cycle_order: 0,
                                                 });
                                             }
                                         }

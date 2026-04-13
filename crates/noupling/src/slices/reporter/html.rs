@@ -28,6 +28,7 @@ struct ViolationInfo {
     circular_direction: Option<String>,
     cycle_path: Vec<String>,
     cycle_hop_files: Vec<(String, String)>,
+    cycle_order: usize,
 }
 
 struct ReportData {
@@ -221,6 +222,7 @@ fn build_report_data(
             circular_direction,
             cycle_path: violation.cycle_path.clone(),
             cycle_hop_files: violation.cycle_hop_files.clone(),
+            cycle_order: violation.cycle_order,
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -438,10 +440,45 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     }
 
     let mut violations_html = String::new();
-    if !dir.violations_here.is_empty() {
+
+    // Separate circular and coupling violations
+    let circular_violations: Vec<&ViolationInfo> = dir.violations_here.iter().filter(|v| v.is_circular).collect();
+    let coupling_violations: Vec<&ViolationInfo> = dir.violations_here.iter().filter(|v| !v.is_circular).collect();
+
+    // Group circular by order
+    if !circular_violations.is_empty() {
+        let mut by_order: std::collections::BTreeMap<usize, Vec<&ViolationInfo>> = std::collections::BTreeMap::new();
+        for v in &circular_violations {
+            by_order.entry(v.cycle_order).or_default().push(v);
+        }
+
+        violations_html.push_str("<h2>Circular Dependencies</h2>\n");
+        for (order, violations) in &by_order {
+            let label = match order {
+                2 => "Mutual Dependencies (Order 2)".to_string(),
+                3 => "Triangular Cycles (Order 3)".to_string(),
+                _ => format!("Cycles of Order {}", order),
+            };
+            violations_html.push_str(&format!("<h3>{} <small class=\"hop-file\">({} found)</small></h3>\n", label, violations.len()));
+            violations_html.push_str("<table class=\"violations\">\n");
+            violations_html.push_str("<tr><th>Severity</th><th>Cycle</th></tr>\n");
+            for v in violations {
+                let sev_clr = "#ef4444";
+                // Render cycle inline
+                let cycle_content = render_cycle_details(v, data);
+                violations_html.push_str(&format!(
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{}</td></tr>\n",
+                    sev_clr, v.severity, cycle_content,
+                ));
+            }
+            violations_html.push_str("</table>\n");
+        }
+    }
+
+    if !coupling_violations.is_empty() {
         violations_html.push_str("<h2>Coupling Violations</h2>\n<table class=\"violations\">\n");
         violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
-        for v in &dir.violations_here {
+        for v in &coupling_violations {
             let sev_clr = if v.severity >= data.critical_severity {
                 "#ef4444"
             } else if v.severity >= 0.2 {
@@ -449,107 +486,22 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             } else {
                 "#6b7280"
             };
-
-            let (from_display, to_display, details) = if v.is_circular {
-                // For circular: show directory names, and the full cycle as details
-                let from_dir = std::path::Path::new(&v.from_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.from_module);
-                let to_dir = std::path::Path::new(&v.to_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.to_module);
-                let cycle_display = if !v.cycle_path.is_empty() {
-                    // Build cycle display with short names, file names, and full paths
-                    let mut hops = String::new();
-                    for (i, dir) in v.cycle_path.iter().enumerate() {
-                        if i > 0 {
-                            hops.push_str(" &#8594; ");
-                        }
-                        let dir_short = std::path::Path::new(dir)
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or(dir);
-                        hops.push_str(&format!("<strong title=\"{}\">{}</strong>", dir, dir_short));
-                        if i < v.cycle_hop_files.len() {
-                            // Show from_file for this hop
-                            let (from_file, _) = &v.cycle_hop_files[i];
-                            let file_short = std::path::Path::new(from_file)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(from_file);
-                            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
-                        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                            // Last entry (closing the cycle): show to_file of the last hop
-                            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-                            let file_short = std::path::Path::new(to_file)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(to_file);
-                            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
-                        }
-                    }
-                    // Full path details below
-                    let mut full_paths = String::new();
-                    for (i, dir) in v.cycle_path.iter().enumerate() {
-                        if i > 0 {
-                            full_paths.push_str("<br>");
-                        }
-                        let dir_short = std::path::Path::new(dir)
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or(dir);
-                        if i < v.cycle_hop_files.len() {
-                            let (from_file, _) = &v.cycle_hop_files[i];
-                            full_paths.push_str(&format!("<strong>{}</strong>: {} &#8594;", dir_short, from_file));
-                        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-                            full_paths.push_str(&format!("<strong>{}</strong>: {}", dir_short, to_file));
-                        } else {
-                            full_paths.push_str(&format!("<strong>{}</strong>", dir_short));
-                        }
-                    }
-                    format!(
-                        "<span class=\"circular\">Circular</span><br>\
-                        <span class=\"cycle-path\">{}</span><br>\
-                        <details><summary class=\"hop-file\">Show full paths</summary>\
-                        <div class=\"full-paths\">{}</div></details>",
-                        hops, full_paths
-                    )
-                } else {
-                    "<span class=\"circular\">Circular</span>".to_string()
-                };
-                (
-                    from_dir.to_string(),
-                    to_dir.to_string(),
-                    cycle_display,
-                )
-            } else {
-                // For coupling: show file names, type is "Coupling"
-                let from_short = std::path::Path::new(&v.from_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.from_module);
-                let to_short = std::path::Path::new(&v.to_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.to_module);
-                (
-                    from_short.to_string(),
-                    to_short.to_string(),
-                    "Coupling".to_string(),
-                )
-            };
-
+            let from_short = std::path::Path::new(&v.from_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.from_module);
+            let to_short = std::path::Path::new(&v.to_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.to_module);
             violations_html.push_str(&format!(
                 "<tr>
                     <td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td>
                     <td title=\"{}\">{}</td>
                     <td title=\"{}\">{}</td>
-                    <td>{}</td>
+                    <td>Coupling</td>
                 </tr>\n",
-                sev_clr, v.severity, v.from_module, from_display, v.to_module, to_display, details,
+                sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
             ));
         }
         violations_html.push_str("</table>\n");
@@ -647,6 +599,68 @@ details summary::before {{ content: ''; }}
         violations = dir.violations_here.len(),
         children_rows = children_rows,
         violations_html = violations_html,
+    )
+}
+
+fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
+    if v.cycle_path.is_empty() {
+        return String::new();
+    }
+
+    // Short cycle display
+    let mut hops = String::new();
+    for (i, dir) in v.cycle_path.iter().enumerate() {
+        if i > 0 {
+            hops.push_str(" &#8594; ");
+        }
+        let dir_short = std::path::Path::new(dir)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(dir);
+        hops.push_str(&format!("<strong title=\"{}\">{}</strong>", dir, dir_short));
+        if i < v.cycle_hop_files.len() {
+            let (from_file, _) = &v.cycle_hop_files[i];
+            let file_short = std::path::Path::new(from_file)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(from_file);
+            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
+            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+            let file_short = std::path::Path::new(to_file)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(to_file);
+            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+        }
+    }
+
+    // Full path details
+    let mut full_paths = String::new();
+    for (i, dir) in v.cycle_path.iter().enumerate() {
+        if i > 0 {
+            full_paths.push_str("<br>");
+        }
+        let dir_short = std::path::Path::new(dir)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(dir);
+        if i < v.cycle_hop_files.len() {
+            let (from_file, _) = &v.cycle_hop_files[i];
+            full_paths.push_str(&format!("<strong>{}</strong>: {} &#8594;", dir_short, from_file));
+        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
+            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+            full_paths.push_str(&format!("<strong>{}</strong>: {}", dir_short, to_file));
+        } else {
+            full_paths.push_str(&format!("<strong>{}</strong>", dir_short));
+        }
+    }
+
+    format!(
+        "<span class=\"cycle-path\">{}</span><br>\
+        <details><summary class=\"hop-file\">Show full paths</summary>\
+        <div class=\"full-paths\">{}</div></details>",
+        hops, full_paths
     )
 }
 
@@ -788,6 +802,7 @@ mod tests {
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),
+                cycle_order: 0,
             }],
             score: 75.0,
             total_modules: 2,
