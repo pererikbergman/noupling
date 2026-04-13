@@ -443,38 +443,108 @@ pub fn format_text(result: &AuditResult) -> String {
     output
 }
 
-pub fn format_markdown(result: &AuditResult, snapshot_id: &str) -> String {
+pub fn format_markdown(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
+    let report = JsonReport::from_audit(modules, result, snapshot_id);
     let mut md = String::new();
 
+    // Header
     md.push_str("# noupling Audit Report\n\n");
     md.push_str(&format!("**Snapshot:** `{}`\n\n", snapshot_id));
 
+    // Summary
     md.push_str("## Summary\n\n");
     md.push_str("| Metric | Value |\n");
     md.push_str("| :--- | :--- |\n");
-    md.push_str(&format!("| Health Score | {:.1}/100 |\n", result.score));
-    md.push_str(&format!("| Total Modules | {} |\n", result.total_modules));
-    md.push_str(&format!("| Violations | {} |\n", result.violations.len()));
+    md.push_str(&format!("| Health Score | {:.1}/100 |\n", report.score));
+    md.push_str(&format!("| Total Modules | {} |\n", report.total_modules));
+    md.push_str(&format!("| Critical Violations | {} |\n", report.critical_violations));
+    md.push_str(&format!("| Circular Dependencies | {} |\n", report.total_circular));
+    md.push_str(&format!("| Coupling Violations | {} |\n", report.total_coupling));
 
-    let critical = result.violations.iter().filter(|v| v.severity >= 0.5).count();
-    md.push_str(&format!("| Critical (severity >= 0.5) | {} |\n", critical));
+    // Circular dependencies grouped by order
+    if !report.circular_dependencies.is_empty() {
+        md.push_str("\n## Circular Dependencies\n");
+        for (label, cycles) in &report.circular_dependencies {
+            md.push_str(&format!("\n### {} ({} found)\n\n", label, cycles.len()));
+            for (idx, cycle) in cycles.iter().enumerate() {
+                // Short cycle path
+                let short = cycle.cycle_short_path.join(" -> ");
+                md.push_str(&format!("**Cycle {}** (severity: {:.2}): `{}`\n\n", idx + 1, cycle.severity, short));
 
-    let circular = result.violations.iter().filter(|v| v.is_circular).count();
-    if circular > 0 {
-        md.push_str(&format!("| Structural Loops | {} |\n", circular));
+                // Hop details table
+                md.push_str("| Directory | File | Target |\n");
+                md.push_str("| :--- | :--- | :--- |\n");
+                for hop in &cycle.hop_files {
+                    let from_short = std::path::Path::new(&hop.from_file)
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or(&hop.from_file);
+                    let to_short = if hop.to_file.is_empty() {
+                        "-".to_string()
+                    } else {
+                        std::path::Path::new(&hop.to_file)
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or(&hop.to_file)
+                            .to_string()
+                    };
+                    md.push_str(&format!("| {} | `{}` | `{}` |\n", hop.from_dir, from_short, to_short));
+                }
+                md.push('\n');
+
+                // Full paths
+                md.push_str("<details><summary>Full paths</summary>\n\n");
+                for hop in &cycle.hop_files {
+                    if !hop.from_file.is_empty() {
+                        md.push_str(&format!("- **{}**: `{}`\n", hop.from_dir, hop.from_file));
+                    }
+                }
+                md.push_str("\n</details>\n\n");
+            }
+        }
     }
 
-    if !result.violations.is_empty() {
-        md.push_str("\n## Violations\n\n");
-        md.push_str("| Severity | From | To | Depth | Type |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
-        for v in &result.violations {
-            let vtype = if v.is_circular { "Structural Loop" } else { "Coupling" };
+    // Coupling violations
+    if !report.coupling_violations.is_empty() {
+        md.push_str("## Coupling Violations\n\n");
+        md.push_str("| Severity | From | To | Dir A | Dir B | Depth |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        for v in &report.coupling_violations {
+            let from_short = std::path::Path::new(&v.from_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.from_module);
+            let to_short = std::path::Path::new(&v.to_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.to_module);
+            let dir_a_short = std::path::Path::new(&v.dir_a)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.dir_a);
+            let dir_b_short = std::path::Path::new(&v.dir_b)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.dir_b);
             md.push_str(&format!(
-                "| {:.2} | `{}` | `{}` | {} | {} |\n",
-                v.severity, v.from_module, v.to_module, v.depth, vtype
+                "| {:.2} | `{}` | `{}` | {} | {} | {} |\n",
+                v.severity, from_short, to_short, dir_a_short, dir_b_short, v.depth
             ));
         }
+        md.push('\n');
+    }
+
+    // Directory tree
+    md.push_str("## Directory Tree\n\n");
+    md.push_str("| Path | Modules | Score | Violations | Circular |\n");
+    md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
+    for dir in &report.directory_tree {
+        let warning = if dir.has_violations { " !" } else { "" };
+        md.push_str(&format!(
+            "| `{}`{} | {} | {:.1} | {} | {} |\n",
+            dir.path, warning, dir.module_count, dir.score,
+            dir.violations_count, dir.circular_count,
+        ));
     }
 
     md
@@ -580,28 +650,46 @@ mod tests {
 
     #[test]
     fn markdown_has_heading_and_summary_table() {
+        let modules = vec![];
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
             total_modules: 5,
         };
 
-        let md = format_markdown(&result, "snap-1");
+        let md = format_markdown(&modules, &result, "snap-1");
         assert!(md.contains("# noupling Audit Report"));
         assert!(md.contains("| Health Score | 100.0/100 |"));
     }
 
     #[test]
-    fn markdown_shows_structural_loop() {
+    fn markdown_shows_circular_section() {
+        let modules = vec![];
         let mut v = make_violation("a.rs", "b.rs", 1.0, 0);
         v.is_circular = true;
+        v.cycle_order = 2;
+        v.cycle_path = vec!["dir_a".to_string(), "dir_b".to_string(), "dir_a".to_string()];
         let result = AuditResult {
             violations: vec![v],
             score: 50.0,
             total_modules: 2,
         };
 
-        let md = format_markdown(&result, "snap-3");
-        assert!(md.contains("Structural Loop"));
+        let md = format_markdown(&modules, &result, "snap-3");
+        assert!(md.contains("## Circular Dependencies"));
+        assert!(md.contains("Mutual Dependencies (Order 2)"));
+    }
+
+    #[test]
+    fn markdown_has_directory_tree() {
+        let modules = vec![];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            total_modules: 3,
+        };
+
+        let md = format_markdown(&modules, &result, "snap-4");
+        assert!(md.contains("## Directory Tree"));
     }
 }
