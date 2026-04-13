@@ -24,6 +24,8 @@ pub struct JsonViolation {
     pub depth: i32,
     pub severity: f64,
     pub is_circular: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cycle_path: Vec<String>,
 }
 
 impl JsonReport {
@@ -45,6 +47,7 @@ impl JsonReport {
                 depth: v.depth,
                 severity: v.severity,
                 is_circular: v.is_circular,
+                cycle_path: v.cycle_path.clone(),
             })
             .collect();
 
@@ -137,6 +140,7 @@ mod tests {
             depth,
             severity,
             is_circular: false,
+            cycle_path: Vec::new(),
         }
     }
 

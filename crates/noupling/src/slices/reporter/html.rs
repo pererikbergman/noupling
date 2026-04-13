@@ -26,6 +26,7 @@ struct ViolationInfo {
     severity: f64,
     is_circular: bool,
     circular_direction: Option<String>,
+    cycle_path: Vec<String>,
 }
 
 struct ReportData {
@@ -212,6 +213,7 @@ fn build_report_data(
             severity: violation.severity,
             is_circular: violation.is_circular,
             circular_direction,
+            cycle_path: violation.cycle_path.clone(),
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -402,18 +404,8 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     let mut violations_html = String::new();
     if !dir.violations_here.is_empty() {
         violations_html.push_str("<h2>Coupling Violations</h2>\n<table class=\"violations\">\n");
-        violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Type</th></tr>\n");
+        violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
         for v in &dir.violations_here {
-            let type_label = if v.is_circular {
-                let dir_note = v
-                    .circular_direction
-                    .as_ref()
-                    .map(|d| format!("<br><small class=\"circular-note\">{}</small>", d))
-                    .unwrap_or_default();
-                format!("<span class=\"circular\">Circular</span>{}", dir_note)
-            } else {
-                "Coupling".to_string()
-            };
             let sev_clr = if v.severity >= data.critical_severity {
                 "#ef4444"
             } else if v.severity >= 0.2 {
@@ -421,14 +413,50 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             } else {
                 "#6b7280"
             };
-            let from_short = std::path::Path::new(&v.from_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.from_module);
-            let to_short = std::path::Path::new(&v.to_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.to_module);
+
+            let (from_display, to_display, details) = if v.is_circular {
+                // For circular: show directory names, and the full cycle as details
+                let from_dir = std::path::Path::new(&v.from_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.from_module);
+                let to_dir = std::path::Path::new(&v.to_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.to_module);
+                let cycle_display = if !v.cycle_path.is_empty() {
+                    let cycle_str = v.cycle_path.join(" &#8594; ");
+                    format!("<span class=\"circular\">Circular</span><br><span class=\"cycle-path\">{}</span>", cycle_str)
+                } else {
+                    "<span class=\"circular\">Circular</span>".to_string()
+                };
+                let dir_note = v
+                    .circular_direction
+                    .as_ref()
+                    .map(|d| format!("<br><small class=\"circular-note\">{}</small>", d))
+                    .unwrap_or_default();
+                (
+                    from_dir.to_string(),
+                    to_dir.to_string(),
+                    format!("{}{}", cycle_display, dir_note),
+                )
+            } else {
+                // For coupling: show file names, type is "Coupling"
+                let from_short = std::path::Path::new(&v.from_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.from_module);
+                let to_short = std::path::Path::new(&v.to_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.to_module);
+                (
+                    from_short.to_string(),
+                    to_short.to_string(),
+                    "Coupling".to_string(),
+                )
+            };
+
             violations_html.push_str(&format!(
                 "<tr>
                     <td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td>
@@ -436,7 +464,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                     <td title=\"{}\">{}</td>
                     <td>{}</td>
                 </tr>\n",
-                sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short, type_label,
+                sev_clr, v.severity, v.from_module, from_display, v.to_module, to_display, details,
             ));
         }
         violations_html.push_str("</table>\n");
@@ -482,6 +510,7 @@ tr:hover {{ background: #f8fafc; }}
 .severity {{ font-weight: 700; font-size: 0.95rem; }}
 .circular {{ background: #fef2f2; color: #dc2626; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }}
 .circular-note {{ color: #dc2626; font-style: italic; }}
+.cycle-path {{ display: inline-block; margin-top: 0.3rem; padding: 0.3rem 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 0.85rem; font-weight: 500; color: #991b1b; }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
@@ -666,6 +695,7 @@ mod tests {
                 depth: 1,
                 severity: 0.5,
                 is_circular: false,
+                cycle_path: Vec::new(),
             }],
             score: 75.0,
             total_modules: 2,
