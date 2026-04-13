@@ -12,8 +12,10 @@ pub struct CouplingViolation {
     pub depth: i32,
     pub severity: f64,
     pub is_circular: bool,
-    /// For circular deps: the full cycle path as directory names (e.g., ["main", "analytics", "deeplink", "main"])
+    /// For circular deps: the full cycle path as directory paths
     pub cycle_path: Vec<String>,
+    /// For circular deps: the files causing each hop (from_file, to_file) per edge
+    pub cycle_hop_files: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -188,6 +190,15 @@ fn compute_dacc(
 struct DetectedCycle {
     /// Full cycle path as directory paths (e.g., ["src/main", "src/analytics", "src/deeplink", "src/main"])
     dir_path: Vec<String>,
+    /// For each hop in the cycle, the file that causes the dependency (from_file -> to_file)
+    /// Length is dir_path.len() - 1 (one edge per hop)
+    hop_files: Vec<(String, String)>,
+}
+
+/// Edge info for the directory-level dependency graph
+struct DirEdgeInfo {
+    from_file: String,
+    to_file: String,
 }
 
 /// Detect circular dependencies at the directory level.
@@ -208,8 +219,14 @@ fn detect_cycles(
         })
         .collect();
 
-    // Build directory-level adjacency list (skip deps within the same dir)
+    let id_to_path: FxHashMap<&str, &str> = modules
+        .iter()
+        .map(|m| (m.id.as_str(), m.path.as_str()))
+        .collect();
+
+    // Build directory-level adjacency list with file info (skip deps within the same dir)
     let mut dir_adj: FxHashMap<String, FxHashSet<String>> = FxHashMap::default();
+    let mut dir_edge_files: FxHashMap<(String, String), DirEdgeInfo> = FxHashMap::default();
     for dep in dependencies {
         let from_dir = match id_to_dir.get(dep.from_module_id.as_str()) {
             Some(d) => d.clone(),
@@ -220,6 +237,12 @@ fn detect_cycles(
             None => continue,
         };
         if from_dir != to_dir {
+            let key = (from_dir.clone(), to_dir.clone());
+            if !dir_edge_files.contains_key(&key) {
+                let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
+                let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
+                dir_edge_files.insert(key, DirEdgeInfo { from_file, to_file });
+            }
             dir_adj.entry(from_dir).or_default().insert(to_dir);
         }
     }
@@ -243,6 +266,7 @@ fn detect_cycles(
             dfs_find_cycles(
                 dir,
                 &dir_adj,
+                &dir_edge_files,
                 &mut visited,
                 &mut in_stack,
                 &mut path,
@@ -258,6 +282,7 @@ fn detect_cycles(
 fn dfs_find_cycles(
     node: &str,
     adj: &FxHashMap<String, FxHashSet<String>>,
+    edge_files: &FxHashMap<(String, String), DirEdgeInfo>,
     visited: &mut FxHashSet<String>,
     in_stack: &mut FxHashSet<String>,
     path: &mut Vec<String>,
@@ -271,12 +296,22 @@ fn dfs_find_cycles(
     if let Some(neighbors) = adj.get(node) {
         for next in neighbors {
             if !visited.contains(next.as_str()) {
-                dfs_find_cycles(next, adj, visited, in_stack, path, cycles, seen_cycles);
+                dfs_find_cycles(next, adj, edge_files, visited, in_stack, path, cycles, seen_cycles);
             } else if in_stack.contains(next.as_str()) {
                 // Found a cycle - extract the cycle path
                 let cycle_start = path.iter().position(|p| p == next).unwrap_or(0);
                 let mut cycle_path: Vec<String> = path[cycle_start..].to_vec();
                 cycle_path.push(next.clone()); // close the cycle
+
+                // Look up the files that cause each hop
+                let mut hop_files = Vec::new();
+                for i in 0..cycle_path.len() - 1 {
+                    let key = (cycle_path[i].clone(), cycle_path[i + 1].clone());
+                    let files = edge_files.get(&key).map(|e| {
+                        (e.from_file.clone(), e.to_file.clone())
+                    }).unwrap_or_default();
+                    hop_files.push(files);
+                }
 
                 // Deduplicate: normalize by starting from the smallest dir name
                 let mut normalized = cycle_path[..cycle_path.len() - 1].to_vec();
@@ -284,7 +319,7 @@ fn dfs_find_cycles(
                 let key = normalized.join(",");
                 if !seen_cycles.contains(&key) {
                     seen_cycles.insert(key);
-                    cycles.push(DetectedCycle { dir_path: cycle_path });
+                    cycles.push(DetectedCycle { dir_path: cycle_path, hop_files });
                 }
             }
         }
@@ -341,9 +376,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             continue;
         }
         let first_dir = &cycle.dir_path[0];
-        let last_target = &cycle.dir_path[cycle.dir_path.len() - 2]; // second-to-last (before closing)
-        // Convert full paths to short names for the cycle display
-        let cycle_names: Vec<String> = cycle.dir_path.iter().map(|p| p.clone()).collect();
+        let last_target = &cycle.dir_path[cycle.dir_path.len() - 2];
         violations.push(CouplingViolation {
             dir_a: first_dir.clone(),
             dir_b: last_target.clone(),
@@ -352,7 +385,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             depth: 0,
             severity: 1.0,
             is_circular: true,
-            cycle_path: cycle_names,
+            cycle_path: cycle.dir_path.clone(),
+            cycle_hop_files: cycle.hop_files.clone(),
         });
     }
 
@@ -394,6 +428,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
+                                                    cycle_hop_files: Vec::new(),
                                                 });
                                             }
                                         }
@@ -425,6 +460,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
+                                                    cycle_hop_files: Vec::new(),
                                                 });
                                             }
                                         }

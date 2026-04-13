@@ -27,6 +27,7 @@ struct ViolationInfo {
     is_circular: bool,
     circular_direction: Option<String>,
     cycle_path: Vec<String>,
+    cycle_hop_files: Vec<(String, String)>,
 }
 
 struct ReportData {
@@ -214,6 +215,7 @@ fn build_report_data(
             is_circular: violation.is_circular,
             circular_direction,
             cycle_path: violation.cycle_path.clone(),
+            cycle_hop_files: violation.cycle_hop_files.clone(),
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -425,8 +427,28 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
                 let cycle_display = if !v.cycle_path.is_empty() {
-                    let cycle_str = v.cycle_path.join(" &#8594; ");
-                    format!("<span class=\"circular\">Circular</span><br><span class=\"cycle-path\">{}</span>", cycle_str)
+                    // Build cycle display with file names per hop
+                    let mut hops = String::new();
+                    for (i, dir) in v.cycle_path.iter().enumerate() {
+                        if i > 0 {
+                            hops.push_str(" &#8594; ");
+                        }
+                        let dir_short = std::path::Path::new(dir)
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or(dir);
+                        hops.push_str(dir_short);
+                        // Show the file that causes this hop (if not the last entry)
+                        if i < v.cycle_hop_files.len() {
+                            let (from_file, _) = &v.cycle_hop_files[i];
+                            let file_short = std::path::Path::new(from_file)
+                                .file_name()
+                                .and_then(|f| f.to_str())
+                                .unwrap_or(from_file);
+                            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+                        }
+                    }
+                    format!("<span class=\"circular\">Circular</span><br><span class=\"cycle-path\">{}</span>", hops)
                 } else {
                     "<span class=\"circular\">Circular</span>".to_string()
                 };
@@ -505,7 +527,8 @@ tr:hover {{ background: #f8fafc; }}
 .severity {{ font-weight: 700; font-size: 0.95rem; }}
 .circular {{ background: #fef2f2; color: #dc2626; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }}
 .circular-note {{ color: #dc2626; font-style: italic; }}
-.cycle-path {{ display: inline-block; margin-top: 0.3rem; padding: 0.3rem 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 0.85rem; font-weight: 500; color: #991b1b; }}
+.cycle-path {{ display: inline-block; margin-top: 0.3rem; padding: 0.3rem 0.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; font-size: 0.85rem; font-weight: 500; color: #991b1b; line-height: 1.6; }}
+.hop-file {{ color: #6b7280; font-weight: 400; }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
@@ -691,6 +714,7 @@ mod tests {
                 severity: 0.5,
                 is_circular: false,
                 cycle_path: Vec::new(),
+                cycle_hop_files: Vec::new(),
             }],
             score: 75.0,
             total_modules: 2,

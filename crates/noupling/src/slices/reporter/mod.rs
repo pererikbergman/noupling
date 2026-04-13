@@ -141,6 +141,7 @@ mod tests {
             severity,
             is_circular: false,
             cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
         }
     }
 
