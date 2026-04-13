@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::core::Module;
+use crate::settings::Settings;
 use crate::slices::analyzer::{AuditResult, CouplingViolation};
 
 /// A node in the directory tree used for HTML navigation.
@@ -34,6 +35,9 @@ struct ReportData {
     total_score: f64,
     total_modules: usize,
     total_violations: usize,
+    score_green: f64,
+    score_yellow: f64,
+    critical_severity: f64,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -42,8 +46,9 @@ pub fn generate_html_report(
     result: &AuditResult,
     snapshot_id: &str,
     output_dir: &Path,
+    settings: &Settings,
 ) -> Result<()> {
-    let data = build_report_data(modules, result, snapshot_id);
+    let data = build_report_data(modules, result, snapshot_id, settings);
 
     std::fs::create_dir_all(output_dir)?;
 
@@ -70,6 +75,7 @@ fn build_report_data(
     modules: &[Module],
     result: &AuditResult,
     snapshot_id: &str,
+    settings: &Settings,
 ) -> ReportData {
     // Find common root prefix from all module paths
     let root_path = find_common_root(modules);
@@ -272,6 +278,9 @@ fn build_report_data(
         total_score: result.score,
         total_modules: result.total_modules,
         total_violations: result.violations.len(),
+        score_green: settings.thresholds.score_green,
+        score_yellow: settings.thresholds.score_yellow,
+        critical_severity: settings.thresholds.critical_severity,
     }
 }
 
@@ -331,23 +340,13 @@ fn short_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
-fn score_color(score: f64) -> &'static str {
-    if score >= 90.0 {
-        "#22c55e" // green
-    } else if score >= 70.0 {
-        "#eab308" // yellow
+fn score_color(score: f64, green: f64, yellow: f64) -> &'static str {
+    if score >= green {
+        "#22c55e"
+    } else if score >= yellow {
+        "#eab308"
     } else {
-        "#ef4444" // red
-    }
-}
-
-fn score_bg(score: f64) -> &'static str {
-    if score >= 90.0 {
-        "#f0fdf4"
-    } else if score >= 70.0 {
-        "#fefce8"
-    } else {
-        "#fef2f2"
+        "#ef4444"
     }
 }
 
@@ -358,7 +357,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     };
 
     let breadcrumbs = build_breadcrumbs(dir_path, &data.root_path);
-    let score_clr = score_color(dir.score);
+    let score_clr = score_color(dir.score, data.score_green, data.score_yellow);
 
     let mut children_rows = String::new();
     for child_path in &dir.children_dirs {
@@ -368,7 +367,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             } else {
                 ""
             };
-            let child_score_clr = score_color(child.score);
+            let child_score_clr = score_color(child.score, data.score_green, data.score_yellow);
             // Use relative link: child name + /index.html
             children_rows.push_str(&format!(
                 "<tr>
@@ -415,7 +414,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             } else {
                 "Coupling".to_string()
             };
-            let sev_clr = if v.severity >= 0.5 {
+            let sev_clr = if v.severity >= data.critical_severity {
                 "#ef4444"
             } else if v.severity >= 0.2 {
                 "#eab308"
@@ -605,7 +604,8 @@ mod tests {
         };
 
         let dir = tempfile::tempdir().unwrap();
-        generate_html_report(&modules, &result, "snap-1", dir.path()).unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-1", dir.path(), &settings).unwrap();
 
         assert!(dir.path().join("index.html").exists());
     }
@@ -620,7 +620,8 @@ mod tests {
         };
 
         let dir = tempfile::tempdir().unwrap();
-        generate_html_report(&modules, &result, "snap-1", dir.path()).unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-1", dir.path(), &settings).unwrap();
 
         let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
         assert!(html.contains("noupling Report"));
@@ -641,7 +642,8 @@ mod tests {
         };
 
         let dir = tempfile::tempdir().unwrap();
-        generate_html_report(&modules, &result, "snap-1", dir.path()).unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-1", dir.path(), &settings).unwrap();
 
         // Should have pages for scanner and storage subdirs
         assert!(dir.path().join("index.html").exists());
@@ -670,7 +672,8 @@ mod tests {
         };
 
         let dir = tempfile::tempdir().unwrap();
-        generate_html_report(&modules, &result, "snap-1", dir.path()).unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-1", dir.path(), &settings).unwrap();
 
         let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
         assert!(html.contains("Coupling Violations"));

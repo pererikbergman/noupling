@@ -1,5 +1,6 @@
 mod cli;
 mod core;
+pub mod settings;
 mod slices;
 mod utils;
 
@@ -11,6 +12,7 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
+        Commands::Init { path } => run_init(&path),
         Commands::Scan { path } => run_scan(&path),
         Commands::Audit { path, snapshot } => run_audit(&path, snapshot.as_deref()),
         Commands::Report { path, format } => run_report(&path, &format),
@@ -20,6 +22,15 @@ fn main() {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
+}
+
+fn run_init(path: &str) -> anyhow::Result<()> {
+    let project_path = Path::new(path);
+    settings::Settings::write_defaults(project_path)?;
+    let settings_path = project_path.join(".noupling").join("settings.json");
+    println!("Created {}", settings_path.display());
+    println!("Edit this file to customize thresholds, ignored directories, and source extensions.");
+    Ok(())
 }
 
 fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
@@ -132,8 +143,9 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             println!("Report saved to {}", file_path.display());
         }
         "html" => {
+            let project_settings = settings::Settings::load(Path::new(path))?;
             let html_dir = report_dir.join("report");
-            slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir)?;
+            slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir, &project_settings)?;
             println!("HTML report generated at {}/index.html", html_dir.display());
         }
         _ => {

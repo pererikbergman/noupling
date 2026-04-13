@@ -3,17 +3,21 @@ use std::path::Path;
 use uuid::Uuid;
 
 use crate::core::{Module, ModuleType};
-
-const IGNORED_DIRS: &[&str] = &[".git", "target", "node_modules", ".noupling", ".agent"];
-const SOURCE_EXTENSIONS: &[&str] = &[
-    "rs", "kt", "kts", "ts", "tsx", "swift", "cs",
-    "go", "hs", "java", "js", "jsx", "py", "zig",
-];
+use crate::settings::Settings;
 
 pub fn discover_files(root: &Path, snapshot_id: &str) -> Result<Vec<Module>> {
+    let settings = Settings::load(root).unwrap_or_default();
+    discover_files_with_settings(root, snapshot_id, &settings)
+}
+
+pub fn discover_files_with_settings(
+    root: &Path,
+    snapshot_id: &str,
+    settings: &Settings,
+) -> Result<Vec<Module>> {
     let mut nodes = Vec::new();
     let root_canonical = root.canonicalize()?;
-    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut nodes)?;
+    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut nodes, settings)?;
     Ok(nodes)
 }
 
@@ -22,6 +26,7 @@ fn walk_directory(
     snapshot_id: &str,
     root: &Path,
     modules: &mut Vec<Module>,
+    settings: &Settings,
 ) -> Result<()> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
@@ -33,15 +38,15 @@ fn walk_directory(
         let name = entry.file_name().to_string_lossy().to_string();
 
         if path.is_dir() {
-            if IGNORED_DIRS.contains(&name.as_str()) {
+            if settings.ignored_dirs.iter().any(|d| d == &name) {
                 continue;
             }
-            walk_directory(&path, snapshot_id, root, modules)?;
+            walk_directory(&path, snapshot_id, root, modules, settings)?;
         } else {
             let is_source = path
                 .extension()
                 .and_then(|e| e.to_str())
-                .map(|ext| SOURCE_EXTENSIONS.contains(&ext))
+                .map(|ext| settings.source_extensions.iter().any(|s| s == ext))
                 .unwrap_or(false);
 
             if !is_source {

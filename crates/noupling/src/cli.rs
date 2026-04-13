@@ -9,6 +9,12 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Initialize .noupling/settings.json with default configuration
+    Init {
+        /// Path to the project root (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: String,
+    },
     /// Scan a project directory for dependencies
     Scan {
         /// Path to the project root

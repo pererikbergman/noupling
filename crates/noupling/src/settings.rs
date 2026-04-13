@@ -1,0 +1,175 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    #[serde(default = "default_thresholds")]
+    pub thresholds: Thresholds,
+    #[serde(default = "default_ignored_dirs")]
+    pub ignored_dirs: Vec<String>,
+    #[serde(default = "default_source_extensions")]
+    pub source_extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Thresholds {
+    #[serde(default = "default_score_green")]
+    pub score_green: f64,
+    #[serde(default = "default_score_yellow")]
+    pub score_yellow: f64,
+    #[serde(default = "default_critical_severity")]
+    pub critical_severity: f64,
+}
+
+fn default_thresholds() -> Thresholds {
+    Thresholds {
+        score_green: default_score_green(),
+        score_yellow: default_score_yellow(),
+        critical_severity: default_critical_severity(),
+    }
+}
+
+fn default_score_green() -> f64 { 90.0 }
+fn default_score_yellow() -> f64 { 70.0 }
+fn default_critical_severity() -> f64 { 0.5 }
+
+fn default_ignored_dirs() -> Vec<String> {
+    vec![
+        ".git".to_string(),
+        "target".to_string(),
+        "node_modules".to_string(),
+        ".noupling".to_string(),
+        ".agent".to_string(),
+        "build".to_string(),
+        "dist".to_string(),
+        ".gradle".to_string(),
+        "__pycache__".to_string(),
+        ".venv".to_string(),
+        "zig-cache".to_string(),
+        "zig-out".to_string(),
+    ]
+}
+
+fn default_source_extensions() -> Vec<String> {
+    vec![
+        "rs".to_string(), "kt".to_string(), "kts".to_string(),
+        "ts".to_string(), "tsx".to_string(), "swift".to_string(),
+        "cs".to_string(), "go".to_string(), "hs".to_string(),
+        "java".to_string(), "js".to_string(), "jsx".to_string(),
+        "py".to_string(), "zig".to_string(),
+    ]
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            thresholds: default_thresholds(),
+            ignored_dirs: default_ignored_dirs(),
+            source_extensions: default_source_extensions(),
+        }
+    }
+}
+
+impl Settings {
+    /// Load settings from `.noupling/settings.json` under the given project path.
+    /// Falls back to defaults if the file doesn't exist.
+    pub fn load(project_path: &Path) -> Result<Self> {
+        let settings_path = project_path.join(".noupling").join("settings.json");
+        if settings_path.exists() {
+            let content = std::fs::read_to_string(&settings_path)?;
+            let settings: Settings = serde_json::from_str(&content)?;
+            Ok(settings)
+        } else {
+            Ok(Settings::default())
+        }
+    }
+
+    /// Write default settings to `.noupling/settings.json`.
+    pub fn write_defaults(project_path: &Path) -> Result<()> {
+        let noupling_dir = project_path.join(".noupling");
+        std::fs::create_dir_all(&noupling_dir)?;
+        let settings = Settings::default();
+        let content = serde_json::to_string_pretty(&settings)?;
+        std::fs::write(noupling_dir.join("settings.json"), content)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_settings_are_valid() {
+        let settings = Settings::default();
+        assert_eq!(settings.thresholds.score_green, 90.0);
+        assert_eq!(settings.thresholds.score_yellow, 70.0);
+        assert_eq!(settings.thresholds.critical_severity, 0.5);
+        assert!(!settings.ignored_dirs.is_empty());
+        assert!(!settings.source_extensions.is_empty());
+    }
+
+    #[test]
+    fn loads_defaults_when_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = Settings::load(dir.path()).unwrap();
+        assert_eq!(settings.thresholds.score_green, 90.0);
+    }
+
+    #[test]
+    fn loads_from_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let noupling_dir = dir.path().join(".noupling");
+        std::fs::create_dir_all(&noupling_dir).unwrap();
+        std::fs::write(
+            noupling_dir.join("settings.json"),
+            r#"{"thresholds": {"score_green": 95.0, "score_yellow": 80.0, "critical_severity": 0.3}}"#,
+        ).unwrap();
+
+        let settings = Settings::load(dir.path()).unwrap();
+        assert_eq!(settings.thresholds.score_green, 95.0);
+        assert_eq!(settings.thresholds.score_yellow, 80.0);
+        assert_eq!(settings.thresholds.critical_severity, 0.3);
+        // Defaults still applied for missing fields
+        assert!(!settings.ignored_dirs.is_empty());
+    }
+
+    #[test]
+    fn partial_settings_use_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let noupling_dir = dir.path().join(".noupling");
+        std::fs::create_dir_all(&noupling_dir).unwrap();
+        std::fs::write(
+            noupling_dir.join("settings.json"),
+            r#"{"thresholds": {"score_green": 85.0}}"#,
+        ).unwrap();
+
+        let settings = Settings::load(dir.path()).unwrap();
+        assert_eq!(settings.thresholds.score_green, 85.0);
+        assert_eq!(settings.thresholds.score_yellow, 70.0); // default
+        assert_eq!(settings.thresholds.critical_severity, 0.5); // default
+    }
+
+    #[test]
+    fn write_defaults_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        Settings::write_defaults(dir.path()).unwrap();
+
+        let path = dir.path().join(".noupling").join("settings.json");
+        assert!(path.exists());
+
+        let content = std::fs::read_to_string(path).unwrap();
+        let settings: Settings = serde_json::from_str(&content).unwrap();
+        assert_eq!(settings.thresholds.score_green, 90.0);
+    }
+
+    #[test]
+    fn serializes_to_pretty_json() {
+        let settings = Settings::default();
+        let json = serde_json::to_string_pretty(&settings).unwrap();
+        assert!(json.contains("score_green"));
+        assert!(json.contains("ignored_dirs"));
+        assert!(json.contains("source_extensions"));
+    }
+}
