@@ -10,25 +10,24 @@ use std::path::Path;
 fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Scan { path } => {
-            if let Err(e) = run_scan(&path) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        Commands::Audit { snapshot } => {
-            match snapshot {
-                Some(id) => println!("Auditing snapshot: {}", id),
-                None => println!("Auditing latest snapshot..."),
-            }
-            println!("Not yet implemented.");
-        }
-        Commands::Report { format } => {
-            println!("Generating {} report...", format);
-            println!("Not yet implemented.");
-        }
+    let result = match cli.command {
+        Commands::Scan { path } => run_scan(&path),
+        Commands::Audit { snapshot } => run_audit(snapshot.as_deref()),
+        Commands::Report { format } => run_report(&format),
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
+}
+
+fn find_db() -> anyhow::Result<slices::storage::Database> {
+    let db_path = Path::new(".noupling").join("history.db");
+    if !db_path.exists() {
+        anyhow::bail!("No database found. Run `noupling scan <PATH>` first.");
+    }
+    slices::storage::Database::open(&db_path)
 }
 
 fn run_scan(path: &str) -> anyhow::Result<()> {
@@ -39,24 +38,19 @@ fn run_scan(path: &str) -> anyhow::Result<()> {
 
     println!("Scanning: {}", path);
 
-    // Open database
     let db_path = project_path.join(".noupling").join("history.db");
     let db = slices::storage::Database::open(&db_path)?;
 
-    // Create snapshot
     let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
     let snapshot = snap_repo.create(path)?;
     println!("Created snapshot: {}", snapshot.id);
 
-    // Scan project
     let result = slices::scanner::scan_project(project_path, &snapshot.id)?;
     println!("Discovered {} modules", result.modules.len());
 
-    // Store modules
     let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
     module_repo.bulk_insert(&result.modules)?;
 
-    // Deduplicate and store dependencies
     let mut unique_deps = result.dependencies;
     unique_deps.sort_by(|a, b| {
         (&a.from_module_id, &a.to_module_id, &a.line_number)
@@ -73,5 +67,63 @@ fn run_scan(path: &str) -> anyhow::Result<()> {
     println!("Found {} dependencies", unique_deps.len());
 
     println!("Scan complete. Database: {}", db_path.display());
+    Ok(())
+}
+
+fn run_audit(snapshot_id: Option<&str>) -> anyhow::Result<()> {
+    let db = find_db()?;
+    let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
+
+    let snapshot = match snapshot_id {
+        Some(id) => snap_repo
+            .get_by_id(id)?
+            .ok_or_else(|| anyhow::anyhow!("Snapshot not found: {}", id))?,
+        None => snap_repo
+            .get_latest()?
+            .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?,
+    };
+
+    let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
+
+    let modules = module_repo.get_by_snapshot(&snapshot.id)?;
+    let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
+
+    let result = slices::analyzer::audit(&modules, &dependencies);
+
+    print!("{}", slices::reporter::format_text(&result));
+
+    Ok(())
+}
+
+fn run_report(format: &str) -> anyhow::Result<()> {
+    let db = find_db()?;
+    let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
+
+    let snapshot = snap_repo
+        .get_latest()?
+        .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?;
+
+    let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
+
+    let modules = module_repo.get_by_snapshot(&snapshot.id)?;
+    let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
+
+    let result = slices::analyzer::audit(&modules, &dependencies);
+
+    match format {
+        "json" => {
+            let report = slices::reporter::JsonReport::from_audit(&result, &snapshot.id);
+            println!("{}", report.to_json()?);
+        }
+        "md" => {
+            println!("Markdown reporter not yet implemented.");
+        }
+        _ => {
+            anyhow::bail!("Unknown format: {}. Use 'json' or 'md'.", format);
+        }
+    }
+
     Ok(())
 }
