@@ -149,20 +149,18 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             let content = report.to_json()?;
             let file_path = report_dir.join("report.json");
             std::fs::write(&file_path, &content)?;
-            println!("{}", content);
-            println!("\nReport saved to {}", file_path.display());
+            println!("Report saved to {}", file_path.display());
         }
         "md" => {
             let content = slices::reporter::format_markdown(&result, &snapshot.id);
             let file_path = report_dir.join("report.md");
             std::fs::write(&file_path, &content)?;
-            println!("{}", content);
             println!("Report saved to {}", file_path.display());
         }
         "html" => {
             let html_dir = report_dir.join("report");
             slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir, &project_settings)?;
-            println!("HTML report generated at {}/index.html", html_dir.display());
+            println!("Report saved to {}/index.html", html_dir.display());
         }
         _ => {
             anyhow::bail!("Unknown format: {}. Use 'json', 'md', or 'html'.", format);
