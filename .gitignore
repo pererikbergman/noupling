@@ -1,0 +1,16 @@
+# Rust
+/target
+Cargo.lock
+
+# Environments
+.env
+.env.*
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp

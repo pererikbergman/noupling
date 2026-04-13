@@ -1,0 +1,9 @@
+[package]
+name = "core_logic"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+shared_types = { path = "../shared_types" }
+thiserror = { workspace = true }
+anyhow = { workspace = true }

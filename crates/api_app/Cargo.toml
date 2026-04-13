@@ -1,0 +1,11 @@
+[package]
+name = "api_app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core_logic = { path = "../core_logic" }
+shared_types = { path = "../shared_types" }
+tokio = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
