@@ -25,6 +25,7 @@ tree-sitter-zig = { workspace = true }
 rusqlite = { workspace = true }
 rayon = { workspace = true }
 fxhash = { workspace = true }
+globset = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

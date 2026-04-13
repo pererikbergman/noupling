@@ -1,4 +1,5 @@
 use anyhow::Result;
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -6,8 +7,8 @@ use std::path::Path;
 pub struct Settings {
     #[serde(default = "default_thresholds")]
     pub thresholds: Thresholds,
-    #[serde(default = "default_ignored_dirs")]
-    pub ignored_dirs: Vec<String>,
+    #[serde(default = "default_ignore_patterns")]
+    pub ignore_patterns: Vec<String>,
     #[serde(default = "default_source_extensions")]
     pub source_extensions: Vec<String>,
 }
@@ -38,20 +39,23 @@ fn default_score_yellow() -> f64 { 70.0 }
 fn default_critical_severity() -> f64 { 0.5 }
 fn default_minimum_severity() -> f64 { 0.2 }
 
-fn default_ignored_dirs() -> Vec<String> {
+fn default_ignore_patterns() -> Vec<String> {
     vec![
-        ".git".to_string(),
-        "target".to_string(),
-        "node_modules".to_string(),
-        ".noupling".to_string(),
-        ".agent".to_string(),
-        "build".to_string(),
-        "dist".to_string(),
-        ".gradle".to_string(),
-        "__pycache__".to_string(),
-        ".venv".to_string(),
-        "zig-cache".to_string(),
-        "zig-out".to_string(),
+        "**/.git/**".to_string(),
+        "**/target/**".to_string(),
+        "**/node_modules/**".to_string(),
+        "**/.noupling/**".to_string(),
+        "**/.agent/**".to_string(),
+        "**/build/**".to_string(),
+        "**/dist/**".to_string(),
+        "**/.gradle/**".to_string(),
+        "**/__pycache__/**".to_string(),
+        "**/.venv/**".to_string(),
+        "**/zig-cache/**".to_string(),
+        "**/zig-out/**".to_string(),
+        "**/generated/**".to_string(),
+        "**/.idea/**".to_string(),
+        "**/.vscode/**".to_string(),
     ]
 }
 
@@ -69,7 +73,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             thresholds: default_thresholds(),
-            ignored_dirs: default_ignored_dirs(),
+            ignore_patterns: default_ignore_patterns(),
             source_extensions: default_source_extensions(),
         }
     }
@@ -98,6 +102,15 @@ impl Settings {
         std::fs::write(noupling_dir.join("settings.json"), content)?;
         Ok(())
     }
+
+    /// Build a GlobSet from the ignore_patterns for matching paths.
+    pub fn build_ignore_set(&self) -> Result<GlobSet> {
+        let mut builder = GlobSetBuilder::new();
+        for pattern in &self.ignore_patterns {
+            builder.add(Glob::new(pattern)?);
+        }
+        Ok(builder.build()?)
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +123,7 @@ mod tests {
         assert_eq!(settings.thresholds.score_green, 90.0);
         assert_eq!(settings.thresholds.score_yellow, 70.0);
         assert_eq!(settings.thresholds.critical_severity, 0.5);
-        assert!(!settings.ignored_dirs.is_empty());
+        assert!(!settings.ignore_patterns.is_empty());
         assert!(!settings.source_extensions.is_empty());
     }
 
@@ -135,8 +148,7 @@ mod tests {
         assert_eq!(settings.thresholds.score_green, 95.0);
         assert_eq!(settings.thresholds.score_yellow, 80.0);
         assert_eq!(settings.thresholds.critical_severity, 0.3);
-        // Defaults still applied for missing fields
-        assert!(!settings.ignored_dirs.is_empty());
+        assert!(!settings.ignore_patterns.is_empty());
     }
 
     #[test]
@@ -151,8 +163,8 @@ mod tests {
 
         let settings = Settings::load(dir.path()).unwrap();
         assert_eq!(settings.thresholds.score_green, 85.0);
-        assert_eq!(settings.thresholds.score_yellow, 70.0); // default
-        assert_eq!(settings.thresholds.critical_severity, 0.5); // default
+        assert_eq!(settings.thresholds.score_yellow, 70.0);
+        assert_eq!(settings.thresholds.critical_severity, 0.5);
     }
 
     #[test]
@@ -173,7 +185,34 @@ mod tests {
         let settings = Settings::default();
         let json = serde_json::to_string_pretty(&settings).unwrap();
         assert!(json.contains("score_green"));
-        assert!(json.contains("ignored_dirs"));
+        assert!(json.contains("ignore_patterns"));
         assert!(json.contains("source_extensions"));
+    }
+
+    #[test]
+    fn ignore_set_matches_patterns() {
+        let settings = Settings::default();
+        let ignore_set = settings.build_ignore_set().unwrap();
+        assert!(ignore_set.is_match("project/.git/HEAD"));
+        assert!(ignore_set.is_match("project/build/output.jar"));
+        assert!(ignore_set.is_match("app/src/generated/MyClass.kt"));
+        assert!(!ignore_set.is_match("app/src/main/MyClass.kt"));
+    }
+
+    #[test]
+    fn custom_ignore_patterns() {
+        let dir = tempfile::tempdir().unwrap();
+        let noupling_dir = dir.path().join(".noupling");
+        std::fs::create_dir_all(&noupling_dir).unwrap();
+        std::fs::write(
+            noupling_dir.join("settings.json"),
+            r#"{"ignore_patterns": ["**/test/**", "**/vendor/**"]}"#,
+        ).unwrap();
+
+        let settings = Settings::load(dir.path()).unwrap();
+        let ignore_set = settings.build_ignore_set().unwrap();
+        assert!(ignore_set.is_match("src/test/MyTest.kt"));
+        assert!(ignore_set.is_match("vendor/lib/util.go"));
+        assert!(!ignore_set.is_match("src/main/App.kt"));
     }
 }

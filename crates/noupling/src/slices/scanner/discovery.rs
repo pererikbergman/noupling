@@ -1,4 +1,5 @@
 use anyhow::Result;
+use globset::GlobSet;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -15,10 +16,11 @@ pub fn discover_files_with_settings(
     snapshot_id: &str,
     settings: &Settings,
 ) -> Result<Vec<Module>> {
-    let mut nodes = Vec::new();
+    let mut modules = Vec::new();
     let root_canonical = root.canonicalize()?;
-    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut nodes, settings)?;
-    Ok(nodes)
+    let ignore_set = settings.build_ignore_set()?;
+    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut modules, settings, &ignore_set)?;
+    Ok(modules)
 }
 
 fn walk_directory(
@@ -27,6 +29,7 @@ fn walk_directory(
     root: &Path,
     modules: &mut Vec<Module>,
     settings: &Settings,
+    ignore_set: &GlobSet,
 ) -> Result<()> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
@@ -35,13 +38,16 @@ fn walk_directory(
 
     for entry in entries {
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
+        let rel_path = path.strip_prefix(root).unwrap_or(&path);
+        let rel_str = rel_path.to_string_lossy().to_string();
+
+        // Check if this path matches any ignore pattern
+        if ignore_set.is_match(&rel_str) {
+            continue;
+        }
 
         if path.is_dir() {
-            if settings.ignored_dirs.iter().any(|d| d == &name) {
-                continue;
-            }
-            walk_directory(&path, snapshot_id, root, modules, settings)?;
+            walk_directory(&path, snapshot_id, root, modules, settings, ignore_set)?;
         } else {
             let is_source = path
                 .extension()
@@ -53,10 +59,7 @@ fn walk_directory(
                 continue;
             }
 
-            let rel_path = path
-                .strip_prefix(root)
-                .unwrap_or(&path);
-
+            let name = entry.file_name().to_string_lossy().to_string();
             let depth = rel_path.components().count() as i32;
 
             modules.push(Module {
@@ -64,7 +67,7 @@ fn walk_directory(
                 snapshot_id: snapshot_id.to_string(),
                 parent_id: None,
                 name,
-                path: rel_path.to_string_lossy().to_string(),
+                path: rel_str,
                 module_type: ModuleType::File,
                 depth,
             });
@@ -92,10 +95,18 @@ mod tests {
         // Non-source files should be excluded
         fs::write(src.join("README.md"), "# Readme").unwrap();
 
-        // Should be ignored
+        // Dirs that match default ignore patterns
         let git = dir.join(".git");
         fs::create_dir_all(&git).unwrap();
         fs::write(git.join("HEAD"), "ref: refs/heads/main").unwrap();
+
+        let build = dir.join("build");
+        fs::create_dir_all(&build).unwrap();
+        fs::write(build.join("output.rs"), "// generated").unwrap();
+
+        let generated = dir.join("src").join("generated");
+        fs::create_dir_all(&generated).unwrap();
+        fs::write(generated.join("auto.rs"), "// auto").unwrap();
     }
 
     #[test]
@@ -140,5 +151,45 @@ mod tests {
         create_mock_project(tmp.path());
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
         assert!(nodes.iter().all(|n| !n.path.contains(".git")));
+    }
+
+    #[test]
+    fn ignores_build_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_mock_project(tmp.path());
+        let nodes = discover_files(tmp.path(), "snap-1").unwrap();
+        assert!(nodes.iter().all(|n| !n.path.contains("build")));
+    }
+
+    #[test]
+    fn ignores_generated_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_mock_project(tmp.path());
+        let nodes = discover_files(tmp.path(), "snap-1").unwrap();
+        assert!(nodes.iter().all(|n| !n.path.contains("generated")));
+    }
+
+    #[test]
+    fn custom_ignore_patterns() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("main.rs"), "fn main() {}").unwrap();
+
+        let test = tmp.path().join("test");
+        fs::create_dir_all(&test).unwrap();
+        fs::write(test.join("test.rs"), "// test").unwrap();
+
+        // Create settings that ignore **/test/**
+        let noupling = tmp.path().join(".noupling");
+        fs::create_dir_all(&noupling).unwrap();
+        fs::write(
+            noupling.join("settings.json"),
+            r#"{"ignore_patterns": ["**/test/**"]}"#,
+        ).unwrap();
+
+        let nodes = discover_files(tmp.path(), "snap-1").unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "main.rs");
     }
 }
