@@ -112,14 +112,14 @@ impl JsonReport {
                     .unwrap_or(dir)
                     .to_string();
                 if i < v.cycle_hop_files.len() {
-                    let (from_file, to_file) = &v.cycle_hop_files[i];
+                    let (from_file, to_file, _line) = &v.cycle_hop_files[i];
                     hop_files.push(JsonHopFile {
                         from_dir: dir_short,
                         from_file: from_file.clone(),
                         to_file: to_file.clone(),
                     });
                 } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                    let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+                    let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
                     hop_files.push(JsonHopFile {
                         from_dir: dir_short,
                         from_file: to_file.clone(),
@@ -452,10 +452,10 @@ pub fn format_sonar(result: &AuditResult) -> String {
     for v in &result.violations {
         if v.is_circular {
             // Create issue on the first file in the cycle
-            let file_path = if !v.cycle_hop_files.is_empty() {
-                v.cycle_hop_files[0].0.clone()
+            let (file_path, first_line) = if !v.cycle_hop_files.is_empty() {
+                (v.cycle_hop_files[0].0.clone(), v.cycle_hop_files[0].2)
             } else {
-                v.from_module.clone()
+                (v.from_module.clone(), 1)
             };
 
             let short_dirs: Vec<String> = v.cycle_path.iter().map(|p| {
@@ -468,8 +468,8 @@ pub fn format_sonar(result: &AuditResult) -> String {
             let cycle_desc = short_dirs.join(" -> ");
 
             let mut secondary = Vec::new();
-            for (i, (from_file, _to_file)) in v.cycle_hop_files.iter().enumerate() {
-                if i == 0 { continue; } // skip primary
+            for (i, (from_file, _to_file, line)) in v.cycle_hop_files.iter().enumerate() {
+                if i == 0 { continue; }
                 let dir_name = if i < v.cycle_path.len() {
                     std::path::Path::new(&v.cycle_path[i])
                         .file_name()
@@ -479,18 +479,18 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 secondary.push(serde_json::json!({
                     "message": format!("Part of circular dependency chain ({})", dir_name),
                     "filePath": from_file,
-                    "textRange": { "startLine": 1 }
+                    "textRange": { "startLine": line }
                 }));
             }
 
-            let effort = (v.cycle_order as i32) * 30; // 30 min per hop to break
+            let effort = (v.cycle_order as i32) * 30;
             let mut issue = serde_json::json!({
                 "ruleId": "noupling:circular-dependency",
                 "effortMinutes": effort,
                 "primaryLocation": {
                     "message": format!("Circular dependency: {}", cycle_desc),
                     "filePath": file_path,
-                    "textRange": { "startLine": 1 }
+                    "textRange": { "startLine": first_line }
                 }
             });
             if !secondary.is_empty() {
@@ -514,12 +514,12 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 "primaryLocation": {
                     "message": format!("Coupling violation: {} depends on {} (severity {:.2})", dir_a_short, dir_b_short, v.severity),
                     "filePath": v.from_module,
-                    "textRange": { "startLine": 1 }
+                    "textRange": { "startLine": v.line_number }
                 },
                 "secondaryLocations": [{
                     "message": format!("Coupled target in {}", dir_b_short),
                     "filePath": v.to_module,
-                    "textRange": { "startLine": 1 }
+                    "textRange": { "startLine": v.line_number }
                 }]
             }));
         }
@@ -682,6 +682,7 @@ mod tests {
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
             cycle_order: 0,
+            line_number: 0,
         }
     }
 

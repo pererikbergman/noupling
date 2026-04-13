@@ -9,13 +9,14 @@ pub struct CouplingViolation {
     pub dir_b: String,
     pub from_module: String,
     pub to_module: String,
+    pub line_number: i32,
     pub depth: i32,
     pub severity: f64,
     pub is_circular: bool,
     /// For circular deps: the full cycle path as directory paths
     pub cycle_path: Vec<String>,
-    /// For circular deps: the files causing each hop (from_file, to_file) per edge
-    pub cycle_hop_files: Vec<(String, String)>,
+    /// For circular deps: the files causing each hop (from_file, to_file, line_number) per edge
+    pub cycle_hop_files: Vec<(String, String, i32)>,
     /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.)
     pub cycle_order: usize,
 }
@@ -195,13 +196,14 @@ struct DetectedCycle {
     dir_path: Vec<String>,
     /// For each hop in the cycle, the file that causes the dependency (from_file -> to_file)
     /// Length is dir_path.len() - 1 (one edge per hop)
-    hop_files: Vec<(String, String)>,
+    hop_files: Vec<(String, String, i32)>,
 }
 
 /// Edge info for the directory-level dependency graph
 struct DirEdgeInfo {
     from_file: String,
     to_file: String,
+    line_number: i32,
 }
 
 /// Detect circular dependencies at the directory level.
@@ -244,7 +246,7 @@ fn detect_cycles(
             if !dir_edge_files.contains_key(&key) {
                 let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
                 let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
-                dir_edge_files.insert(key, DirEdgeInfo { from_file, to_file });
+                dir_edge_files.insert(key, DirEdgeInfo { from_file, to_file, line_number: dep.line_number });
             }
             dir_adj.entry(from_dir).or_default().insert(to_dir);
         }
@@ -311,7 +313,7 @@ fn dfs_find_cycles(
                 for i in 0..cycle_path.len() - 1 {
                     let key = (cycle_path[i].clone(), cycle_path[i + 1].clone());
                     let files = edge_files.get(&key).map(|e| {
-                        (e.from_file.clone(), e.to_file.clone())
+                        (e.from_file.clone(), e.to_file.clone(), e.line_number)
                     }).unwrap_or_default();
                     hop_files.push(files);
                 }
@@ -348,7 +350,7 @@ fn detect_sibling_cycles(
     // Build adjacency: sibling A -> sibling B if D_acc(A) contains a module under B
     let mut adj: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
     // Track which file causes each edge for hop_files
-    let mut edge_files: FxHashMap<(usize, usize), (String, String)> = FxHashMap::default();
+    let mut edge_files: FxHashMap<(usize, usize), (String, String, i32)> = FxHashMap::default();
 
     for (i, dir_a) in siblings.iter().enumerate() {
         if let Some(deps_a) = dacc.get(dir_a) {
@@ -359,7 +361,6 @@ fn detect_sibling_cycles(
                         let b_prefix = format!("{}/", dir_b);
                         if target_dir == dir_b || target_dir.starts_with(&b_prefix) {
                             adj.entry(i).or_default().push(j);
-                            // Find a file that causes this edge
                             if !edge_files.contains_key(&(i, j)) {
                                 for dep in dependencies {
                                     if &dep.to_module_id == target_id {
@@ -369,7 +370,7 @@ fn detect_sibling_cycles(
                                             if fd == dir_a || fd.starts_with(&a_prefix) {
                                                 let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
                                                 let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
-                                                edge_files.insert((i, j), (from_file, to_file));
+                                                edge_files.insert((i, j), (from_file, to_file, dep.line_number));
                                                 break;
                                             }
                                         }
@@ -415,7 +416,7 @@ fn find_all_cycles_from(
     cycles: &mut Vec<DetectedCycle>,
     seen_keys: &mut FxHashSet<String>,
     siblings: &[String],
-    edge_files: &FxHashMap<(usize, usize), (String, String)>,
+    edge_files: &FxHashMap<(usize, usize), (String, String, i32)>,
 ) {
     if let Some(neighbors) = adj.get(&current) {
         for &next in neighbors {
@@ -516,6 +517,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 dir_b: last_target.clone(),
                 from_module: first_dir.clone(),
                 to_module: last_target.clone(),
+                line_number: 0,
                 depth,
                 // Circular deps scale inversely with depth:
                 // Root level (depth 0): severity = total_modules (can zero the score)
@@ -554,6 +556,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     dir_b: dir_b.clone(),
                                                     from_module: id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string(),
                                                     to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
+                                                    line_number: dep.line_number,
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,
@@ -587,6 +590,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     dir_b: dir_a.clone(),
                                                     from_module: id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string(),
                                                     to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
+                                                    line_number: dep.line_number,
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,

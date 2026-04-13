@@ -165,14 +165,14 @@ fn render_dir_page(
                     let mut display_parts = Vec::new();
                     for (i, name) in short.iter().enumerate() {
                         if i < v.cycle_hop_files.len() {
-                            let (from_file, _) = &v.cycle_hop_files[i];
+                            let (from_file, _, _) = &v.cycle_hop_files[i];
                             let file_short = std::path::Path::new(from_file)
                                 .file_name()
                                 .and_then(|f| f.to_str())
                                 .unwrap_or(from_file);
                             display_parts.push(format!("**{}** ({})", name, file_short));
                         } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                            let (_, to_file) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
+                            let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
                             let file_short = std::path::Path::new(to_file)
                                 .file_name()
                                 .and_then(|f| f.to_str())
@@ -188,7 +188,7 @@ fn render_dir_page(
                     md.push_str("<details><summary>Full paths</summary>\n\n");
                     for (i, dir_p) in v.cycle_path.iter().enumerate() {
                         if i < v.cycle_hop_files.len() {
-                            let (from_file, _) = &v.cycle_hop_files[i];
+                            let (from_file, _, _) = &v.cycle_hop_files[i];
                             let dir_short = std::path::Path::new(dir_p)
                                 .file_name()
                                 .and_then(|f| f.to_str())
