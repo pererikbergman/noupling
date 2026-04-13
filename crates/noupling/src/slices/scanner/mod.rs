@@ -35,6 +35,8 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
                 "kt" | "kts" => parser::parse_kotlin_imports(&source),
                 "ts" => parser::parse_typescript_imports(&source),
                 "tsx" => parser::parse_tsx_imports(&source),
+                "swift" => parser::parse_swift_imports(&source),
+                "cs" => parser::parse_csharp_imports(&source),
                 _ => return None,
             };
             let deps: Vec<Dependency> = imports

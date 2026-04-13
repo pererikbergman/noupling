@@ -13,6 +13,8 @@ pub fn resolve_import(
         "rs" => resolve_rust_import(import_path, source_file, known_paths),
         "kt" | "kts" => resolve_kotlin_import(import_path, known_paths),
         "ts" | "tsx" => resolve_typescript_import(import_path, source_file, known_paths),
+        "swift" => resolve_swift_import(import_path, known_paths),
+        "cs" => resolve_csharp_import(import_path, known_paths),
         _ => None,
     }
 }
@@ -112,6 +114,47 @@ fn resolve_typescript_import(
         let candidate = format!("{}/index.{}", base, ext);
         if known_paths.contains(&candidate) {
             return Some(candidate);
+        }
+    }
+
+    None
+}
+
+/// Resolves a Swift import to a project file path.
+/// Swift imports are module names (e.g., "MyModule") - we match against file names.
+fn resolve_swift_import(
+    import_path: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    // Swift imports are module-level, try matching as a .swift file
+    let filename = format!("{}.swift", import_path);
+    known_paths.iter().find(|p| p.ends_with(&filename)).cloned()
+}
+
+/// Resolves a C# using directive to a project file path.
+/// e.g., "MyApp.Data.Repository" -> find a file matching the namespace path.
+fn resolve_csharp_import(
+    import_path: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    let segments: Vec<&str> = import_path.split('.').collect();
+    if segments.is_empty() {
+        return None;
+    }
+
+    // Try full path as .cs file
+    let file_path = segments.join("/");
+    let candidate = format!("{}.cs", file_path);
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        return Some(found.clone());
+    }
+
+    // Try without last segment (class name)
+    if segments.len() > 1 {
+        let parent_path = segments[..segments.len() - 1].join("/");
+        let candidate = format!("{}.cs", parent_path);
+        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+            return Some(found.clone());
         }
     }
 

@@ -7,6 +7,8 @@ A high-performance CLI tool that audits software architecture by quantifying cou
 - Rust (`.rs`)
 - Kotlin (`.kt`, `.kts`)
 - TypeScript (`.ts`, `.tsx`)
+- Swift (`.swift`)
+- C# (`.cs`)
 
 ## Installation
 

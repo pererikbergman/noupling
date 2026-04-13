@@ -264,6 +264,106 @@ fn collect_typescript_imports(
     }
 }
 
+pub fn parse_swift_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    let swift_lang: tree_sitter::Language = tree_sitter_swift::LANGUAGE.into();
+    parser
+        .set_language(&swift_lang)
+        .expect("Failed to set Swift language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_swift_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_swift_imports(
+    node: tree_sitter::Node,
+    source: &str,
+    imports: &mut Vec<ImportEntry>,
+) {
+    if node.kind() == "import_declaration" {
+        let line_number = (node.start_position().row + 1) as i32;
+        // Extract the module identifier after "import"
+        let full = node_text(node, source);
+        let path = full.trim_start_matches("import ").trim().to_string();
+        if !path.is_empty() {
+            imports.push(ImportEntry {
+                path,
+                line_number,
+            });
+        }
+        return;
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_swift_imports(child, source, imports);
+    }
+}
+
+pub fn parse_csharp_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    let csharp_lang: tree_sitter::Language = tree_sitter_c_sharp::LANGUAGE.into();
+    parser
+        .set_language(&csharp_lang)
+        .expect("Failed to set C# language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_csharp_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_csharp_imports(
+    node: tree_sitter::Node,
+    source: &str,
+    imports: &mut Vec<ImportEntry>,
+) {
+    if node.kind() == "using_directive" {
+        let line_number = (node.start_position().row + 1) as i32;
+        // Find the qualified name child
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "qualified_name" || child.kind() == "identifier" {
+                let text = node_text(child, source);
+                imports.push(ImportEntry {
+                    path: text,
+                    line_number,
+                });
+                return;
+            }
+        }
+        // Fallback
+        let full = node_text(node, source);
+        let path = full
+            .trim_start_matches("using ")
+            .trim_end_matches(';')
+            .trim()
+            .to_string();
+        if !path.is_empty() {
+            imports.push(ImportEntry {
+                path,
+                line_number,
+            });
+        }
+        return;
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_csharp_imports(child, source, imports);
+    }
+}
+
 fn node_text(node: tree_sitter::Node, source: &str) -> String {
     source[node.byte_range()].to_string()
 }
@@ -455,5 +555,81 @@ mod tests {
         assert_eq!(imports.len(), 2);
         assert_eq!(imports[0].path, "react");
         assert_eq!(imports[1].path, "./Button");
+    }
+
+    // ── Swift parser ──
+
+    #[test]
+    fn swift_parses_simple_import() {
+        let source = "import Foundation";
+        let imports = parse_swift_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "Foundation");
+        assert_eq!(imports[0].line_number, 1);
+    }
+
+    #[test]
+    fn swift_parses_multiple_imports() {
+        let source = "import UIKit\nimport SwiftUI\nimport Combine\n";
+        let imports = parse_swift_imports(source);
+        assert_eq!(imports.len(), 3);
+        assert_eq!(imports[0].path, "UIKit");
+        assert_eq!(imports[1].path, "SwiftUI");
+        assert_eq!(imports[2].path, "Combine");
+    }
+
+    #[test]
+    fn swift_handles_empty_source() {
+        let imports = parse_swift_imports("");
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn swift_ignores_non_import_code() {
+        let source = "func hello() { print(\"hello\") }";
+        let imports = parse_swift_imports(source);
+        assert!(imports.is_empty());
+    }
+
+    // ── C# parser ──
+
+    #[test]
+    fn csharp_parses_simple_using() {
+        let source = "using System;";
+        let imports = parse_csharp_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "System");
+        assert_eq!(imports[0].line_number, 1);
+    }
+
+    #[test]
+    fn csharp_parses_qualified_using() {
+        let source = "using System.Collections.Generic;";
+        let imports = parse_csharp_imports(source);
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].path, "System.Collections.Generic");
+    }
+
+    #[test]
+    fn csharp_parses_multiple_usings() {
+        let source = "using System;\nusing System.Linq;\nusing MyApp.Data;\n";
+        let imports = parse_csharp_imports(source);
+        assert_eq!(imports.len(), 3);
+        assert_eq!(imports[0].path, "System");
+        assert_eq!(imports[1].path, "System.Linq");
+        assert_eq!(imports[2].path, "MyApp.Data");
+    }
+
+    #[test]
+    fn csharp_handles_empty_source() {
+        let imports = parse_csharp_imports("");
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn csharp_ignores_non_using_code() {
+        let source = "namespace MyApp { class Foo {} }";
+        let imports = parse_csharp_imports(source);
+        assert!(imports.is_empty());
     }
 }
