@@ -37,10 +37,16 @@ type: Spec
     - [x] 03-05 - Graceful skip for unsupported file types with warning (Epic: Scanner Slice)
 
 *   **Phase 3: Scaling & Polish (Could-Haves):**
-    - [ ] 03-06 - Kotlin grammar parser (Epic: Scanner Slice)
-    - [ ] 03-07 - TypeScript grammar parser (Epic: Scanner Slice)
-    - [ ] 03-08 - Swift grammar parser (Epic: Scanner Slice)
-    - [ ] 03-09 - C# grammar parser (Epic: Scanner Slice)
+    - [x] 03-06 - Kotlin grammar parser (Epic: Scanner Slice)
+    - [x] 03-07 - TypeScript grammar parser (Epic: Scanner Slice)
+    - [x] 03-08 - Swift grammar parser (Epic: Scanner Slice)
+    - [x] 03-09 - C# grammar parser (Epic: Scanner Slice)
+    - [x] 03-10 - Go grammar parser (Epic: Scanner Slice)
+    - [x] 03-11 - Haskell grammar parser (Epic: Scanner Slice)
+    - [x] 03-12 - Java grammar parser (Epic: Scanner Slice)
+    - [x] 03-13 - JavaScript grammar parser (Epic: Scanner Slice)
+    - [x] 03-14 - Python grammar parser (Epic: Scanner Slice)
+    - [x] 03-15 - Zig grammar parser (Epic: Scanner Slice)
     - [ ] 06-06 - End-to-end integration tests against fixtures (Epic: CLI Integration)
 
 ### 2. MoSCoW Prioritization Checklist
@@ -72,10 +78,16 @@ type: Spec
 | - [x] | Should | 06-04 | Wire report (Markdown) | CLI Integration | Format choice for users |
 | - [x] | Should | 06-05 | Historical snapshot audit | CLI Integration | Trend analysis capability |
 | - [x] | Should | 03-05 | Unsupported file skip | Scanner Slice | Robustness for mixed repos |
-| - [ ] | Could | 03-06 | Kotlin parser | Scanner Slice | Multi-language expansion |
-| - [ ] | Could | 03-07 | TypeScript parser | Scanner Slice | Multi-language expansion |
-| - [ ] | Could | 03-08 | Swift parser | Scanner Slice | Multi-language expansion |
-| - [ ] | Could | 03-09 | C# parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-06 | Kotlin parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-07 | TypeScript parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-08 | Swift parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-09 | C# parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-10 | Go parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-11 | Haskell parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-12 | Java parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-13 | JavaScript parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-14 | Python parser | Scanner Slice | Multi-language expansion |
+| - [x] | Could | 03-15 | Zig parser | Scanner Slice | Multi-language expansion |
 | - [ ] | Could | 06-06 | E2E integration tests | CLI Integration | Confidence in full pipeline |
 
 ### 3. Business Value Analysis
@@ -92,5 +104,6 @@ type: Spec
 * Markdown reporter improves human review experience.
 * Historical snapshot audit enables the trend analysis promise.
 
-**Could-Haves:**
-* Additional language parsers expand addressable market but are not needed for a working Rust-focused MVP.
+**Could-Haves (Completed):**
+* All 11 language parsers implemented: C#, Go, Haskell, Java, JavaScript, Kotlin, Python, Rust, Swift, TypeScript, Zig.
+* Only E2E integration tests remain.

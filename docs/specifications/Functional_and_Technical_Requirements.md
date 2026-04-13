@@ -9,7 +9,7 @@
 * **Quantify Structural Health:** Measure coupling and cohesion metrics.  
 * **Identify Gravity Failures:** Flag high-severity coupling at the root level.  
 * **Enable Trend Analysis:** Track architectural drift over time using a local database.  
-* **Support Multi-Language Environments:** Kotlin, C\#, Swift, TypeScript, and Rust.
+* **Support Multi-Language Environments:** C\#, Go, Haskell, Java, JavaScript, Kotlin, Python, Rust, Swift, TypeScript, and Zig.
 
 ## **2\. Project Architecture (Vertical Slices)**
 
@@ -60,11 +60,17 @@ The scanner slice must use Tree-Sitter grammars. It must map language-specific i
 
 ### **4.1 Grammar Mapping**
 
-* **Kotlin:** Query (import\_list (import\_header (identifier) @import))  
-* **TypeScript:** Query (import\_declaration (string\_literal) @import)  
-* **Swift:** Query (import\_declaration (import\_kind)? (identifier) @import)  
-* **C\#:** Query (using\_directive (qualified\_name) @import)  
-* **Rust:** Query (use\_declaration (use\_list (use\_item (path\_expression) @import))) or (use\_declaration (path\_expression) @import)
+* **C\#:** `using_directive` -> `qualified_name`  
+* **Go:** `import_spec` -> `interpreted_string_literal`  
+* **Haskell:** `import` -> `module`  
+* **Java:** `import_declaration` -> `scoped_identifier`  
+* **JavaScript:** `import_statement` -> `string` (same as TypeScript)  
+* **Kotlin:** `import` -> `qualified_identifier`  
+* **Python:** `import_statement` -> `dotted_name`, `import_from_statement` -> `dotted_name`  
+* **Rust:** `use_declaration` -> `scoped_identifier` / `scoped_use_list`  
+* **Swift:** `import_declaration` (full text extraction)  
+* **TypeScript/TSX:** `import_statement` -> `string`  
+* **Zig:** `builtin_function` (@import) -> `string_content`
 
 ## **5\. Mathematical Metrics & Analysis**
 

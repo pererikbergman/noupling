@@ -11,14 +11,14 @@ type: Knowledge
 
 ## Domain
 
-Architecture auditing: scans source code, extracts import dependencies via Tree-sitter, builds a project tree, and computes coupling violations using bottom-up aggregation and top-down BFS.
+Architecture auditing: scans source code across 11 languages (C#, Go, Haskell, Java, JavaScript, Kotlin, Python, Rust, Swift, TypeScript, Zig), extracts import dependencies via Tree-sitter, and computes coupling violations using bottom-up aggregation and top-down BFS.
 
 ## Architectural Boundaries (Vertical Slices)
 
 | Module | Type | Responsibility |
 | :--- | :--- | :--- |
 | `cli` | Module | Clap CLI argument parsing (scan, audit, report commands) |
-| `core` | Module | Shared domain types: Node, NodeType, Dependency, Snapshot |
+| `core` | Module | Shared domain types: Module, ModuleType, Dependency, Snapshot |
 | `slices/scanner` | Slice | File discovery (Rayon) and Tree-sitter AST parsing |
 | `slices/storage` | Slice | SQLite persistence, schema migrations, repository patterns |
 | `slices/analyzer` | Slice | Bottom-up D_acc aggregation, top-down BFS coupling audit |
