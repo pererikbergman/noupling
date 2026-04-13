@@ -157,13 +157,19 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
+        "xml" => {
+            let content = slices::reporter::format_xml(&modules, &result, &snapshot.id);
+            let file_path = report_dir.join("report.xml");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
         "html" => {
             let html_dir = report_dir.join("report");
             slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir, &project_settings)?;
             println!("Report saved to {}/index.html", html_dir.display());
         }
         _ => {
-            anyhow::bail!("Unknown format: {}. Use 'json', 'md', or 'html'.", format);
+            anyhow::bail!("Unknown format: {}. Use 'json', 'xml', 'md', or 'html'.", format);
         }
     }
 

@@ -333,6 +333,91 @@ fn common_parent(a: &str, b: &str) -> String {
     }
 }
 
+pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
+    let report = JsonReport::from_audit(modules, result, snapshot_id);
+    let mut xml = String::new();
+    xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    xml.push_str(&format!(
+        "<noupling-report snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
+        xml_escape(&report.snapshot_id), report.score, report.total_modules,
+        report.critical_violations, report.total_circular, report.total_coupling,
+    ));
+
+    // Circular dependencies
+    if !report.circular_dependencies.is_empty() {
+        xml.push_str("  <circular-dependencies>\n");
+        for (label, cycles) in &report.circular_dependencies {
+            xml.push_str(&format!("    <group label=\"{}\" count=\"{}\">\n", xml_escape(label), cycles.len()));
+            for cycle in cycles {
+                xml.push_str(&format!("      <cycle order=\"{}\" severity=\"{:.2}\">\n", cycle.cycle_order, cycle.severity));
+                xml.push_str("        <path>\n");
+                for dir in &cycle.cycle_path {
+                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
+                }
+                xml.push_str("        </path>\n");
+                xml.push_str("        <short-path>\n");
+                for dir in &cycle.cycle_short_path {
+                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
+                }
+                xml.push_str("        </short-path>\n");
+                xml.push_str("        <hops>\n");
+                for hop in &cycle.hop_files {
+                    xml.push_str(&format!(
+                        "          <hop fromDir=\"{}\" fromFile=\"{}\" toFile=\"{}\"/>\n",
+                        xml_escape(&hop.from_dir), xml_escape(&hop.from_file), xml_escape(&hop.to_file),
+                    ));
+                }
+                xml.push_str("        </hops>\n");
+                xml.push_str("      </cycle>\n");
+            }
+            xml.push_str("    </group>\n");
+        }
+        xml.push_str("  </circular-dependencies>\n");
+    }
+
+    // Coupling violations
+    if !report.coupling_violations.is_empty() {
+        xml.push_str("  <coupling-violations>\n");
+        for v in &report.coupling_violations {
+            xml.push_str(&format!(
+                "    <violation severity=\"{:.2}\" depth=\"{}\" fromModule=\"{}\" toModule=\"{}\" dirA=\"{}\" dirB=\"{}\"/>\n",
+                v.severity, v.depth, xml_escape(&v.from_module), xml_escape(&v.to_module),
+                xml_escape(&v.dir_a), xml_escape(&v.dir_b),
+            ));
+        }
+        xml.push_str("  </coupling-violations>\n");
+    }
+
+    // Directory tree
+    xml.push_str("  <directory-tree>\n");
+    for dir in &report.directory_tree {
+        xml.push_str(&format!(
+            "    <directory path=\"{}\" name=\"{}\" modules=\"{}\" score=\"{:.2}\" violations=\"{}\" circular=\"{}\" hasViolations=\"{}\">\n",
+            xml_escape(&dir.path), xml_escape(&dir.name), dir.module_count,
+            dir.score, dir.violations_count, dir.circular_count, dir.has_violations,
+        ));
+        for child in &dir.children {
+            xml.push_str(&format!("      <child>{}</child>\n", xml_escape(child)));
+        }
+        for file in &dir.files {
+            xml.push_str(&format!("      <file>{}</file>\n", xml_escape(file)));
+        }
+        xml.push_str("    </directory>\n");
+    }
+    xml.push_str("  </directory-tree>\n");
+
+    xml.push_str("</noupling-report>\n");
+    xml
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 pub fn format_text(result: &AuditResult) -> String {
     let mut output = String::new();
 
