@@ -24,6 +24,7 @@ fn main() {
         | Commands::Hook { path, .. }
         | Commands::Baseline { path, .. }
         | Commands::Audit { path, .. }
+        | Commands::Trend { path, .. }
         | Commands::Report { path, .. } => {
             let settings_path = Path::new(path).join(".noupling").join("settings.json");
             if !settings_path.exists() {
@@ -43,6 +44,7 @@ fn main() {
             fail_below,
             baseline,
         } => run_audit(&path, snapshot.as_deref(), fail_below, baseline),
+        Commands::Trend { path, last } => run_trend(&path, last),
         Commands::Report { path, format } => run_report(&path, &format),
     };
 
@@ -90,6 +92,83 @@ fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
             action
         ),
     }
+}
+
+fn run_trend(path: &str, last: usize) -> anyhow::Result<()> {
+    let db = find_db(path)?;
+    let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
+    let module_repo = storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
+
+    let project_settings = settings::Settings::load(Path::new(path))?;
+    let snapshots = snap_repo.get_all()?;
+
+    if snapshots.is_empty() {
+        println!("No snapshots found. Run `noupling scan` first.");
+        return Ok(());
+    }
+
+    let display_snapshots = if snapshots.len() > last {
+        &snapshots[snapshots.len() - last..]
+    } else {
+        &snapshots
+    };
+
+    println!(
+        "{:<12} {:<22} {:>8} {:>10} {:>10} {:>8}",
+        "SNAPSHOT", "TIMESTAMP", "SCORE", "MODULES", "VIOLATIONS", "DELTA"
+    );
+    println!("{}", "-".repeat(76));
+
+    let mut prev_score: Option<f64> = None;
+
+    for snap in display_snapshots {
+        let modules = module_repo.get_by_snapshot(&snap.id)?;
+        let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
+
+        let mut result = analyzer::audit(&modules, &dependencies);
+        result.filter_by_severity(project_settings.thresholds.minimum_severity);
+
+        let delta = match prev_score {
+            Some(prev) => {
+                let d = result.score - prev;
+                if d > 0.0 {
+                    format!("+{:.1}", d)
+                } else if d < 0.0 {
+                    format!("{:.1}", d)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            None => "-".to_string(),
+        };
+
+        let short_id = if snap.id.len() > 8 {
+            &snap.id[..8]
+        } else {
+            &snap.id
+        };
+
+        println!(
+            "{:<12} {:<22} {:>7.1} {:>10} {:>10} {:>8}",
+            short_id,
+            snap.timestamp,
+            result.score,
+            result.total_modules,
+            result.violations.len(),
+            delta,
+        );
+
+        prev_score = Some(result.score);
+    }
+
+    println!(
+        "\nShowing {} of {} snapshots",
+        display_snapshots.len(),
+        snapshots.len()
+    );
+
+    Ok(())
 }
 
 fn find_db(project_path: &str) -> anyhow::Result<storage::Database> {

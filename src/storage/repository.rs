@@ -64,6 +64,20 @@ impl<'a> SnapshotRepository<'a> {
             None => Ok(None),
         }
     }
+
+    pub fn get_all(&self) -> Result<Vec<Snapshot>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, timestamp, root_path FROM snapshots ORDER BY rowid")?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Snapshot {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                root_path: row.get(2)?,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
 }
 
 /// Repository for bulk inserting and querying source modules.
