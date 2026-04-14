@@ -4,7 +4,6 @@ mod resolver;
 
 pub use discovery::discover_files;
 pub use parser::parse_rust_imports;
-pub use parser::ImportEntry;
 pub use resolver::resolve_import;
 
 use crate::core::{Dependency, Module};
@@ -48,7 +47,8 @@ pub fn scan_project(root: &Path, snapshot_id: &str) -> Result<ScanResult> {
             let deps: Vec<Dependency> = imports
                 .iter()
                 .filter_map(|entry| {
-                    let resolved = resolve_import(&entry.path, &module.path, Path::new(""), &all_paths)?;
+                    let resolved =
+                        resolve_import(&entry.path, &module.path, Path::new(""), &all_paths)?;
                     let to_module = modules.iter().find(|m| m.path == resolved)?;
                     Some(Dependency {
                         from_module_id: module.id.clone(),
@@ -75,14 +75,22 @@ mod tests {
 
     #[test]
     fn scan_project_discovers_modules_and_deps() {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/mock_rust_project");
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mock_rust_project");
         let result = scan_project(&fixture, "test-snap").unwrap();
 
         // Only source files, no directories
-        assert!(result.modules.iter().all(|m| matches!(m.module_type, ModuleType::File)));
+        assert!(result
+            .modules
+            .iter()
+            .all(|m| matches!(m.module_type, ModuleType::File)));
         // main.rs, mod.rs, helper.rs = 3 files
-        assert_eq!(result.modules.len(), 3, "files: {:?}", result.modules.iter().map(|m| &m.name).collect::<Vec<_>>());
+        assert_eq!(
+            result.modules.len(),
+            3,
+            "files: {:?}",
+            result.modules.iter().map(|m| &m.name).collect::<Vec<_>>()
+        );
 
         // main.rs has `use crate::modules::helper` which should resolve to helper.rs
         assert!(
@@ -93,8 +101,8 @@ mod tests {
 
     #[test]
     fn scan_project_parallel_produces_consistent_results() {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/mock_rust_project");
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mock_rust_project");
 
         let r1 = scan_project(&fixture, "snap-1").unwrap();
         let r2 = scan_project(&fixture, "snap-2").unwrap();

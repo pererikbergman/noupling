@@ -70,7 +70,10 @@ fn load_diff_meta(path: &str) -> Option<Vec<String>> {
 fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
     let db_path = Path::new(project_path).join(".noupling").join("history.db");
     if !db_path.exists() {
-        anyhow::bail!("No database found at {}. Run `noupling scan <PATH>` first.", db_path.display());
+        anyhow::bail!(
+            "No database found at {}. Run `noupling scan <PATH>` first.",
+            db_path.display()
+        );
     }
     slices::storage::Database::open(&db_path)
 }
@@ -84,7 +87,11 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     // Get changed files if diff mode
     let changed_files = if let Some(base) = diff_base {
         let files = diff::get_changed_files(project_path, base)?;
-        println!("Diff mode: {} files changed compared to {}", files.len(), base);
+        println!(
+            "Diff mode: {} files changed compared to {}",
+            files.len(),
+            base
+        );
         Some(files)
     } else {
         None
@@ -108,8 +115,11 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
 
     let mut unique_deps = result.dependencies;
     unique_deps.sort_by(|a, b| {
-        (&a.from_module_id, &a.to_module_id, &a.line_number)
-            .cmp(&(&b.from_module_id, &b.to_module_id, &b.line_number))
+        (&a.from_module_id, &a.to_module_id, &a.line_number).cmp(&(
+            &b.from_module_id,
+            &b.to_module_id,
+            &b.line_number,
+        ))
     });
     unique_deps.dedup_by(|a, b| {
         a.from_module_id == b.from_module_id
@@ -223,15 +233,27 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             let file_path = report_dir.join("noupling-sonar.json");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
-            println!("Add to sonar-project.properties: sonar.externalIssuesReportPaths={}", file_path.display());
+            println!(
+                "Add to sonar-project.properties: sonar.externalIssuesReportPaths={}",
+                file_path.display()
+            );
         }
         "html" => {
             let html_dir = report_dir.join("report");
-            slices::reporter::generate_html_report(&modules, &result, &snapshot.id, &html_dir, &project_settings)?;
+            slices::reporter::generate_html_report(
+                &modules,
+                &result,
+                &snapshot.id,
+                &html_dir,
+                &project_settings,
+            )?;
             println!("Report saved to {}/index.html", html_dir.display());
         }
         _ => {
-            anyhow::bail!("Unknown format: {}. Use 'json', 'xml', 'md', 'html', or 'sonar'.", format);
+            anyhow::bail!(
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', or 'sonar'.",
+                format
+            );
         }
     }
 

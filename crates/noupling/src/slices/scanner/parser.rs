@@ -21,11 +21,7 @@ pub fn parse_rust_imports(source: &str) -> Vec<ImportEntry> {
     imports
 }
 
-fn collect_use_declarations(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_use_declarations(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     if node.kind() == "use_declaration" {
         let line_number = (node.start_position().row + 1) as i32;
         extract_paths_from_use(node, source, line_number, imports);
@@ -158,11 +154,7 @@ pub fn parse_kotlin_imports(source: &str) -> Vec<ImportEntry> {
     imports
 }
 
-fn collect_kotlin_imports(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_kotlin_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     // tree-sitter-kotlin-ng uses "import" node with "qualified_identifier" child
     if node.kind() == "import" {
         let line_number = (node.start_position().row + 1) as i32;
@@ -179,15 +171,9 @@ fn collect_kotlin_imports(
         }
         // Fallback: extract from full text
         let full = node_text(node, source);
-        let path = full
-            .trim_start_matches("import ")
-            .trim()
-            .to_string();
+        let path = full.trim_start_matches("import ").trim().to_string();
         if !path.is_empty() {
-            imports.push(ImportEntry {
-                path,
-                line_number,
-            });
+            imports.push(ImportEntry { path, line_number });
         }
         return;
     }
@@ -247,10 +233,7 @@ fn collect_typescript_imports(
                 let text = node_text(child, source);
                 let path = text.trim_matches(|c| c == '"' || c == '\'').to_string();
                 if !path.is_empty() {
-                    imports.push(ImportEntry {
-                        path,
-                        line_number,
-                    });
+                    imports.push(ImportEntry { path, line_number });
                 }
                 return;
             }
@@ -281,21 +264,14 @@ pub fn parse_swift_imports(source: &str) -> Vec<ImportEntry> {
     imports
 }
 
-fn collect_swift_imports(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_swift_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     if node.kind() == "import_declaration" {
         let line_number = (node.start_position().row + 1) as i32;
         // Extract the module identifier after "import"
         let full = node_text(node, source);
         let path = full.trim_start_matches("import ").trim().to_string();
         if !path.is_empty() {
-            imports.push(ImportEntry {
-                path,
-                line_number,
-            });
+            imports.push(ImportEntry { path, line_number });
         }
         return;
     }
@@ -323,11 +299,7 @@ pub fn parse_csharp_imports(source: &str) -> Vec<ImportEntry> {
     imports
 }
 
-fn collect_csharp_imports(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_csharp_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     if node.kind() == "using_directive" {
         let line_number = (node.start_position().row + 1) as i32;
         // Find the qualified name child
@@ -350,10 +322,7 @@ fn collect_csharp_imports(
             .trim()
             .to_string();
         if !path.is_empty() {
-            imports.push(ImportEntry {
-                path,
-                line_number,
-            });
+            imports.push(ImportEntry { path, line_number });
         }
         return;
     }
@@ -367,7 +336,9 @@ fn collect_csharp_imports(
 pub fn parse_go_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let go_lang: tree_sitter::Language = tree_sitter_go::LANGUAGE.into();
-    parser.set_language(&go_lang).expect("Failed to set Go language");
+    parser
+        .set_language(&go_lang)
+        .expect("Failed to set Go language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,
@@ -407,7 +378,9 @@ fn collect_go_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<I
 pub fn parse_haskell_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let hs_lang: tree_sitter::Language = tree_sitter_haskell::LANGUAGE.into();
-    parser.set_language(&hs_lang).expect("Failed to set Haskell language");
+    parser
+        .set_language(&hs_lang)
+        .expect("Failed to set Haskell language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,
@@ -426,7 +399,10 @@ fn collect_haskell_imports(node: tree_sitter::Node, source: &str, imports: &mut 
         for child in node.children(&mut cursor) {
             if child.kind() == "module" {
                 let text = node_text(child, source);
-                imports.push(ImportEntry { path: text, line_number });
+                imports.push(ImportEntry {
+                    path: text,
+                    line_number,
+                });
                 return;
             }
         }
@@ -454,7 +430,9 @@ fn collect_haskell_imports(node: tree_sitter::Node, source: &str, imports: &mut 
 pub fn parse_java_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let java_lang: tree_sitter::Language = tree_sitter_java::LANGUAGE.into();
-    parser.set_language(&java_lang).expect("Failed to set Java language");
+    parser
+        .set_language(&java_lang)
+        .expect("Failed to set Java language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,
@@ -473,7 +451,10 @@ fn collect_java_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec
         for child in node.children(&mut cursor) {
             if child.kind() == "scoped_identifier" {
                 let text = node_text(child, source);
-                imports.push(ImportEntry { path: text, line_number });
+                imports.push(ImportEntry {
+                    path: text,
+                    line_number,
+                });
                 return;
             }
         }
@@ -500,7 +481,9 @@ fn collect_java_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec
 pub fn parse_javascript_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let js_lang: tree_sitter::Language = tree_sitter_javascript::LANGUAGE.into();
-    parser.set_language(&js_lang).expect("Failed to set JavaScript language");
+    parser
+        .set_language(&js_lang)
+        .expect("Failed to set JavaScript language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,
@@ -516,7 +499,9 @@ pub fn parse_javascript_imports(source: &str) -> Vec<ImportEntry> {
 pub fn parse_python_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let py_lang: tree_sitter::Language = tree_sitter_python::LANGUAGE.into();
-    parser.set_language(&py_lang).expect("Failed to set Python language");
+    parser
+        .set_language(&py_lang)
+        .expect("Failed to set Python language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,
@@ -536,10 +521,12 @@ fn collect_python_imports(node: tree_sitter::Node, source: &str, imports: &mut V
             for child in node.children(&mut cursor) {
                 if child.kind() == "dotted_name" {
                     let text = node_text(child, source);
-                    imports.push(ImportEntry { path: text, line_number });
+                    imports.push(ImportEntry {
+                        path: text,
+                        line_number,
+                    });
                 }
             }
-            return;
         }
         "import_from_statement" => {
             let line_number = (node.start_position().row + 1) as i32;
@@ -547,16 +534,21 @@ fn collect_python_imports(node: tree_sitter::Node, source: &str, imports: &mut V
             for child in node.children(&mut cursor) {
                 if child.kind() == "dotted_name" {
                     let text = node_text(child, source);
-                    imports.push(ImportEntry { path: text, line_number });
+                    imports.push(ImportEntry {
+                        path: text,
+                        line_number,
+                    });
                     return;
                 }
                 if child.kind() == "relative_import" {
                     let text = node_text(child, source);
-                    imports.push(ImportEntry { path: text, line_number });
+                    imports.push(ImportEntry {
+                        path: text,
+                        line_number,
+                    });
                     return;
                 }
             }
-            return;
         }
         _ => {
             let mut cursor = node.walk();
@@ -570,7 +562,9 @@ fn collect_python_imports(node: tree_sitter::Node, source: &str, imports: &mut V
 pub fn parse_zig_imports(source: &str) -> Vec<ImportEntry> {
     let mut parser = Parser::new();
     let zig_lang: tree_sitter::Language = tree_sitter_zig::LANGUAGE.into();
-    parser.set_language(&zig_lang).expect("Failed to set Zig language");
+    parser
+        .set_language(&zig_lang)
+        .expect("Failed to set Zig language");
 
     let tree = match parser.parse(source, None) {
         Some(t) => t,

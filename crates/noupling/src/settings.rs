@@ -34,10 +34,18 @@ fn default_thresholds() -> Thresholds {
     }
 }
 
-fn default_score_green() -> f64 { 90.0 }
-fn default_score_yellow() -> f64 { 70.0 }
-fn default_critical_severity() -> f64 { 0.5 }
-fn default_minimum_severity() -> f64 { 0.2 }
+fn default_score_green() -> f64 {
+    90.0
+}
+fn default_score_yellow() -> f64 {
+    70.0
+}
+fn default_critical_severity() -> f64 {
+    0.5
+}
+fn default_minimum_severity() -> f64 {
+    0.2
+}
 
 fn default_ignore_patterns() -> Vec<String> {
     vec![
@@ -61,11 +69,20 @@ fn default_ignore_patterns() -> Vec<String> {
 
 fn default_source_extensions() -> Vec<String> {
     vec![
-        "rs".to_string(), "kt".to_string(), "kts".to_string(),
-        "ts".to_string(), "tsx".to_string(), "swift".to_string(),
-        "cs".to_string(), "go".to_string(), "hs".to_string(),
-        "java".to_string(), "js".to_string(), "jsx".to_string(),
-        "py".to_string(), "zig".to_string(),
+        "rs".to_string(),
+        "kt".to_string(),
+        "kts".to_string(),
+        "ts".to_string(),
+        "tsx".to_string(),
+        "swift".to_string(),
+        "cs".to_string(),
+        "go".to_string(),
+        "hs".to_string(),
+        "java".to_string(),
+        "js".to_string(),
+        "jsx".to_string(),
+        "py".to_string(),
+        "zig".to_string(),
     ]
 }
 
@@ -159,7 +176,8 @@ mod tests {
         std::fs::write(
             noupling_dir.join("settings.json"),
             r#"{"thresholds": {"score_green": 85.0}}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let settings = Settings::load(dir.path()).unwrap();
         assert_eq!(settings.thresholds.score_green, 85.0);
@@ -207,7 +225,8 @@ mod tests {
         std::fs::write(
             noupling_dir.join("settings.json"),
             r#"{"ignore_patterns": ["**/test/**", "**/vendor/**"]}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let settings = Settings::load(dir.path()).unwrap();
         let ignore_set = settings.build_ignore_set().unwrap();

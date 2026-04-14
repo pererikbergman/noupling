@@ -34,15 +34,25 @@ impl AuditResult {
         self.violations.retain(|v| {
             // Coupling: check if from_module or to_module is a changed file
             if !v.is_circular {
-                return changed_files.iter().any(|f| v.from_module.ends_with(f) || f.ends_with(&v.from_module))
-                    || changed_files.iter().any(|f| v.to_module.ends_with(f) || f.ends_with(&v.to_module));
+                return changed_files
+                    .iter()
+                    .any(|f| v.from_module.ends_with(f) || f.ends_with(&v.from_module))
+                    || changed_files
+                        .iter()
+                        .any(|f| v.to_module.ends_with(f) || f.ends_with(&v.to_module));
             }
             // Circular: check if any hop file in the cycle is a changed file
             for (from_file, to_file, _) in &v.cycle_hop_files {
-                if changed_files.iter().any(|f| from_file.ends_with(f) || f.ends_with(from_file)) {
+                if changed_files
+                    .iter()
+                    .any(|f| from_file.ends_with(f) || f.ends_with(from_file))
+                {
                     return true;
                 }
-                if changed_files.iter().any(|f| to_file.ends_with(f) || f.ends_with(to_file)) {
+                if changed_files
+                    .iter()
+                    .any(|f| to_file.ends_with(f) || f.ends_with(to_file))
+                {
                     return true;
                 }
             }
@@ -52,10 +62,10 @@ impl AuditResult {
     }
 
     /// Remove violations below the given severity threshold and recalculate the score.
-    /// Remove violations below the given severity threshold and recalculate the score.
     pub fn filter_by_severity(&mut self, minimum_severity: f64) {
         // Circular violations are always kept regardless of severity
-        self.violations.retain(|v| v.is_circular || v.severity >= minimum_severity);
+        self.violations
+            .retain(|v| v.is_circular || v.severity >= minimum_severity);
         self.recalculate_score();
     }
 
@@ -161,7 +171,7 @@ fn compute_dacc(
 
     // Sort dirs by depth descending so we process leaves first
     let mut sorted_dirs: Vec<&String> = all_dirs.iter().collect();
-    sorted_dirs.sort_by(|a, b| dir_depth(b).cmp(&dir_depth(a)));
+    sorted_dirs.sort_by_key(|a| std::cmp::Reverse(dir_depth(a)));
 
     for dir in &sorted_dirs {
         let mut external_deps: FxHashSet<String> = FxHashSet::default();
@@ -179,13 +189,21 @@ fn compute_dacc(
             };
 
             // Source must be under this directory
-            let from_under = from_path.starts_with(&dir_prefix) || id_to_dir.get(dep.from_module_id.as_str()).map(|d| d.as_str() == dir.as_str()).unwrap_or(false);
+            let from_under = from_path.starts_with(&dir_prefix)
+                || id_to_dir
+                    .get(dep.from_module_id.as_str())
+                    .map(|d| d.as_str() == dir.as_str())
+                    .unwrap_or(false);
             if !from_under {
                 continue;
             }
 
             // Target must NOT be under this directory (external dep)
-            let to_under = to_path.starts_with(&dir_prefix) || id_to_dir.get(dep.to_module_id.as_str()).map(|d| d.as_str() == dir.as_str()).unwrap_or(false);
+            let to_under = to_path.starts_with(&dir_prefix)
+                || id_to_dir
+                    .get(dep.to_module_id.as_str())
+                    .map(|d| d.as_str() == dir.as_str())
+                    .unwrap_or(false);
             if to_under {
                 continue;
             }
@@ -201,7 +219,11 @@ fn compute_dacc(
                     for target_id in child_dacc {
                         // Check if target is still external to this directory
                         if let Some(to_path) = id_to_path.get(target_id.as_str()) {
-                            let to_under = to_path.starts_with(&dir_prefix) || id_to_dir.get(target_id.as_str()).map(|d| d.as_str() == dir.as_str()).unwrap_or(false);
+                            let to_under = to_path.starts_with(&dir_prefix)
+                                || id_to_dir
+                                    .get(target_id.as_str())
+                                    .map(|d| d.as_str() == dir.as_str())
+                                    .unwrap_or(false);
                             if !to_under {
                                 external_deps.insert(target_id.clone());
                             }
@@ -224,141 +246,6 @@ struct DetectedCycle {
     /// For each hop in the cycle, the file that causes the dependency (from_file -> to_file)
     /// Length is dir_path.len() - 1 (one edge per hop)
     hop_files: Vec<(String, String, i32)>,
-}
-
-/// Edge info for the directory-level dependency graph
-struct DirEdgeInfo {
-    from_file: String,
-    to_file: String,
-    line_number: i32,
-}
-
-/// Detect circular dependencies at the directory level.
-/// Builds a directory-level dependency graph and finds cycles via DFS.
-fn detect_cycles(
-    modules: &[Module],
-    dependencies: &[Dependency],
-) -> Vec<DetectedCycle> {
-    // Map module_id -> parent dir
-    let id_to_dir: FxHashMap<&str, String> = modules
-        .iter()
-        .map(|m| {
-            let dir = std::path::Path::new(&m.path)
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-            (m.id.as_str(), dir)
-        })
-        .collect();
-
-    let id_to_path: FxHashMap<&str, &str> = modules
-        .iter()
-        .map(|m| (m.id.as_str(), m.path.as_str()))
-        .collect();
-
-    // Build directory-level adjacency list with file info (skip deps within the same dir)
-    let mut dir_adj: FxHashMap<String, FxHashSet<String>> = FxHashMap::default();
-    let mut dir_edge_files: FxHashMap<(String, String), DirEdgeInfo> = FxHashMap::default();
-    for dep in dependencies {
-        let from_dir = match id_to_dir.get(dep.from_module_id.as_str()) {
-            Some(d) => d.clone(),
-            None => continue,
-        };
-        let to_dir = match id_to_dir.get(dep.to_module_id.as_str()) {
-            Some(d) => d.clone(),
-            None => continue,
-        };
-        if from_dir != to_dir {
-            let key = (from_dir.clone(), to_dir.clone());
-            if !dir_edge_files.contains_key(&key) {
-                let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
-                let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
-                dir_edge_files.insert(key, DirEdgeInfo { from_file, to_file, line_number: dep.line_number });
-            }
-            dir_adj.entry(from_dir).or_default().insert(to_dir);
-        }
-    }
-
-    // Collect all directory nodes
-    let all_dirs: FxHashSet<String> = dir_adj
-        .keys()
-        .chain(dir_adj.values().flat_map(|v| v.iter()))
-        .cloned()
-        .collect();
-
-    // DFS-based cycle detection with path tracking
-    let mut visited: FxHashSet<String> = FxHashSet::default();
-    let mut cycles: Vec<DetectedCycle> = Vec::new();
-    let mut seen_cycles: FxHashSet<String> = FxHashSet::default();
-
-    for dir in &all_dirs {
-        if !visited.contains(dir) {
-            let mut path = Vec::new();
-            let mut in_stack: FxHashSet<String> = FxHashSet::default();
-            dfs_find_cycles(
-                dir,
-                &dir_adj,
-                &dir_edge_files,
-                &mut visited,
-                &mut in_stack,
-                &mut path,
-                &mut cycles,
-                &mut seen_cycles,
-            );
-        }
-    }
-
-    cycles
-}
-
-fn dfs_find_cycles(
-    node: &str,
-    adj: &FxHashMap<String, FxHashSet<String>>,
-    edge_files: &FxHashMap<(String, String), DirEdgeInfo>,
-    visited: &mut FxHashSet<String>,
-    in_stack: &mut FxHashSet<String>,
-    path: &mut Vec<String>,
-    cycles: &mut Vec<DetectedCycle>,
-    seen_cycles: &mut FxHashSet<String>,
-) {
-    visited.insert(node.to_string());
-    in_stack.insert(node.to_string());
-    path.push(node.to_string());
-
-    if let Some(neighbors) = adj.get(node) {
-        for next in neighbors {
-            if !visited.contains(next.as_str()) {
-                dfs_find_cycles(next, adj, edge_files, visited, in_stack, path, cycles, seen_cycles);
-            } else if in_stack.contains(next.as_str()) {
-                // Found a cycle - extract the cycle path
-                let cycle_start = path.iter().position(|p| p == next).unwrap_or(0);
-                let mut cycle_path: Vec<String> = path[cycle_start..].to_vec();
-                cycle_path.push(next.clone()); // close the cycle
-
-                // Look up the files that cause each hop
-                let mut hop_files = Vec::new();
-                for i in 0..cycle_path.len() - 1 {
-                    let key = (cycle_path[i].clone(), cycle_path[i + 1].clone());
-                    let files = edge_files.get(&key).map(|e| {
-                        (e.from_file.clone(), e.to_file.clone(), e.line_number)
-                    }).unwrap_or_default();
-                    hop_files.push(files);
-                }
-
-                // Deduplicate: normalize by starting from the smallest dir name
-                let mut normalized = cycle_path[..cycle_path.len() - 1].to_vec();
-                normalized.sort();
-                let key = normalized.join(",");
-                if !seen_cycles.contains(&key) {
-                    seen_cycles.insert(key);
-                    cycles.push(DetectedCycle { dir_path: cycle_path, hop_files });
-                }
-            }
-        }
-    }
-
-    path.pop();
-    in_stack.remove(node);
 }
 
 /// Detect circular dependencies among sibling directories using their D_acc sets.
@@ -384,7 +271,9 @@ fn detect_sibling_cycles(
             for target_id in deps_a {
                 if let Some(target_dir) = id_to_dir.get(target_id.as_str()) {
                     for (j, dir_b) in siblings.iter().enumerate() {
-                        if i == j { continue; }
+                        if i == j {
+                            continue;
+                        }
                         let b_prefix = format!("{}/", dir_b);
                         if target_dir == dir_b || target_dir.starts_with(&b_prefix) {
                             adj.entry(i).or_default().push(j);
@@ -395,9 +284,18 @@ fn detect_sibling_cycles(
                                         let a_prefix = format!("{}/", dir_a);
                                         if let Some(fd) = from_dir {
                                             if fd == dir_a || fd.starts_with(&a_prefix) {
-                                                let from_file = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string();
-                                                let to_file = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string();
-                                                edge_files.insert((i, j), (from_file, to_file, dep.line_number));
+                                                let from_file = id_to_path
+                                                    .get(dep.from_module_id.as_str())
+                                                    .unwrap_or(&"")
+                                                    .to_string();
+                                                let to_file = id_to_path
+                                                    .get(dep.to_module_id.as_str())
+                                                    .unwrap_or(&"")
+                                                    .to_string();
+                                                edge_files.insert(
+                                                    (i, j),
+                                                    (from_file, to_file, dep.line_number),
+                                                );
                                                 break;
                                             }
                                         }
@@ -426,14 +324,22 @@ fn detect_sibling_cycles(
         let mut visited_in_path: FxHashSet<usize> = FxHashSet::default();
         visited_in_path.insert(start);
         find_all_cycles_from(
-            start, start, &adj, &mut path, &mut visited_in_path,
-            &mut cycles, &mut seen_keys, siblings, &edge_files,
+            start,
+            start,
+            &adj,
+            &mut path,
+            &mut visited_in_path,
+            &mut cycles,
+            &mut seen_keys,
+            siblings,
+            &edge_files,
         );
     }
 
     cycles
 }
 
+#[allow(clippy::too_many_arguments)]
 fn find_all_cycles_from(
     start: usize,
     current: usize,
@@ -451,42 +357,51 @@ fn find_all_cycles_from(
                 // Found a cycle back to start
                 let mut sorted = path.clone();
                 sorted.sort();
-                let key = sorted.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+                let key = sorted
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 if !seen_keys.contains(&key) {
                     seen_keys.insert(key);
 
-                    let mut dir_path: Vec<String> = path.iter().map(|&i| siblings[i].clone()).collect();
+                    let mut dir_path: Vec<String> =
+                        path.iter().map(|&i| siblings[i].clone()).collect();
                     dir_path.push(siblings[start].clone());
 
                     let mut hop_files = Vec::new();
                     for w in 0..path.len() {
                         let from_idx = path[w];
-                        let to_idx = if w + 1 < path.len() { path[w + 1] } else { start };
-                        let files = edge_files.get(&(from_idx, to_idx)).cloned().unwrap_or_default();
+                        let to_idx = if w + 1 < path.len() {
+                            path[w + 1]
+                        } else {
+                            start
+                        };
+                        let files = edge_files
+                            .get(&(from_idx, to_idx))
+                            .cloned()
+                            .unwrap_or_default();
                         hop_files.push(files);
                     }
 
-                    cycles.push(DetectedCycle { dir_path, hop_files });
+                    cycles.push(DetectedCycle {
+                        dir_path,
+                        hop_files,
+                    });
                 }
             } else if !visited.contains(&next) && next > start {
                 // Only explore nodes with index > start to avoid finding the same cycle
                 // from different starting points
                 visited.insert(next);
                 path.push(next);
-                find_all_cycles_from(start, next, adj, path, visited, cycles, seen_keys, siblings, edge_files);
+                find_all_cycles_from(
+                    start, next, adj, path, visited, cycles, seen_keys, siblings, edge_files,
+                );
                 path.pop();
                 visited.remove(&next);
             }
         }
     }
-}
-
-fn short_dir_name(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or(path)
-        .to_string()
 }
 
 /// Run the full audit: D_acc aggregation, BFS coupling detection, severity, and health score.
@@ -530,9 +445,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         };
 
         // Detect circular dependencies among siblings at this level using D_acc
-        let sibling_cycles = detect_sibling_cycles(
-            children, &dacc, &id_to_dir, &id_to_path, dependencies,
-        );
+        let sibling_cycles =
+            detect_sibling_cycles(children, &dacc, &id_to_dir, &id_to_path, dependencies);
         for cycle in sibling_cycles {
             if cycle.dir_path.len() < 2 {
                 continue;
@@ -581,8 +495,14 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                 violations.push(CouplingViolation {
                                                     dir_a: dir_a.clone(),
                                                     dir_b: dir_b.clone(),
-                                                    from_module: id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string(),
-                                                    to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
+                                                    from_module: id_to_path
+                                                        .get(dep.from_module_id.as_str())
+                                                        .unwrap_or(&"")
+                                                        .to_string(),
+                                                    to_module: id_to_path
+                                                        .get(dep.to_module_id.as_str())
+                                                        .unwrap_or(&"")
+                                                        .to_string(),
                                                     line_number: dep.line_number,
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
@@ -615,8 +535,14 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                 violations.push(CouplingViolation {
                                                     dir_a: dir_b.clone(),
                                                     dir_b: dir_a.clone(),
-                                                    from_module: id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"").to_string(),
-                                                    to_module: id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"").to_string(),
+                                                    from_module: id_to_path
+                                                        .get(dep.from_module_id.as_str())
+                                                        .unwrap_or(&"")
+                                                        .to_string(),
+                                                    to_module: id_to_path
+                                                        .get(dep.to_module_id.as_str())
+                                                        .unwrap_or(&"")
+                                                        .to_string(),
                                                     line_number: dep.line_number,
                                                     depth,
                                                     severity: 1.0 / (depth as f64 + 1.0),
@@ -760,7 +686,10 @@ mod tests {
         let deps = vec![make_dep("a", "b", 10)];
 
         let result = audit(&modules, &deps);
-        assert!(!result.violations.is_empty(), "Should detect coupling between scanner and storage");
+        assert!(
+            !result.violations.is_empty(),
+            "Should detect coupling between scanner and storage"
+        );
         assert_eq!(result.violations[0].dir_a, "src/slices/scanner");
         assert_eq!(result.violations[0].dir_b, "src/slices/storage");
     }
@@ -852,16 +781,17 @@ mod tests {
         assert!(result.score < 100.0);
         assert!(result.score >= 0.0);
         // severity=1.0, total_modules=2, score=100*(1-1.0/2)=50
-        assert!((result.score - 50.0).abs() < 0.01, "Expected ~50, got {}", result.score);
+        assert!(
+            (result.score - 50.0).abs() < 0.01,
+            "Expected ~50, got {}",
+            result.score
+        );
     }
 
     #[test]
     fn score_clamps_to_zero() {
         // Many high-severity violations
-        let modules = vec![
-            make_module("a", "x/mod.rs"),
-            make_module("b", "y/mod.rs"),
-        ];
+        let modules = vec![make_module("a", "x/mod.rs"), make_module("b", "y/mod.rs")];
         // Create multiple deps to push score below 0
         let deps = vec![
             make_dep("a", "b", 1),
@@ -891,8 +821,8 @@ mod tests {
             make_module("d", "src/slices/reporter/mod.rs"),
         ];
         let deps = vec![
-            make_dep("a", "b", 1),  // depth 0, severity 1.0
-            make_dep("c", "d", 1),  // depth 2, severity 0.33
+            make_dep("a", "b", 1), // depth 0, severity 1.0
+            make_dep("c", "d", 1), // depth 2, severity 0.33
         ];
 
         let result = audit(&modules, &deps);

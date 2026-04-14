@@ -123,6 +123,7 @@ impl<'a> ModuleRepository<'a> {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    #[allow(dead_code)]
     pub fn get_children(&self, parent_id: &str) -> Result<Vec<Module>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, snapshot_id, parent_id, name, path, module_type, depth FROM modules WHERE parent_id = ?1",
@@ -366,7 +367,9 @@ mod tests {
                 depth: 0,
             },
         ];
-        ModuleRepository::new(&db.conn).bulk_insert(&modules).unwrap();
+        ModuleRepository::new(&db.conn)
+            .bulk_insert(&modules)
+            .unwrap();
 
         let deps = vec![Dependency {
             from_module_id: "m1".to_string(),

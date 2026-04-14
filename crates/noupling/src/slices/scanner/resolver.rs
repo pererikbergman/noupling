@@ -8,7 +8,10 @@ pub fn resolve_import(
     _project_root: &Path,
     known_paths: &[String],
 ) -> Option<String> {
-    let ext = Path::new(source_file).extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = Path::new(source_file)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
     match ext {
         "rs" => resolve_rust_import(import_path, source_file, known_paths),
         "kt" | "kts" => resolve_kotlin_import(import_path, known_paths),
@@ -46,10 +49,7 @@ fn resolve_rust_import(
 
 /// Resolves a Kotlin import (dot-separated) to a project file path.
 /// e.g., "com.example.MyClass" -> "src/main/kotlin/com/example/MyClass.kt"
-fn resolve_kotlin_import(
-    import_path: &str,
-    known_paths: &[String],
-) -> Option<String> {
+fn resolve_kotlin_import(import_path: &str, known_paths: &[String]) -> Option<String> {
     // Convert dot-separated path to file path segments
     let segments: Vec<&str> = import_path.split('.').collect();
     if segments.is_empty() {
@@ -99,7 +99,9 @@ fn resolve_typescript_import(
     let mut components: Vec<String> = Vec::new();
     for comp in resolved.components() {
         match comp {
-            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
             std::path::Component::CurDir => {}
             std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
             _ => {}
@@ -128,10 +130,7 @@ fn resolve_typescript_import(
 
 /// Resolves a Swift import to a project file path.
 /// Swift imports are module names (e.g., "MyModule") - we match against file names.
-fn resolve_swift_import(
-    import_path: &str,
-    known_paths: &[String],
-) -> Option<String> {
+fn resolve_swift_import(import_path: &str, known_paths: &[String]) -> Option<String> {
     // Swift imports are module-level, try matching as a .swift file
     let filename = format!("{}.swift", import_path);
     known_paths.iter().find(|p| p.ends_with(&filename)).cloned()
@@ -139,10 +138,7 @@ fn resolve_swift_import(
 
 /// Resolves a C# using directive to a project file path.
 /// e.g., "MyApp.Data.Repository" -> find a file matching the namespace path.
-fn resolve_csharp_import(
-    import_path: &str,
-    known_paths: &[String],
-) -> Option<String> {
+fn resolve_csharp_import(import_path: &str, known_paths: &[String]) -> Option<String> {
     let segments: Vec<&str> = import_path.split('.').collect();
     if segments.is_empty() {
         return None;
@@ -171,18 +167,19 @@ fn resolve_csharp_import(
 /// Go imports are package paths like "myproject/pkg/utils".
 fn resolve_go_import(import_path: &str, known_paths: &[String]) -> Option<String> {
     // Try matching the import path suffix against known .go files
-    let segments = import_path.replace('/', "/");
-    for ext in &["go"] {
-        // Look for any .go file under a directory matching the import path
-        let dir_suffix = format!("/{}/", segments);
-        if let Some(found) = known_paths.iter().find(|p| p.contains(&dir_suffix) && p.ends_with(ext)) {
-            return Some(found.clone());
-        }
-        // Try direct file match
-        let candidate = format!("{}.{}", segments, ext);
-        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
-            return Some(found.clone());
-        }
+    let segments = import_path;
+    // Look for any .go file under a directory matching the import path
+    let dir_suffix = format!("/{}/", segments);
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| p.contains(&dir_suffix) && p.ends_with(".go"))
+    {
+        return Some(found.clone());
+    }
+    // Try direct file match
+    let candidate = format!("{}.go", segments);
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        return Some(found.clone());
     }
     None
 }
@@ -192,7 +189,10 @@ fn resolve_go_import(import_path: &str, known_paths: &[String]) -> Option<String
 fn resolve_haskell_import(import_path: &str, known_paths: &[String]) -> Option<String> {
     let file_path = import_path.replace('.', "/");
     let candidate = format!("{}.hs", file_path);
-    known_paths.iter().find(|p| p.ends_with(&candidate)).cloned()
+    known_paths
+        .iter()
+        .find(|p| p.ends_with(&candidate))
+        .cloned()
 }
 
 /// Resolves a Java import to a project file.
@@ -283,7 +283,9 @@ fn resolve_zig_import(
     let mut components: Vec<String> = Vec::new();
     for comp in resolved.components() {
         match comp {
-            std::path::Component::ParentDir => { components.pop(); }
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
             std::path::Component::CurDir => {}
             std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
             _ => {}
@@ -558,12 +560,7 @@ mod tests {
     fn ts_resolves_sibling_import() {
         let paths = ts_paths();
         let root = Path::new("");
-        let result = resolve_import(
-            "../utils/helpers",
-            "src/pages/Home.ts",
-            root,
-            &paths,
-        );
+        let result = resolve_import("../utils/helpers", "src/pages/Home.ts", root, &paths);
         assert_eq!(result, Some("src/utils/helpers.ts".to_string()));
     }
 
@@ -571,12 +568,7 @@ mod tests {
     fn ts_resolves_index_file() {
         let paths = ts_paths();
         let root = Path::new("");
-        let result = resolve_import(
-            "../shared",
-            "src/pages/Home.ts",
-            root,
-            &paths,
-        );
+        let result = resolve_import("../shared", "src/pages/Home.ts", root, &paths);
         assert_eq!(result, Some("src/shared/index.ts".to_string()));
     }
 
@@ -584,12 +576,7 @@ mod tests {
     fn ts_returns_none_for_npm_package() {
         let paths = ts_paths();
         let root = Path::new("");
-        let result = resolve_import(
-            "react",
-            "src/pages/Home.ts",
-            root,
-            &paths,
-        );
+        let result = resolve_import("react", "src/pages/Home.ts", root, &paths);
         assert!(result.is_none());
     }
 
@@ -597,12 +584,7 @@ mod tests {
     fn ts_resolves_tsx_extension() {
         let paths = ts_paths();
         let root = Path::new("");
-        let result = resolve_import(
-            "../components/Button",
-            "src/pages/Home.ts",
-            root,
-            &paths,
-        );
+        let result = resolve_import("../components/Button", "src/pages/Home.ts", root, &paths);
         assert_eq!(result, Some("src/components/Button.tsx".to_string()));
     }
 }

@@ -46,7 +46,12 @@ pub fn generate_markdown_report(
 
     // Generate root README.md
     let root_md = render_dir_page(
-        &root_path, &dir_map, &violations_per_dir, &report, snapshot_id, true,
+        &root_path,
+        &dir_map,
+        &violations_per_dir,
+        &report,
+        snapshot_id,
+        true,
     );
     std::fs::write(output_dir.join("README.md"), root_md)?;
 
@@ -55,13 +60,19 @@ pub fn generate_markdown_report(
         if dir.path == root_path {
             continue;
         }
-        let rel = dir.path
+        let rel = dir
+            .path
             .strip_prefix(&format!("{}/", root_path))
             .unwrap_or(&dir.path);
         let page_dir = output_dir.join(rel);
         std::fs::create_dir_all(&page_dir)?;
         let md = render_dir_page(
-            &dir.path, &dir_map, &violations_per_dir, &report, snapshot_id, false,
+            &dir.path,
+            &dir_map,
+            &violations_per_dir,
+            &report,
+            snapshot_id,
+            false,
         );
         std::fs::write(page_dir.join("README.md"), md)?;
     }
@@ -95,7 +106,10 @@ fn render_dir_page(
     }
 
     // Summary
-    let violations = violations_per_dir.get(dir_path).map(|v| v.len()).unwrap_or(0);
+    let violations = violations_per_dir
+        .get(dir_path)
+        .map(|v| v.len())
+        .unwrap_or(0);
     md.push_str("## Summary\n\n");
     md.push_str("| Metric | Value |\n");
     md.push_str("| :--- | :--- |\n");
@@ -118,7 +132,11 @@ fn render_dir_page(
             let child_dir = dir_map.get(&child_path);
             let child_modules = child_dir.map(|d| d.module_count).unwrap_or(0);
             let child_violations = child_dir.map(|d| d.violations_count).unwrap_or(0);
-            let warning = if child_dir.map(|d| d.has_violations).unwrap_or(false) { " !" } else { "" };
+            let warning = if child_dir.map(|d| d.has_violations).unwrap_or(false) {
+                " !"
+            } else {
+                ""
+            };
             md.push_str(&format!(
                 "| [{}]({}/README.md){} | {} | {} |\n",
                 child_name, child_name, warning, child_modules, child_violations,
@@ -133,8 +151,10 @@ fn render_dir_page(
 
     // Violations at this level
     if let Some(violations) = violations_per_dir.get(dir_path) {
-        let circular: Vec<&&CouplingViolation> = violations.iter().filter(|v| v.is_circular).collect();
-        let coupling: Vec<&&CouplingViolation> = violations.iter().filter(|v| !v.is_circular).collect();
+        let circular: Vec<&&CouplingViolation> =
+            violations.iter().filter(|v| v.is_circular).collect();
+        let coupling: Vec<&&CouplingViolation> =
+            violations.iter().filter(|v| !v.is_circular).collect();
 
         // Circular grouped by order
         if !circular.is_empty() {
@@ -154,13 +174,17 @@ fn render_dir_page(
 
                 for (idx, v) in cycles.iter().enumerate() {
                     // Short path
-                    let short: Vec<String> = v.cycle_path.iter().map(|p| {
-                        std::path::Path::new(p)
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or(p)
-                            .to_string()
-                    }).collect();
+                    let short: Vec<String> = v
+                        .cycle_path
+                        .iter()
+                        .map(|p| {
+                            std::path::Path::new(p)
+                                .file_name()
+                                .and_then(|f| f.to_str())
+                                .unwrap_or(p)
+                                .to_string()
+                        })
+                        .collect();
 
                     let mut display_parts = Vec::new();
                     for (i, name) in short.iter().enumerate() {
@@ -182,7 +206,12 @@ fn render_dir_page(
                             display_parts.push(format!("**{}**", name));
                         }
                     }
-                    md.push_str(&format!("**Cycle {}** (severity {:.2}): {}\n\n", idx + 1, v.severity, display_parts.join(" -> ")));
+                    md.push_str(&format!(
+                        "**Cycle {}** (severity {:.2}): {}\n\n",
+                        idx + 1,
+                        v.severity,
+                        display_parts.join(" -> ")
+                    ));
 
                     // Full paths
                     md.push_str("<details><summary>Full paths</summary>\n\n");
@@ -215,7 +244,10 @@ fn render_dir_page(
                     .file_name()
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
-                md.push_str(&format!("| {:.2} | `{}` | `{}` |\n", v.severity, from_short, to_short));
+                md.push_str(&format!(
+                    "| {:.2} | `{}` | `{}` |\n",
+                    v.severity, from_short, to_short
+                ));
             }
             md.push('\n');
         }
@@ -225,7 +257,9 @@ fn render_dir_page(
 }
 
 fn find_common_ancestor(paths: &[String]) -> String {
-    if paths.is_empty() { return String::new(); }
+    if paths.is_empty() {
+        return String::new();
+    }
     let mut common = std::path::Path::new(&paths[0])
         .parent()
         .unwrap_or(std::path::Path::new(""))
@@ -251,7 +285,11 @@ fn common_parent(a: &str, b: &str) -> String {
     let pa = std::path::Path::new(a);
     let pb = std::path::Path::new(b);
     if pa.parent() == pb.parent() {
-        return pa.parent().unwrap_or(std::path::Path::new("")).to_string_lossy().to_string();
+        return pa
+            .parent()
+            .unwrap_or(std::path::Path::new(""))
+            .to_string_lossy()
+            .to_string();
     }
     let mut current = pa.to_path_buf();
     loop {

@@ -4,12 +4,13 @@ use std::path::Path;
 
 use crate::core::Module;
 use crate::settings::Settings;
-use crate::slices::analyzer::{AuditResult, CouplingViolation};
+use crate::slices::analyzer::AuditResult;
 
 /// A node in the directory tree used for HTML navigation.
 #[derive(Debug)]
 struct DirNode {
     name: String,
+    #[allow(dead_code)]
     path: String,
     children_dirs: Vec<String>,
     files: Vec<String>,
@@ -25,6 +26,7 @@ struct ViolationInfo {
     to_module: String,
     severity: f64,
     is_circular: bool,
+    #[allow(dead_code)]
     circular_direction: Option<String>,
     cycle_path: Vec<String>,
     cycle_hop_files: Vec<(String, String, i32)>,
@@ -35,8 +37,11 @@ struct ReportData {
     dirs: BTreeMap<String, DirNode>,
     root_path: String,
     snapshot_id: String,
+    #[allow(dead_code)]
     total_score: f64,
+    #[allow(dead_code)]
     total_modules: usize,
+    #[allow(dead_code)]
     total_violations: usize,
     score_green: f64,
     score_yellow: f64,
@@ -64,7 +69,9 @@ pub fn generate_html_report(
         if dir_path == &data.root_path {
             continue;
         }
-        let rel = dir_path.strip_prefix(&format!("{}/", data.root_path)).unwrap_or(dir_path);
+        let rel = dir_path
+            .strip_prefix(&format!("{}/", data.root_path))
+            .unwrap_or(dir_path);
         let page_dir = output_dir.join(rel);
         std::fs::create_dir_all(&page_dir)?;
         let html = render_page(&data, dir_path);
@@ -202,11 +209,17 @@ fn build_report_data(
                 .get(&(violation.dir_b.clone(), violation.dir_a.clone()))
                 .unwrap_or(&0);
             if forward < reverse {
-                Some(format!("{} -> {} (likely wrong direction, fewer couplings)",
-                    short_name(&violation.dir_a), short_name(&violation.dir_b)))
+                Some(format!(
+                    "{} -> {} (likely wrong direction, fewer couplings)",
+                    short_name(&violation.dir_a),
+                    short_name(&violation.dir_b)
+                ))
             } else if reverse < forward {
-                Some(format!("{} -> {} (likely wrong direction, fewer couplings)",
-                    short_name(&violation.dir_b), short_name(&violation.dir_a)))
+                Some(format!(
+                    "{} -> {} (likely wrong direction, fewer couplings)",
+                    short_name(&violation.dir_b),
+                    short_name(&violation.dir_a)
+                ))
             } else {
                 Some("equal coupling in both directions".to_string())
             }
@@ -233,7 +246,7 @@ fn build_report_data(
     // Propagate module counts up
     let dir_paths_sorted: Vec<String> = {
         let mut paths: Vec<String> = dirs.keys().cloned().collect();
-        paths.sort_by(|a, b| b.len().cmp(&a.len())); // deepest first
+        paths.sort_by_key(|a| std::cmp::Reverse(a.len())); // deepest first
         paths
     };
     for dir_path in &dir_paths_sorted {
@@ -442,12 +455,21 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     let mut violations_html = String::new();
 
     // Separate circular and coupling violations
-    let circular_violations: Vec<&ViolationInfo> = dir.violations_here.iter().filter(|v| v.is_circular).collect();
-    let coupling_violations: Vec<&ViolationInfo> = dir.violations_here.iter().filter(|v| !v.is_circular).collect();
+    let circular_violations: Vec<&ViolationInfo> = dir
+        .violations_here
+        .iter()
+        .filter(|v| v.is_circular)
+        .collect();
+    let coupling_violations: Vec<&ViolationInfo> = dir
+        .violations_here
+        .iter()
+        .filter(|v| !v.is_circular)
+        .collect();
 
     // Group circular by order
     if !circular_violations.is_empty() {
-        let mut by_order: std::collections::BTreeMap<usize, Vec<&ViolationInfo>> = std::collections::BTreeMap::new();
+        let mut by_order: std::collections::BTreeMap<usize, Vec<&ViolationInfo>> =
+            std::collections::BTreeMap::new();
         for v in &circular_violations {
             by_order.entry(v.cycle_order).or_default().push(v);
         }
@@ -459,7 +481,11 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 3 => "Triangular Cycles (Order 3)".to_string(),
                 _ => format!("Cycles of Order {}", order),
             };
-            violations_html.push_str(&format!("<h3>{} <small class=\"hop-file\">({} found)</small></h3>\n", label, violations.len()));
+            violations_html.push_str(&format!(
+                "<h3>{} <small class=\"hop-file\">({} found)</small></h3>\n",
+                label,
+                violations.len()
+            ));
             violations_html.push_str("<table class=\"violations\">\n");
             violations_html.push_str("<tr><th>Severity</th><th>Cycle</th></tr>\n");
             for v in violations {
@@ -477,7 +503,8 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
 
     if !coupling_violations.is_empty() {
         violations_html.push_str("<h2>Coupling Violations</h2>\n<table class=\"violations\">\n");
-        violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
+        violations_html
+            .push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
         for v in &coupling_violations {
             let sev_clr = if v.severity >= data.critical_severity {
                 "#ef4444"
@@ -624,14 +651,20 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
                 .file_name()
                 .and_then(|f| f.to_str())
                 .unwrap_or(from_file);
-            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+            hops.push_str(&format!(
+                " <small class=\"hop-file\">({})</small>",
+                file_short
+            ));
         } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
             let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
             let file_short = std::path::Path::new(to_file)
                 .file_name()
                 .and_then(|f| f.to_str())
                 .unwrap_or(to_file);
-            hops.push_str(&format!(" <small class=\"hop-file\">({})</small>", file_short));
+            hops.push_str(&format!(
+                " <small class=\"hop-file\">({})</small>",
+                file_short
+            ));
         }
     }
 
@@ -647,7 +680,10 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
             .unwrap_or(dir);
         if i < v.cycle_hop_files.len() {
             let (from_file, _, _) = &v.cycle_hop_files[i];
-            full_paths.push_str(&format!("<strong>{}</strong>: {} &#8594;", dir_short, from_file));
+            full_paths.push_str(&format!(
+                "<strong>{}</strong>: {} &#8594;",
+                dir_short, from_file
+            ));
         } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
             let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
             full_paths.push_str(&format!("<strong>{}</strong>: {}", dir_short, to_file));
@@ -708,6 +744,7 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 mod tests {
     use super::*;
     use crate::core::ModuleType;
+    use crate::slices::analyzer::CouplingViolation;
 
     fn make_module(id: &str, path: &str) -> Module {
         Module {

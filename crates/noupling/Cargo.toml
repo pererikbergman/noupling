@@ -2,6 +2,13 @@
 name = "noupling"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords = ["architecture", "coupling", "dependencies", "lint", "static-analysis"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 serde = { workspace = true }

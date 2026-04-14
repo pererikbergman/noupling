@@ -1,8 +1,8 @@
 mod html;
 mod md;
 
-use std::collections::BTreeMap;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 use crate::core::Module;
 use crate::slices::analyzer::{AuditResult, CouplingViolation};
@@ -65,22 +65,15 @@ pub struct JsonDirectory {
 }
 
 impl JsonReport {
-    pub fn from_audit(
-        modules: &[Module],
-        result: &AuditResult,
-        snapshot_id: &str,
-    ) -> Self {
+    pub fn from_audit(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> Self {
         let critical_violations = result
             .violations
             .iter()
             .filter(|v| v.severity >= 0.5)
             .count();
 
-        let circular: Vec<&CouplingViolation> = result
-            .violations
-            .iter()
-            .filter(|v| v.is_circular)
-            .collect();
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
 
         let coupling: Vec<&CouplingViolation> = result
             .violations
@@ -96,13 +89,17 @@ impl JsonReport {
                 3 => "Triangular Cycles (Order 3)".to_string(),
                 n => format!("Cycles of Order {}", n),
             };
-            let short_path: Vec<String> = v.cycle_path.iter().map(|p| {
-                std::path::Path::new(p)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(p)
-                    .to_string()
-            }).collect();
+            let short_path: Vec<String> = v
+                .cycle_path
+                .iter()
+                .map(|p| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or(p)
+                        .to_string()
+                })
+                .collect();
 
             let mut hop_files = Vec::new();
             for (i, dir) in v.cycle_path.iter().enumerate() {
@@ -186,7 +183,8 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
                 break;
             }
             dirs.entry(dir_str.clone()).or_insert_with(|| {
-                let name = dir.file_name()
+                let name = dir
+                    .file_name()
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| dir_str.clone());
                 JsonDirectory {
@@ -236,14 +234,18 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
 
     // Propagate module counts and count violations per dir
     let mut sorted_paths: Vec<String> = dirs.keys().cloned().collect();
-    sorted_paths.sort_by(|a, b| b.len().cmp(&a.len()));
+    sorted_paths.sort_by_key(|a| std::cmp::Reverse(a.len()));
 
     for path in &sorted_paths {
         let child_count: usize = {
-            let dir = dirs.get(path).unwrap();
+            let _dir = dirs.get(path).unwrap();
             let prefix = format!("{}/", path);
-            dir_paths.iter()
-                .filter(|p| p.starts_with(&prefix) && p.matches('/').count() == path.matches('/').count() + 1)
+            dir_paths
+                .iter()
+                .filter(|p| {
+                    p.starts_with(&prefix)
+                        && p.matches('/').count() == path.matches('/').count() + 1
+                })
                 .filter_map(|p| dirs.get(p).map(|d| d.module_count))
                 .sum()
         };
@@ -294,7 +296,9 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
 }
 
 fn find_common_ancestor(paths: &[String]) -> String {
-    if paths.is_empty() { return String::new(); }
+    if paths.is_empty() {
+        return String::new();
+    }
     let mut common = std::path::Path::new(&paths[0])
         .parent()
         .unwrap_or(std::path::Path::new(""))
@@ -320,7 +324,11 @@ fn common_parent(a: &str, b: &str) -> String {
     let pa = std::path::Path::new(a);
     let pb = std::path::Path::new(b);
     if pa.parent() == pb.parent() {
-        return pa.parent().unwrap_or(std::path::Path::new("")).to_string_lossy().to_string();
+        return pa
+            .parent()
+            .unwrap_or(std::path::Path::new(""))
+            .to_string_lossy()
+            .to_string();
     }
     let mut current = pa.to_path_buf();
     loop {
@@ -349,9 +357,16 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     if !report.circular_dependencies.is_empty() {
         xml.push_str("  <circular-dependencies>\n");
         for (label, cycles) in &report.circular_dependencies {
-            xml.push_str(&format!("    <group label=\"{}\" count=\"{}\">\n", xml_escape(label), cycles.len()));
+            xml.push_str(&format!(
+                "    <group label=\"{}\" count=\"{}\">\n",
+                xml_escape(label),
+                cycles.len()
+            ));
             for cycle in cycles {
-                xml.push_str(&format!("      <cycle order=\"{}\" severity=\"{:.2}\">\n", cycle.cycle_order, cycle.severity));
+                xml.push_str(&format!(
+                    "      <cycle order=\"{}\" severity=\"{:.2}\">\n",
+                    cycle.cycle_order, cycle.severity
+                ));
                 xml.push_str("        <path>\n");
                 for dir in &cycle.cycle_path {
                     xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
@@ -366,7 +381,9 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
                 for hop in &cycle.hop_files {
                     xml.push_str(&format!(
                         "          <hop fromDir=\"{}\" fromFile=\"{}\" toFile=\"{}\"/>\n",
-                        xml_escape(&hop.from_dir), xml_escape(&hop.from_file), xml_escape(&hop.to_file),
+                        xml_escape(&hop.from_dir),
+                        xml_escape(&hop.from_file),
+                        xml_escape(&hop.to_file),
                     ));
                 }
                 xml.push_str("        </hops>\n");
@@ -431,24 +448,32 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 (v.from_module.clone(), 1)
             };
 
-            let short_dirs: Vec<String> = v.cycle_path.iter().map(|p| {
-                std::path::Path::new(p)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(p)
-                    .to_string()
-            }).collect();
+            let short_dirs: Vec<String> = v
+                .cycle_path
+                .iter()
+                .map(|p| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or(p)
+                        .to_string()
+                })
+                .collect();
             let cycle_desc = short_dirs.join(" -> ");
 
             let mut secondary = Vec::new();
             for (i, (from_file, _to_file, line)) in v.cycle_hop_files.iter().enumerate() {
-                if i == 0 { continue; }
+                if i == 0 {
+                    continue;
+                }
                 let dir_name = if i < v.cycle_path.len() {
                     std::path::Path::new(&v.cycle_path[i])
                         .file_name()
                         .and_then(|f| f.to_str())
                         .unwrap_or("")
-                } else { "" };
+                } else {
+                    ""
+                };
                 secondary.push(serde_json::json!({
                     "message": format!("Part of circular dependency chain ({})", dir_name),
                     "filePath": from_file,
@@ -533,10 +558,7 @@ pub fn format_text(result: &AuditResult) -> String {
                 "  [{:.2}]{} {} -> {} (depth {})\n",
                 v.severity, label, v.from_module, v.to_module, v.depth
             ));
-            output.push_str(&format!(
-                "         {} <> {}\n",
-                v.dir_a, v.dir_b
-            ));
+            output.push_str(&format!("         {} <> {}\n", v.dir_a, v.dir_b));
         }
     }
 
@@ -558,9 +580,18 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     md.push_str("| :--- | :--- |\n");
     md.push_str(&format!("| Health Score | {:.1}/100 |\n", report.score));
     md.push_str(&format!("| Total Modules | {} |\n", report.total_modules));
-    md.push_str(&format!("| Critical Violations | {} |\n", report.critical_violations));
-    md.push_str(&format!("| Circular Dependencies | {} |\n", report.total_circular));
-    md.push_str(&format!("| Coupling Violations | {} |\n", report.total_coupling));
+    md.push_str(&format!(
+        "| Critical Violations | {} |\n",
+        report.critical_violations
+    ));
+    md.push_str(&format!(
+        "| Circular Dependencies | {} |\n",
+        report.total_circular
+    ));
+    md.push_str(&format!(
+        "| Coupling Violations | {} |\n",
+        report.total_coupling
+    ));
 
     // Circular dependencies grouped by order
     if !report.circular_dependencies.is_empty() {
@@ -570,7 +601,12 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
             for (idx, cycle) in cycles.iter().enumerate() {
                 // Short cycle path
                 let short = cycle.cycle_short_path.join(" -> ");
-                md.push_str(&format!("**Cycle {}** (severity: {:.2}): `{}`\n\n", idx + 1, cycle.severity, short));
+                md.push_str(&format!(
+                    "**Cycle {}** (severity: {:.2}): `{}`\n\n",
+                    idx + 1,
+                    cycle.severity,
+                    short
+                ));
 
                 // Hop details table
                 md.push_str("| Directory | File | Target |\n");
@@ -589,7 +625,10 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
                             .unwrap_or(&hop.to_file)
                             .to_string()
                     };
-                    md.push_str(&format!("| {} | `{}` | `{}` |\n", hop.from_dir, from_short, to_short));
+                    md.push_str(&format!(
+                        "| {} | `{}` | `{}` |\n",
+                        hop.from_dir, from_short, to_short
+                    ));
                 }
                 md.push('\n');
 
@@ -643,8 +682,12 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
         let warning = if dir.has_violations { " !" } else { "" };
         md.push_str(&format!(
             "| `{}`{} | {} | {:.1} | {} | {} |\n",
-            dir.path, warning, dir.module_count, dir.score,
-            dir.violations_count, dir.circular_count,
+            dir.path,
+            warning,
+            dir.module_count,
+            dir.score,
+            dir.violations_count,
+            dir.circular_count,
         ));
     }
 
@@ -770,7 +813,11 @@ mod tests {
         let mut v = make_violation("a.rs", "b.rs", 1.0, 0);
         v.is_circular = true;
         v.cycle_order = 2;
-        v.cycle_path = vec!["dir_a".to_string(), "dir_b".to_string(), "dir_a".to_string()];
+        v.cycle_path = vec![
+            "dir_a".to_string(),
+            "dir_b".to_string(),
+            "dir_a".to_string(),
+        ];
         let result = AuditResult {
             violations: vec![v],
             score: 50.0,

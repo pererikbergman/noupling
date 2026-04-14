@@ -19,7 +19,14 @@ pub fn discover_files_with_settings(
     let mut modules = Vec::new();
     let root_canonical = root.canonicalize()?;
     let ignore_set = settings.build_ignore_set()?;
-    walk_directory(&root_canonical, snapshot_id, &root_canonical, &mut modules, settings, &ignore_set)?;
+    walk_directory(
+        &root_canonical,
+        snapshot_id,
+        &root_canonical,
+        &mut modules,
+        settings,
+        &ignore_set,
+    )?;
     Ok(modules)
 }
 
@@ -31,9 +38,7 @@ fn walk_directory(
     settings: &Settings,
     ignore_set: &GlobSet,
 ) -> Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok())
-        .collect();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
@@ -121,9 +126,16 @@ mod tests {
 
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
 
-        assert_eq!(nodes.len(), 3, "Expected 3 .rs files, got: {:?}", nodes.iter().map(|n| &n.name).collect::<Vec<_>>());
+        assert_eq!(
+            nodes.len(),
+            3,
+            "Expected 3 .rs files, got: {:?}",
+            nodes.iter().map(|n| &n.name).collect::<Vec<_>>()
+        );
         assert!(nodes.iter().all(|n| n.name.ends_with(".rs")));
-        assert!(nodes.iter().all(|n| matches!(n.module_type, ModuleType::File)));
+        assert!(nodes
+            .iter()
+            .all(|n| matches!(n.module_type, ModuleType::File)));
     }
 
     #[test]
@@ -132,7 +144,10 @@ mod tests {
         create_mock_project(tmp.path());
 
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
-        let dirs: Vec<&Module> = nodes.iter().filter(|n| matches!(n.module_type, ModuleType::Dir)).collect();
+        let dirs: Vec<&Module> = nodes
+            .iter()
+            .filter(|n| matches!(n.module_type, ModuleType::Dir))
+            .collect();
         assert!(dirs.is_empty());
     }
 
@@ -191,7 +206,8 @@ mod tests {
         fs::write(
             noupling.join("settings.json"),
             r#"{"ignore_patterns": ["**/test/**"]}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let nodes = discover_files(tmp.path(), "snap-1").unwrap();
         assert_eq!(nodes.len(), 1);

@@ -17,6 +17,7 @@ impl Database {
         Ok(db)
     }
 
+    #[cfg(test)]
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         let db = Self { conn };
@@ -123,7 +124,15 @@ mod tests {
             .collect();
         assert_eq!(
             columns,
-            vec!["id", "snapshot_id", "parent_id", "name", "path", "module_type", "depth"]
+            vec![
+                "id",
+                "snapshot_id",
+                "parent_id",
+                "name",
+                "path",
+                "module_type",
+                "depth"
+            ]
         );
     }
 
@@ -138,6 +147,9 @@ mod tests {
             .unwrap()
             .filter_map(|r| r.ok())
             .collect();
-        assert_eq!(columns, vec!["from_module_id", "to_module_id", "line_number"]);
+        assert_eq!(
+            columns,
+            vec!["from_module_id", "to_module_id", "line_number"]
+        );
     }
 }
