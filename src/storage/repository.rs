@@ -3,6 +3,7 @@ use rusqlite::Connection;
 
 use crate::core::{Dependency, Module, ModuleType, Snapshot};
 
+/// Repository for creating and querying scan snapshots.
 pub struct SnapshotRepository<'a> {
     conn: &'a Connection,
 }
@@ -65,6 +66,7 @@ impl<'a> SnapshotRepository<'a> {
     }
 }
 
+/// Repository for bulk inserting and querying source modules.
 pub struct ModuleRepository<'a> {
     conn: &'a Connection,
 }
@@ -148,6 +150,7 @@ impl<'a> ModuleRepository<'a> {
     }
 }
 
+/// Repository for bulk inserting and querying import dependencies.
 pub struct DependencyRepository<'a> {
     conn: &'a Connection,
 }
