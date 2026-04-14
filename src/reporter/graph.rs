@@ -1,0 +1,287 @@
+//! Dependency graph generation in Mermaid and Graphviz DOT formats.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate::analyzer::{AuditResult, CouplingViolation};
+use crate::core::Module;
+
+/// Build a directory-level dependency graph from modules and violations.
+fn build_dir_graph(
+    modules: &[Module],
+    result: &AuditResult,
+) -> (BTreeSet<String>, BTreeMap<(String, String), usize>) {
+    // Collect all directories
+    let mut dirs: BTreeSet<String> = BTreeSet::new();
+    for module in modules {
+        if let Some(parent) = std::path::Path::new(&module.path).parent() {
+            let dir = parent.to_string_lossy().to_string();
+            if !dir.is_empty() {
+                dirs.insert(dir);
+            }
+        }
+    }
+
+    // Build edges from violations (both coupling and circular)
+    let mut edges: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for v in &result.violations {
+        if v.is_circular {
+            // Add edges for each hop in the cycle
+            for i in 0..v.cycle_path.len().saturating_sub(1) {
+                let from = short_name(&v.cycle_path[i]);
+                let to = short_name(&v.cycle_path[i + 1]);
+                *edges.entry((from, to)).or_insert(0) += 1;
+            }
+        } else {
+            let from = short_name(&v.dir_a);
+            let to = short_name(&v.dir_b);
+            *edges.entry((from, to)).or_insert(0) += 1;
+        }
+    }
+
+    (dirs, edges)
+}
+
+/// Classify a directory as healthy, coupled, or circular based on violations.
+fn node_status(dir_name: &str, violations: &[CouplingViolation]) -> &'static str {
+    for v in violations {
+        if v.is_circular {
+            for p in &v.cycle_path {
+                if short_name(p) == dir_name {
+                    return "circular";
+                }
+            }
+        }
+        if short_name(&v.dir_a) == dir_name || short_name(&v.dir_b) == dir_name {
+            return "coupled";
+        }
+    }
+    "healthy"
+}
+
+fn short_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// Generate a Mermaid flowchart diagram.
+pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
+    let (dirs, edges) = build_dir_graph(modules, result);
+    let mut out = String::new();
+
+    out.push_str("flowchart LR\n");
+
+    // Collect unique short names from edges
+    let mut used_dirs: BTreeSet<String> = BTreeSet::new();
+    for (from, to) in edges.keys() {
+        used_dirs.insert(from.clone());
+        used_dirs.insert(to.clone());
+    }
+
+    // Add nodes without edges too (from directory list)
+    for dir in &dirs {
+        let name = short_name(dir);
+        if !name.is_empty() {
+            used_dirs.insert(name);
+        }
+    }
+
+    // Define nodes with styling
+    for dir_name in &used_dirs {
+        let status = node_status(dir_name, &result.violations);
+        let style = match status {
+            "circular" => format!("    {}[{}]:::circular", sanitize(dir_name), dir_name),
+            "coupled" => format!("    {}[{}]:::coupled", sanitize(dir_name), dir_name),
+            _ => format!("    {}[{}]:::healthy", sanitize(dir_name), dir_name),
+        };
+        out.push_str(&style);
+        out.push('\n');
+    }
+    out.push('\n');
+
+    // Define edges
+    for ((from, to), count) in &edges {
+        if *count > 1 {
+            out.push_str(&format!(
+                "    {} -->|{}| {}\n",
+                sanitize(from),
+                count,
+                sanitize(to)
+            ));
+        } else {
+            out.push_str(&format!("    {} --> {}\n", sanitize(from), sanitize(to)));
+        }
+    }
+    out.push('\n');
+
+    // Styles
+    out.push_str("    classDef healthy fill:#dcfce7,stroke:#22c55e,color:#166534\n");
+    out.push_str("    classDef coupled fill:#fef9c3,stroke:#eab308,color:#854d0e\n");
+    out.push_str("    classDef circular fill:#fecaca,stroke:#ef4444,color:#991b1b\n");
+
+    out
+}
+
+/// Generate a Graphviz DOT diagram.
+pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
+    let (dirs, edges) = build_dir_graph(modules, result);
+    let mut out = String::new();
+
+    out.push_str("digraph noupling {\n");
+    out.push_str("    rankdir=LR;\n");
+    out.push_str("    node [shape=box, style=filled, fontname=\"Helvetica\"];\n\n");
+
+    // Collect used dirs
+    let mut used_dirs: BTreeSet<String> = BTreeSet::new();
+    for (from, to) in edges.keys() {
+        used_dirs.insert(from.clone());
+        used_dirs.insert(to.clone());
+    }
+    for dir in &dirs {
+        let name = short_name(dir);
+        if !name.is_empty() {
+            used_dirs.insert(name);
+        }
+    }
+
+    // Nodes
+    for dir_name in &used_dirs {
+        let status = node_status(dir_name, &result.violations);
+        let (fill, font) = match status {
+            "circular" => ("#fecaca", "#991b1b"),
+            "coupled" => ("#fef9c3", "#854d0e"),
+            _ => ("#dcfce7", "#166534"),
+        };
+        out.push_str(&format!(
+            "    {} [label=\"{}\", fillcolor=\"{}\", fontcolor=\"{}\"];\n",
+            sanitize(dir_name),
+            dir_name,
+            fill,
+            font
+        ));
+    }
+    out.push('\n');
+
+    // Edges
+    for ((from, to), count) in &edges {
+        if *count > 1 {
+            out.push_str(&format!(
+                "    {} -> {} [label=\"{}\"];\n",
+                sanitize(from),
+                sanitize(to),
+                count
+            ));
+        } else {
+            out.push_str(&format!("    {} -> {};\n", sanitize(from), sanitize(to)));
+        }
+    }
+
+    out.push_str("}\n");
+    out
+}
+
+/// Sanitize a name for use as a Mermaid/DOT identifier.
+fn sanitize(name: &str) -> String {
+    name.chars()
+        .map(|c| if c == '-' || c == '.' || c == ' ' { '_' } else { c })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ModuleType;
+
+    fn make_module(path: &str) -> Module {
+        Module {
+            id: path.to_string(),
+            snapshot_id: "snap".to_string(),
+            parent_id: None,
+            name: std::path::Path::new(path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            path: path.to_string(),
+            module_type: ModuleType::File,
+            depth: 1,
+        }
+    }
+
+    fn make_violation(dir_a: &str, dir_b: &str) -> CouplingViolation {
+        CouplingViolation {
+            dir_a: dir_a.to_string(),
+            dir_b: dir_b.to_string(),
+            from_module: format!("{}/mod.rs", dir_a),
+            to_module: format!("{}/mod.rs", dir_b),
+            line_number: 1,
+            depth: 1,
+            severity: 0.5,
+            is_circular: false,
+            cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
+            cycle_order: 0,
+        }
+    }
+
+    #[test]
+    fn mermaid_generates_valid_output() {
+        let modules = vec![
+            make_module("src/scanner/mod.rs"),
+            make_module("src/core/mod.rs"),
+        ];
+        let result = AuditResult {
+            violations: vec![make_violation("src/scanner", "src/core")],
+            score: 75.0,
+            total_modules: 2,
+            hotspots: Vec::new(),
+        };
+
+        let mermaid = format_mermaid(&modules, &result);
+        assert!(mermaid.contains("flowchart LR"));
+        assert!(mermaid.contains("scanner"));
+        assert!(mermaid.contains("core"));
+        assert!(mermaid.contains("-->"));
+        assert!(mermaid.contains("classDef healthy"));
+    }
+
+    #[test]
+    fn dot_generates_valid_output() {
+        let modules = vec![
+            make_module("src/scanner/mod.rs"),
+            make_module("src/core/mod.rs"),
+        ];
+        let result = AuditResult {
+            violations: vec![make_violation("src/scanner", "src/core")],
+            score: 75.0,
+            total_modules: 2,
+            hotspots: Vec::new(),
+        };
+
+        let dot = format_dot(&modules, &result);
+        assert!(dot.contains("digraph noupling"));
+        assert!(dot.contains("scanner"));
+        assert!(dot.contains("core"));
+        assert!(dot.contains("->"));
+        assert!(dot.contains("fillcolor"));
+    }
+
+    #[test]
+    fn empty_violations_still_generates() {
+        let modules = vec![make_module("src/scanner/mod.rs")];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            total_modules: 1,
+            hotspots: Vec::new(),
+        };
+
+        let mermaid = format_mermaid(&modules, &result);
+        assert!(mermaid.contains("flowchart LR"));
+
+        let dot = format_dot(&modules, &result);
+        assert!(dot.contains("digraph noupling"));
+    }
+}

@@ -333,9 +333,25 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             )?;
             println!("Report saved to {}/index.html", html_dir.display());
         }
+        "mermaid" => {
+            let content = reporter::format_mermaid(&modules, &result);
+            let file_path = report_dir.join("report.mermaid");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "dot" => {
+            let content = reporter::format_dot(&modules, &result);
+            let file_path = report_dir.join("report.dot");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+            println!(
+                "Render with: dot -Tpng {} -o graph.png",
+                file_path.display()
+            );
+        }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', or 'sonar'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', or 'dot'.",
                 format
             );
         }
