@@ -772,6 +772,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 2,
+            hotspots: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -788,6 +789,7 @@ mod tests {
             violations: vec![],
             score: 95.5,
             total_modules: 1,
+            hotspots: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -810,6 +812,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 3,
+            hotspots: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -844,6 +847,7 @@ mod tests {
             }],
             score: 75.0,
             total_modules: 2,
+            hotspots: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();

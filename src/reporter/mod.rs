@@ -22,7 +22,15 @@ pub struct JsonReport {
     pub total_coupling: usize,
     pub circular_dependencies: BTreeMap<String, Vec<JsonCircularViolation>>,
     pub coupling_violations: Vec<JsonCouplingViolation>,
+    pub hotspots: Vec<JsonHotspot>,
     pub directory_tree: Vec<JsonDirectory>,
+}
+
+#[derive(Serialize)]
+pub struct JsonHotspot {
+    pub path: String,
+    pub fan_in: usize,
+    pub fan_out: usize,
 }
 
 #[derive(Serialize)]
@@ -152,6 +160,18 @@ impl JsonReport {
         // Build directory tree
         let directory_tree = build_json_dir_tree(modules, result);
 
+        // Hotspots
+        let hotspots: Vec<JsonHotspot> = result
+            .hotspots
+            .iter()
+            .filter(|h| h.fan_in > 0)
+            .map(|h| JsonHotspot {
+                path: h.path.clone(),
+                fan_in: h.fan_in,
+                fan_out: h.fan_out,
+            })
+            .collect();
+
         JsonReport {
             snapshot_id: snapshot_id.to_string(),
             score: result.score,
@@ -161,6 +181,7 @@ impl JsonReport {
             total_coupling: coupling.len(),
             circular_dependencies: circular_by_order,
             coupling_violations,
+            hotspots,
             directory_tree,
         }
     }
@@ -562,6 +583,23 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Hotspots (top 10 most-imported modules)
+    let top_hotspots: Vec<_> = result
+        .hotspots
+        .iter()
+        .filter(|h| h.fan_in > 0)
+        .take(10)
+        .collect();
+    if !top_hotspots.is_empty() {
+        output.push_str("\nHotspots (most imported):\n");
+        for h in &top_hotspots {
+            output.push_str(&format!(
+                "  [{} in, {} out] {}\n",
+                h.fan_in, h.fan_out, h.path
+            ));
+        }
+    }
+
     output
 }
 
@@ -721,6 +759,7 @@ mod tests {
             violations: vec![make_violation("a.rs", "b.rs", 1.0, 0)],
             score: 50.0,
             total_modules: 2,
+            hotspots: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -742,6 +781,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 5,
+            hotspots: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -760,6 +800,7 @@ mod tests {
             ],
             score: 42.0,
             total_modules: 6,
+            hotspots: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -772,6 +813,7 @@ mod tests {
             violations: vec![make_violation("scanner/mod.rs", "storage/mod.rs", 0.5, 1)],
             score: 75.0,
             total_modules: 4,
+            hotspots: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -786,6 +828,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 4,
+            hotspots: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -800,6 +843,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 5,
+            hotspots: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -822,6 +866,7 @@ mod tests {
             violations: vec![v],
             score: 50.0,
             total_modules: 2,
+            hotspots: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -836,6 +881,7 @@ mod tests {
             violations: vec![],
             score: 100.0,
             total_modules: 3,
+            hotspots: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

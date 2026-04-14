@@ -32,6 +32,9 @@ pub struct Thresholds {
     pub critical_severity: f64,
     #[serde(default = "default_minimum_severity")]
     pub minimum_severity: f64,
+    /// Modules with fan-in (incoming imports) above this are flagged as hotspots.
+    #[serde(default = "default_hotspot_fan_in")]
+    pub hotspot_fan_in: usize,
 }
 
 fn default_thresholds() -> Thresholds {
@@ -40,6 +43,7 @@ fn default_thresholds() -> Thresholds {
         score_yellow: default_score_yellow(),
         critical_severity: default_critical_severity(),
         minimum_severity: default_minimum_severity(),
+        hotspot_fan_in: default_hotspot_fan_in(),
     }
 }
 
@@ -54,6 +58,9 @@ fn default_critical_severity() -> f64 {
 }
 fn default_minimum_severity() -> f64 {
     0.2
+}
+fn default_hotspot_fan_in() -> usize {
+    10
 }
 
 fn default_ignore_patterns() -> Vec<String> {
