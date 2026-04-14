@@ -100,7 +100,7 @@ impl AuditResult {
         self.recalculate_score();
     }
 
-    fn recalculate_score(&mut self) {
+    pub fn recalculate_score(&mut self) {
         let sum_severity: f64 = self.violations.iter().map(|v| v.severity).sum();
         self.score = if self.total_modules > 0 {
             (100.0 * (1.0 - sum_severity / self.total_modules as f64)).max(0.0)

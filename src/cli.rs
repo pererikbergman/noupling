@@ -100,6 +100,18 @@ pub enum Commands {
         diff_base: Option<String>,
     },
 
+    /// Save or manage the violation baseline.
+    /// `noupling baseline save .` saves current violations as the accepted baseline.
+    /// Future audits with --baseline will only report NEW violations not in the baseline.
+    Baseline {
+        /// Action: "save" to create baseline from current violations
+        action: String,
+
+        /// Path to the project root
+        #[arg(default_value = ".")]
+        path: String,
+    },
+
     /// Run the coupling and circular dependency analysis on the latest (or specified) snapshot.
     /// Displays health score, violation count, and detailed violation list to stdout.
     Audit {
@@ -115,6 +127,11 @@ pub enum Commands {
         /// Use in CI to gate merges: --fail-below 80
         #[arg(long)]
         fail_below: Option<f64>,
+
+        /// Compare against the saved baseline. Only report NEW violations
+        /// not in .noupling/baseline.json. Exit code 1 only on new violations.
+        #[arg(long)]
+        baseline: bool,
     },
 
     /// Generate a report file from the latest snapshot's audit results.
@@ -161,9 +178,11 @@ mod tests {
                 snapshot,
                 path,
                 fail_below,
+                baseline,
             } => {
                 assert!(snapshot.is_none());
                 assert_eq!(path, ".");
+                assert!(!baseline);
                 assert!(fail_below.is_none());
             }
             _ => panic!("Expected Audit command"),
