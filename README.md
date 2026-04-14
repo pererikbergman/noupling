@@ -99,6 +99,12 @@ noupling audit /path/to/project
 
 Displays a health score (0-100), coupling violations sorted by severity, and circular dependencies grouped by cycle order.
 
+Use `--fail-below` to fail in CI when the score drops:
+
+```bash
+noupling audit /path/to/project --fail-below 80  # Exit code 1 if score < 80
+```
+
 ### Generate reports
 
 ```bash
@@ -133,8 +139,8 @@ Scans the full project for import resolution but filters results to changed file
 - name: Scan (diff mode)
   run: noupling scan . --diff-base origin/main
 
-- name: Audit
-  run: noupling audit .
+- name: Audit (fail if score drops below 80)
+  run: noupling audit . --fail-below 80
 
 - name: Generate Sonar report
   run: noupling report . --format sonar
