@@ -44,7 +44,7 @@ fn walk_directory(
     for entry in entries {
         let path = entry.path();
         let rel_path = path.strip_prefix(root).unwrap_or(&path);
-        let rel_str = rel_path.to_string_lossy().to_string();
+        let rel_str = rel_path.to_string_lossy().replace('\\', "/");
 
         if path.is_dir() {
             // Check both "build" and "build/x" forms to match patterns like **/build/**
