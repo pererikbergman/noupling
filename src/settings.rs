@@ -1,14 +1,23 @@
+//! Configuration loaded from `.noupling/settings.json`.
+
 use anyhow::Result;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Project settings loaded from `.noupling/settings.json`.
+///
+/// Auto-created with defaults on first run. All fields have defaults,
+/// so partial JSON files are supported.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    /// Score and severity thresholds.
     #[serde(default = "default_thresholds")]
     pub thresholds: Thresholds,
+    /// Glob patterns for directories/files to ignore (gitignore-style).
     #[serde(default = "default_ignore_patterns")]
     pub ignore_patterns: Vec<String>,
+    /// File extensions to include in the scan.
     #[serde(default = "default_source_extensions")]
     pub source_extensions: Vec<String>,
 }

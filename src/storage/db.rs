@@ -2,7 +2,12 @@ use anyhow::Result;
 use rusqlite::Connection;
 use std::path::Path;
 
+/// SQLite database connection with auto-initialized schema.
+///
+/// Creates the `.noupling/history.db` file and initializes
+/// the snapshots, modules, and dependencies tables on first access.
 pub struct Database {
+    /// The underlying SQLite connection.
     pub conn: Connection,
 }
 

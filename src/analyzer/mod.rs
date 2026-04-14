@@ -1,30 +1,48 @@
+//! Architectural analysis engine.
+//!
+//! Computes coupling violations and circular dependencies using
+//! bottom-up D_acc aggregation and top-down BFS sibling analysis.
+
 use fxhash::{FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
 
 use crate::core::{Dependency, Module};
 
+/// A detected coupling violation or circular dependency between modules.
 #[derive(Debug, Clone)]
 pub struct CouplingViolation {
+    /// First directory involved in the violation.
     pub dir_a: String,
+    /// Second directory involved in the violation.
     pub dir_b: String,
+    /// Source file containing the problematic import.
     pub from_module: String,
+    /// Target file being imported.
     pub to_module: String,
+    /// Line number of the import in the source file.
     pub line_number: i32,
+    /// Directory depth where the violation occurs.
     pub depth: i32,
+    /// Severity score. Coupling: `1/(depth+1)`. Circular: `modules/(depth+1)/10`.
     pub severity: f64,
+    /// Whether this is a circular dependency (vs. a coupling violation).
     pub is_circular: bool,
-    /// For circular deps: the full cycle path as directory paths
+    /// For circular deps: the full cycle path as directory paths.
     pub cycle_path: Vec<String>,
-    /// For circular deps: the files causing each hop (from_file, to_file, line_number) per edge
+    /// For circular deps: `(from_file, to_file, line_number)` for each hop in the cycle.
     pub cycle_hop_files: Vec<(String, String, i32)>,
-    /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.)
+    /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.).
     pub cycle_order: usize,
 }
 
+/// The result of running an architectural audit on a project snapshot.
 #[derive(Debug)]
 pub struct AuditResult {
+    /// All detected violations, sorted by severity descending.
     pub violations: Vec<CouplingViolation>,
+    /// Overall health score (0-100). Higher is better.
     pub score: f64,
+    /// Total number of source modules analyzed.
     pub total_modules: usize,
 }
 

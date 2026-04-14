@@ -1,5 +1,8 @@
+//! Core domain types shared across all modules.
+
 use serde::{Deserialize, Serialize};
 
+/// Whether a discovered module is a file or directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModuleType {
     #[serde(rename = "FILE")]
@@ -8,28 +11,53 @@ pub enum ModuleType {
     Dir,
 }
 
+/// A source file discovered during scanning.
+///
+/// Represents a single source file with its relative path, name,
+/// and depth within the project tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
+    /// Unique identifier (UUID v4).
     pub id: String,
+    /// The snapshot this module belongs to.
     pub snapshot_id: String,
+    /// Parent module ID (unused in current flat structure).
     pub parent_id: Option<String>,
+    /// File name (e.g., `main.rs`).
     pub name: String,
+    /// Relative path from project root (e.g., `src/scanner/parser.rs`).
     pub path: String,
+    /// Whether this is a file or directory.
     pub module_type: ModuleType,
+    /// Depth from the project root (number of path components).
     pub depth: i32,
 }
 
+/// An import dependency between two modules.
+///
+/// Records that `from_module_id` imports something from `to_module_id`
+/// at a specific line number in the source file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dependency {
+    /// The module containing the import statement.
     pub from_module_id: String,
+    /// The module being imported.
     pub to_module_id: String,
+    /// Line number of the import statement in the source file.
     pub line_number: i32,
 }
 
+/// A point-in-time scan of a project.
+///
+/// Each scan creates a new snapshot with a unique ID, allowing
+/// historical comparison of architectural health.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Snapshot {
+    /// Unique identifier (UUID v4).
     pub id: String,
+    /// When the snapshot was created (SQLite CURRENT_TIMESTAMP).
     pub timestamp: String,
+    /// The project root path that was scanned.
     pub root_path: String,
 }
 

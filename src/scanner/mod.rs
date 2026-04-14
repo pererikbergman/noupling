@@ -1,3 +1,8 @@
+//! Source file discovery, Tree-sitter parsing, and import resolution.
+//!
+//! Supports 11 languages: C#, Go, Haskell, Java, JavaScript, Kotlin,
+//! Python, Rust, Swift, TypeScript, and Zig.
+
 mod discovery;
 mod parser;
 mod resolver;
@@ -11,8 +16,11 @@ use anyhow::Result;
 use rayon::prelude::*;
 use std::path::Path;
 
+/// The result of scanning a project directory.
 pub struct ScanResult {
+    /// All discovered source modules.
     pub modules: Vec<Module>,
+    /// All resolved import dependencies between modules.
     pub dependencies: Vec<Dependency>,
 }
 
