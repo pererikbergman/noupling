@@ -2,9 +2,9 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::analyzer::AuditResult;
 use crate::core::Module;
 use crate::settings::Settings;
-use crate::analyzer::AuditResult;
 
 /// A node in the directory tree used for HTML navigation.
 #[derive(Debug)]
@@ -743,8 +743,8 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ModuleType;
     use crate::analyzer::CouplingViolation;
+    use crate::core::ModuleType;
 
     fn make_module(id: &str, path: &str) -> Module {
         Module {

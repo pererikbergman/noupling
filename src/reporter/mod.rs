@@ -4,8 +4,8 @@ mod md;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-use crate::core::Module;
 use crate::analyzer::{AuditResult, CouplingViolation};
+use crate::core::Module;
 
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;

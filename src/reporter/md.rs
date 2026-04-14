@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::core::Module;
 use crate::analyzer::{AuditResult, CouplingViolation};
+use crate::core::Module;
 
 use super::JsonReport;
 
