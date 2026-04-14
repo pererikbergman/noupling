@@ -1,10 +1,5 @@
-[workspace]
-members = [
-    "crates/*",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "noupling"
 version = "0.1.0"
 edition = "2021"
 authors = ["Per-Erik Bergman"]
@@ -12,11 +7,12 @@ license = "MIT"
 repository = "https://github.com/pererikbergman/noupling"
 homepage = "https://github.com/pererikbergman/noupling"
 description = "Architecture auditing CLI that detects coupling violations and circular dependencies"
+keywords = ["architecture", "coupling", "dependencies", "lint", "static-analysis"]
+categories = ["development-tools", "command-line-utilities"]
 
-[workspace.dependencies]
+[dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
 thiserror = "1.0"
 anyhow = "1.0"
 tracing = "0.1"
@@ -38,4 +34,6 @@ rayon = "1.10"
 fxhash = "0.2"
 globset = "0.4"
 uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
 tempfile = "3.15"

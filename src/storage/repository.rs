@@ -196,7 +196,7 @@ impl<'a> DependencyRepository<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::slices::storage::Database;
+    use crate::storage::Database;
 
     fn setup_db() -> Database {
         Database::open_in_memory().unwrap()

@@ -19,7 +19,7 @@ A high-performance CLI tool that audits software architecture by quantifying cou
 ## Installation
 
 ```bash
-cargo install --path crates/noupling
+cargo install --path .
 ```
 
 ## Usage
@@ -114,12 +114,15 @@ cargo fmt                  # Format
 
 ## Structure
 
-- `crates/noupling/` - Main binary with vertical slice architecture
-  - `slices/scanner/` - File discovery and Tree-sitter AST parsing (11 languages)
-  - `slices/storage/` - SQLite persistence and repository patterns
-  - `slices/analyzer/` - D_acc aggregation, BFS coupling audit, cycle detection
-  - `slices/reporter/` - JSON, XML, Markdown, HTML, and SonarCloud report generation
-- `deploy/` - Dockerfile
-- `docs/` - Specifications and roadmap
-- `examples/` - Sample Kotlin projects for testing
-- `tests/` - Integration test fixtures
+```
+src/
+├── main.rs          # CLI entry point
+├── cli.rs           # Clap argument parsing
+├── settings.rs      # Settings from .noupling/settings.json
+├── diff.rs          # Git diff integration for PR/CI mode
+├── core/            # Shared domain types (Module, Dependency, Snapshot)
+├── scanner/         # File discovery, Tree-sitter parsing (11 languages)
+├── storage/         # SQLite persistence and repository patterns
+├── analyzer/        # D_acc aggregation, BFS coupling audit, cycle detection
+└── reporter/        # JSON, XML, Markdown, HTML, SonarCloud reports
+```

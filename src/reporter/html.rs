@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::core::Module;
 use crate::settings::Settings;
-use crate::slices::analyzer::AuditResult;
+use crate::analyzer::AuditResult;
 
 /// A node in the directory tree used for HTML navigation.
 #[derive(Debug)]
@@ -744,7 +744,7 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 mod tests {
     use super::*;
     use crate::core::ModuleType;
-    use crate::slices::analyzer::CouplingViolation;
+    use crate::analyzer::CouplingViolation;
 
     fn make_module(id: &str, path: &str) -> Module {
         Module {

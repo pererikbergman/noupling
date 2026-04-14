@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 use crate::core::Module;
-use crate::slices::analyzer::{AuditResult, CouplingViolation};
+use crate::analyzer::{AuditResult, CouplingViolation};
 
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;

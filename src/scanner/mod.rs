@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn scan_project_discovers_modules_and_deps() {
         let fixture =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mock_rust_project");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mock_rust_project");
         let result = scan_project(&fixture, "test-snap").unwrap();
 
         // Only source files, no directories
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn scan_project_parallel_produces_consistent_results() {
         let fixture =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mock_rust_project");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mock_rust_project");
 
         let r1 = scan_project(&fixture, "snap-1").unwrap();
         let r2 = scan_project(&fixture, "snap-2").unwrap();

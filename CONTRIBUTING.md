@@ -35,32 +35,33 @@ cargo run -- report /path/to/project --format html
 
 ## Architecture
 
-The project uses a vertical slice architecture inside `crates/noupling/src/`:
+The project uses a flat module structure inside `src/`:
 
 ```
-cli.rs          - Clap CLI argument parsing
-core/           - Shared domain types (Module, Dependency, Snapshot)
-diff.rs         - Git diff integration for PR/CI mode
-settings.rs     - Settings loading from .noupling/settings.json
-slices/
-  scanner/      - File discovery, Tree-sitter parsing, import resolution
-  storage/      - SQLite persistence and repository patterns
-  analyzer/     - D_acc aggregation, BFS coupling audit, cycle detection
-  reporter/     - JSON, XML, Markdown, HTML, and SonarCloud report generation
+src/
+├── main.rs          - CLI entry point
+├── cli.rs           - Clap argument parsing
+├── settings.rs      - Settings from .noupling/settings.json
+├── diff.rs          - Git diff integration for PR/CI mode
+├── core/            - Shared domain types (Module, Dependency, Snapshot)
+├── scanner/         - File discovery, Tree-sitter parsing, import resolution
+├── storage/         - SQLite persistence and repository patterns
+├── analyzer/        - D_acc aggregation, BFS coupling audit, cycle detection
+└── reporter/        - JSON, XML, Markdown, HTML, and SonarCloud report generation
 ```
 
 ## Adding a New Language Parser
 
-1. Add the `tree-sitter-<lang>` dependency to both `Cargo.toml` files (root workspace and `crates/noupling/`).
+1. Add the `tree-sitter-<lang>` dependency to `Cargo.toml`.
 2. Add the file extension to `SOURCE_EXTENSIONS` in `settings.rs` (default list).
-3. In `slices/scanner/parser.rs`:
+3. In `src/scanner/parser.rs`:
    - Add a `parse_<lang>_imports()` function using tree-sitter.
    - Add tests for the parser.
-4. In `slices/scanner/resolver.rs`:
+4. In `src/scanner/resolver.rs`:
    - Add a `resolve_<lang>_import()` function.
    - Add the extension to the `match` in `resolve_import()`.
    - Add resolver tests.
-5. In `slices/scanner/mod.rs`:
+5. In `src/scanner/mod.rs`:
    - Add the extension to the `match` in `scan_project()`.
 6. Run `cargo test` and `cargo clippy`.
 

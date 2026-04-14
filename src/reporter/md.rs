@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::core::Module;
-use crate::slices::analyzer::{AuditResult, CouplingViolation};
+use crate::analyzer::{AuditResult, CouplingViolation};
 
 use super::JsonReport;
 

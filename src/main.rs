@@ -1,8 +1,11 @@
+mod analyzer;
 mod cli;
 mod core;
 mod diff;
+mod reporter;
+mod scanner;
 pub mod settings;
-mod slices;
+mod storage;
 mod utils;
 
 use clap::Parser;
@@ -67,7 +70,7 @@ fn load_diff_meta(path: &str) -> Option<Vec<String>> {
     Some(files)
 }
 
-fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
+fn find_db(project_path: &str) -> anyhow::Result<storage::Database> {
     let db_path = Path::new(project_path).join(".noupling").join("history.db");
     if !db_path.exists() {
         anyhow::bail!(
@@ -75,7 +78,7 @@ fn find_db(project_path: &str) -> anyhow::Result<slices::storage::Database> {
             db_path.display()
         );
     }
-    slices::storage::Database::open(&db_path)
+    storage::Database::open(&db_path)
 }
 
 fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
@@ -100,17 +103,17 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     println!("Scanning: {}", path);
 
     let db_path = project_path.join(".noupling").join("history.db");
-    let db = slices::storage::Database::open(&db_path)?;
+    let db = storage::Database::open(&db_path)?;
 
-    let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
+    let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
     let snapshot = snap_repo.create(path)?;
     println!("Created snapshot: {}", snapshot.id);
 
     // Always scan the full project (needed for dependency resolution)
-    let result = slices::scanner::scan_project(project_path, &snapshot.id)?;
+    let result = scanner::scan_project(project_path, &snapshot.id)?;
     println!("Discovered {} modules", result.modules.len());
 
-    let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
+    let module_repo = storage::repository::ModuleRepository::new(&db.conn);
     module_repo.bulk_insert(&result.modules)?;
 
     let mut unique_deps = result.dependencies;
@@ -127,7 +130,7 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
             && a.line_number == b.line_number
     });
 
-    let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
+    let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
     dep_repo.bulk_insert(&unique_deps)?;
     println!("Found {} dependencies", unique_deps.len());
 
@@ -152,7 +155,7 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
 
 fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
     let db = find_db(path)?;
-    let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
+    let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = match snapshot_id {
         Some(id) => snap_repo
@@ -163,14 +166,14 @@ fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
             .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?,
     };
 
-    let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
+    let module_repo = storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
 
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
     let project_settings = settings::Settings::load(Path::new(path))?;
-    let mut result = slices::analyzer::audit(&modules, &dependencies);
+    let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
 
     // Apply diff filter if a diff scan was performed
@@ -178,27 +181,27 @@ fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
         result.filter_by_changed_files(&changed_files);
     }
 
-    print!("{}", slices::reporter::format_text(&result));
+    print!("{}", reporter::format_text(&result));
 
     Ok(())
 }
 
 fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let db = find_db(path)?;
-    let snap_repo = slices::storage::repository::SnapshotRepository::new(&db.conn);
+    let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = snap_repo
         .get_latest()?
         .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?;
 
-    let module_repo = slices::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = slices::storage::repository::DependencyRepository::new(&db.conn);
+    let module_repo = storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
 
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
     let project_settings = settings::Settings::load(Path::new(path))?;
-    let mut result = slices::analyzer::audit(&modules, &dependencies);
+    let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
 
     // Apply diff filter if a diff scan was performed
@@ -211,7 +214,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
 
     match format {
         "json" => {
-            let report = slices::reporter::JsonReport::from_audit(&modules, &result, &snapshot.id);
+            let report = reporter::JsonReport::from_audit(&modules, &result, &snapshot.id);
             let content = report.to_json()?;
             let file_path = report_dir.join("report.json");
             std::fs::write(&file_path, &content)?;
@@ -219,17 +222,17 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
         }
         "md" => {
             let md_dir = report_dir.join("report-md");
-            slices::reporter::generate_markdown_report(&modules, &result, &snapshot.id, &md_dir)?;
+            reporter::generate_markdown_report(&modules, &result, &snapshot.id, &md_dir)?;
             println!("Report saved to {}/README.md", md_dir.display());
         }
         "xml" => {
-            let content = slices::reporter::format_xml(&modules, &result, &snapshot.id);
+            let content = reporter::format_xml(&modules, &result, &snapshot.id);
             let file_path = report_dir.join("report.xml");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
         "sonar" => {
-            let content = slices::reporter::format_sonar(&result);
+            let content = reporter::format_sonar(&result);
             let file_path = report_dir.join("noupling-sonar.json");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
@@ -240,7 +243,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
         }
         "html" => {
             let html_dir = report_dir.join("report");
-            slices::reporter::generate_html_report(
+            reporter::generate_html_report(
                 &modules,
                 &result,
                 &snapshot.id,
