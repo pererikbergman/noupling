@@ -121,6 +121,7 @@ mod tests {
             from_module: from.to_string(),
             to_module: to.to_string(),
             line_number: 1,
+            weight: 1,
             depth: 0,
             severity: 0.5,
             is_circular: false,

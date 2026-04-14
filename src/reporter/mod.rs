@@ -52,6 +52,7 @@ pub struct JsonHopFile {
 #[derive(Serialize)]
 pub struct JsonCouplingViolation {
     pub severity: f64,
+    pub weight: usize,
     pub from_module: String,
     pub to_module: String,
     pub dir_a: String,
@@ -149,6 +150,7 @@ impl JsonReport {
             .iter()
             .map(|v| JsonCouplingViolation {
                 severity: v.severity,
+                weight: v.weight,
                 from_module: v.from_module.clone(),
                 to_module: v.to_module.clone(),
                 dir_a: v.dir_a.clone(),
@@ -574,7 +576,13 @@ pub fn format_text(result: &AuditResult) -> String {
     if !result.violations.is_empty() {
         output.push('\n');
         for v in &result.violations {
-            let label = if v.is_circular { " CIRCULAR" } else { "" };
+            let label = if v.is_circular {
+                " CIRCULAR".to_string()
+            } else if v.weight > 1 {
+                format!(" x{}", v.weight)
+            } else {
+                String::new()
+            };
             output.push_str(&format!(
                 "  [{:.2}]{} {} -> {} (depth {})\n",
                 v.severity, label, v.from_module, v.to_module, v.depth
@@ -749,6 +757,7 @@ mod tests {
             cycle_hop_files: Vec::new(),
             cycle_order: 0,
             line_number: 0,
+            weight: 0,
         }
     }
 

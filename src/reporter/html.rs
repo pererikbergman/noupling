@@ -844,6 +844,7 @@ mod tests {
                 cycle_hop_files: Vec::new(),
                 cycle_order: 0,
                 line_number: 0,
+                weight: 0,
             }],
             score: 75.0,
             total_modules: 2,

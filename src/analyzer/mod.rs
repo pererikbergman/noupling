@@ -23,7 +23,9 @@ pub struct CouplingViolation {
     pub line_number: i32,
     /// Directory depth where the violation occurs.
     pub depth: i32,
-    /// Severity score. Coupling: `1/(depth+1)`. Circular: `modules/(depth+1)/10`.
+    /// Number of import statements between this directory pair.
+    pub weight: usize,
+    /// Severity score. Coupling: `weight/(depth+1)`. Circular: `modules/(depth+1)/10`.
     pub severity: f64,
     /// Whether this is a circular dependency (vs. a coupling violation).
     pub is_circular: bool,
@@ -492,9 +494,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 to_module: last_target.clone(),
                 line_number: 0,
                 depth,
-                // Circular deps scale inversely with depth:
-                // Root level (depth 0): severity = total_modules (can zero the score)
-                // Deeper: severity = total_modules / (depth + 1)
+                weight: 0,
                 severity: modules.len() as f64 / (depth as f64 + 1.0) / 10.0,
                 is_circular: true,
                 cycle_path: cycle.dir_path.clone(),
@@ -537,6 +537,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                         .to_string(),
                                                     line_number: dep.line_number,
                                                     depth,
+                                                    weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
@@ -577,6 +578,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                         .to_string(),
                                                     line_number: dep.line_number,
                                                     depth,
+                                                    weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
@@ -595,13 +597,34 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         }
     }
 
+    // Aggregate coupling violations by (dir_a, dir_b, depth) and count weight
+    let mut weight_map: FxHashMap<(String, String, i32), usize> = FxHashMap::default();
+    for v in &violations {
+        if !v.is_circular {
+            let key = (v.dir_a.clone(), v.dir_b.clone(), v.depth);
+            *weight_map.entry(key).or_insert(0) += 1;
+        }
+    }
+
+    // Dedup coupling violations, keeping one per (dir_a, dir_b, depth) with weight
+    let mut seen: FxHashSet<(String, String, i32)> = FxHashSet::default();
+    violations.retain_mut(|v| {
+        if v.is_circular {
+            return true;
+        }
+        let key = (v.dir_a.clone(), v.dir_b.clone(), v.depth);
+        if seen.contains(&key) {
+            return false;
+        }
+        seen.insert(key.clone());
+        let w = *weight_map.get(&key).unwrap_or(&1);
+        v.weight = w;
+        v.severity = w as f64 / (v.depth as f64 + 1.0);
+        true
+    });
+
     // Sort by severity descending
     violations.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
-
-    // Dedup violations (same from_module + to_module pair at same depth)
-    violations.dedup_by(|a, b| {
-        a.from_module == b.from_module && a.to_module == b.to_module && a.depth == b.depth
-    });
 
     // Health score
     let sum_severity: f64 = violations.iter().map(|v| v.severity).sum();
