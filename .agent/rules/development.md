@@ -33,6 +33,19 @@ Follow Red-Green-Refactor for all implementations:
 - **Modules are independent**: scanner, storage, analyzer, reporter should not depend on each other directly. Use `core/` for shared types.
 - Keep the flat `src/` layout. No nested module groups.
 
+## Documentation
+
+Every feature addition or modification MUST include documentation updates in the same PR:
+
+- **README.md**: Update usage examples, CLI flags, configuration options, or feature list.
+- **`--help` text**: Update clap doc comments in `src/cli.rs` for any new or changed flags.
+- **CHANGELOG.md**: Add an entry under the next version section.
+- **docs/architecture.md**: Update if the data flow or module responsibilities change.
+- **CONTRIBUTING.md**: Update if the development workflow or project structure changes.
+- **`.agent/knowledge/`**: Update project-map.md or tech-stack.md if architecture or dependencies change.
+
+A PR without documentation for user-facing changes is incomplete.
+
 ## Safety
 
 - Never delete files in `docs/` or `.agent/` without confirmation.
