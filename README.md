@@ -60,6 +60,13 @@ noupling report /path/to/project --format html
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap pererikbergman/noupling
+brew install noupling
+```
+
 ### From source
 
 ```bash
