@@ -134,6 +134,17 @@ pub enum Commands {
         baseline: bool,
     },
 
+    /// Show health score history across snapshots. Track architectural drift over time.
+    Trend {
+        /// Path to the project root (reads from .noupling/history.db)
+        #[arg(default_value = ".")]
+        path: String,
+
+        /// Show only the last N snapshots
+        #[arg(long, default_value = "20")]
+        last: usize,
+    },
+
     /// Generate a report file from the latest snapshot's audit results.
     /// The report is saved to .noupling/ (or .noupling/report/ for html/md).
     Report {
