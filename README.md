@@ -1,36 +1,76 @@
-# noupling
+<p align="center">
+  <h1 align="center">noupling</h1>
+  <p align="center">
+    <strong>Detect coupling violations and circular dependencies in your codebase.</strong>
+  </p>
+  <p align="center">
+    <a href="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml"><img src="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+    <img src="https://img.shields.io/badge/rust-2021-orange.svg" alt="Rust 2021">
+    <img src="https://img.shields.io/badge/languages-11-green.svg" alt="11 Languages">
+  </p>
+</p>
 
-A high-performance CLI tool that audits software architecture by quantifying coupling and cohesion through hierarchical dependency analysis.
+---
 
-## Supported Languages
+## Why noupling?
 
-- C# (`.cs`)
-- Go (`.go`)
-- Haskell (`.hs`)
-- Java (`.java`)
-- JavaScript (`.js`, `.jsx`)
-- Kotlin (`.kt`, `.kts`)
-- Python (`.py`)
-- Rust (`.rs`)
-- Swift (`.swift`)
-- TypeScript (`.ts`, `.tsx`)
-- Zig (`.zig`)
+Most linters check code style. **noupling checks architecture.**
+
+It scans your project, builds a dependency graph from actual import statements, and quantifies how coupled your modules are. It finds:
+
+- **Coupling violations** - sibling modules that depend on each other, breaking architectural boundaries
+- **Circular dependencies** - dependency chains that form loops (A -> B -> C -> A), preventing independent development and testing
+
+Every violation gets a **severity score** based on depth: problems at the root of your project hit harder than deep in a leaf package. The result is a single **health score (0-100)** you can track over time and gate in CI.
+
+### Key Features
+
+- **11 languages**: C#, Go, Haskell, Java, JavaScript, Kotlin, Python, Rust, Swift, TypeScript, Zig
+- **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
+- **Parallel scanning**: Rayon-powered file discovery and parsing
+- **6 report formats**: JSON, XML, Markdown, HTML, SonarCloud
+- **Interactive HTML report**: Kover-style drill-down with color-coded scores
+- **PR/CI mode**: `--diff-base main` to only flag new violations
+- **Configurable**: Thresholds, glob ignore patterns, source extensions
+
+---
+
+## Quick Start
+
+```bash
+# Install
+cargo install --path .
+
+# Scan your project
+noupling scan /path/to/project
+
+# See the health score
+noupling audit /path/to/project
+
+# Generate an interactive HTML report
+noupling report /path/to/project --format html
+```
+
+---
 
 ## Installation
 
+### From source
+
 ```bash
+git clone https://github.com/pererikbergman/noupling.git
+cd noupling
 cargo install --path .
 ```
 
+### Prebuilt binaries
+
+Download from [GitHub Releases](https://github.com/pererikbergman/noupling/releases). Available for Linux (x86_64, aarch64), macOS (Apple Silicon, Intel), and Windows.
+
+---
+
 ## Usage
-
-### Initialize settings
-
-```bash
-noupling init /path/to/project
-```
-
-Creates `.noupling/settings.json` with default thresholds, ignore patterns, and source extensions. Settings are auto-created on first scan if missing.
 
 ### Scan a project
 
@@ -40,23 +80,13 @@ noupling scan /path/to/project
 
 Discovers source files, parses imports via Tree-sitter, and stores the dependency graph in `.noupling/history.db`.
 
-### Diff mode (PR/CI gate)
-
-```bash
-noupling scan /path/to/project --diff-base main
-```
-
-Scans the full project but only reports violations involving files changed compared to the base branch. Use this in CI pipelines to fail PRs only on new issues.
-
-### Audit for coupling violations
+### Audit for violations
 
 ```bash
 noupling audit /path/to/project
 ```
 
-Runs bottom-up dependency aggregation and top-down BFS coupling detection. Displays a health score (0-100) and any violations sorted by severity.
-
-Use `--snapshot <ID>` to audit a specific historical snapshot instead of the latest.
+Displays a health score (0-100), coupling violations sorted by severity, and circular dependencies grouped by cycle order.
 
 ### Generate reports
 
@@ -68,15 +98,56 @@ noupling report /path/to/project --format html    # Interactive HTML with drill-
 noupling report /path/to/project --format sonar   # SonarCloud generic issue import
 ```
 
-Reports are saved to `.noupling/`. For SonarCloud, add to `sonar-project.properties`:
+### Diff mode (PR/CI gate)
 
+Only report violations from files changed compared to a base branch:
+
+```bash
+noupling scan /path/to/project --diff-base main
+noupling audit /path/to/project
 ```
+
+Scans the full project for import resolution but filters results to changed files only. Use this in CI to fail PRs only on **new** issues.
+
+---
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+- name: Install noupling
+  run: cargo install --path .
+
+- name: Scan (diff mode)
+  run: noupling scan . --diff-base origin/main
+
+- name: Audit
+  run: noupling audit .
+
+- name: Generate Sonar report
+  run: noupling report . --format sonar
+```
+
+### SonarCloud
+
+Generate the generic issue import file and reference it in your Sonar config:
+
+```bash
+noupling report . --format sonar
+```
+
+Add to `sonar-project.properties`:
+
+```properties
 sonar.externalIssuesReportPaths=.noupling/noupling-sonar.json
 ```
 
+---
+
 ## Configuration
 
-Settings are stored in `.noupling/settings.json`:
+Settings are stored in `.noupling/settings.json` (auto-created on first run):
 
 ```json
 {
@@ -92,37 +163,68 @@ Settings are stored in `.noupling/settings.json`:
     "**/generated/**",
     "**/node_modules/**"
   ],
-  "source_extensions": ["rs", "kt", "java", "ts", "py"]
+  "source_extensions": [
+    "rs", "kt", "java", "ts", "py", "swift", "cs",
+    "go", "hs", "js", "jsx", "kts", "tsx", "zig"
+  ]
 }
 ```
 
-- **score_green/yellow**: Thresholds for color coding in HTML reports
-- **critical_severity**: Violations above this are flagged as critical
-- **minimum_severity**: Hide violations below this (reduces noise from deep coupling)
-- **ignore_patterns**: Glob patterns (gitignore-style) for directories to skip
-- **source_extensions**: File types to include in the scan
+| Setting | Description | Default |
+| :--- | :--- | :--- |
+| `score_green` | Score threshold for "healthy" (green) | 90.0 |
+| `score_yellow` | Score threshold for "warning" (yellow) | 70.0 |
+| `critical_severity` | Violations above this are flagged critical | 0.5 |
+| `minimum_severity` | Hide violations below this (reduce noise) | 0.2 |
+| `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
+| `source_extensions` | File types to scan | 14 extensions |
 
-## Development
+---
 
-```bash
-cargo build                # Build
-cargo test                 # Run tests
-cargo run -- scan .        # Run against this project
-cargo clippy               # Lint
-cargo fmt                  # Format
-```
+## How It Works
 
-## Structure
+1. **Scan**: Discover source files, parse imports with Tree-sitter, resolve to project paths
+2. **Store**: Persist modules and dependencies in SQLite (`.noupling/history.db`)
+3. **Analyze**:
+   - **D_acc**: For each directory, compute the union of all external dependencies from its subtree
+   - **BFS**: Walk the tree top-down, checking sibling pairs for coupling
+   - **Cycles**: Find circular dependencies among siblings at each level
+4. **Score**: `Health = 100 * (1 - sum_severity / total_modules)`
 
-```
-src/
-├── main.rs          # CLI entry point
-├── cli.rs           # Clap argument parsing
-├── settings.rs      # Settings from .noupling/settings.json
-├── diff.rs          # Git diff integration for PR/CI mode
-├── core/            # Shared domain types (Module, Dependency, Snapshot)
-├── scanner/         # File discovery, Tree-sitter parsing (11 languages)
-├── storage/         # SQLite persistence and repository patterns
-├── analyzer/        # D_acc aggregation, BFS coupling audit, cycle detection
-└── reporter/        # JSON, XML, Markdown, HTML, SonarCloud reports
-```
+Coupling severity: `1 / (depth + 1)` - root-level coupling is severe, deep coupling is mild.
+
+Circular severity: `modules / (depth + 1) / 10` - always significant, amplified near the root.
+
+See [docs/architecture.md](docs/architecture.md) for the full technical details.
+
+---
+
+## Supported Languages
+
+| Language | Extensions | Import Pattern |
+| :--- | :--- | :--- |
+| C# | `.cs` | `using` directives |
+| Go | `.go` | `import` declarations |
+| Haskell | `.hs` | `import` declarations |
+| Java | `.java` | `import` declarations |
+| JavaScript | `.js`, `.jsx` | ES `import` statements |
+| Kotlin | `.kt`, `.kts` | `import` declarations |
+| Python | `.py` | `import` / `from...import` |
+| Rust | `.rs` | `use` declarations |
+| Swift | `.swift` | `import` declarations |
+| TypeScript | `.ts`, `.tsx` | ES `import` statements |
+| Zig | `.zig` | `@import()` builtins |
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, coding standards, branching strategy, and how to add a new language parser.
+
+## Security
+
+If you discover a security vulnerability, please report it privately via [GitHub Security Advisories](https://github.com/pererikbergman/noupling/security/advisories).
+
+## License
+
+[MIT](LICENSE)
