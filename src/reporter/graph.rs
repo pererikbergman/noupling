@@ -185,7 +185,13 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
 /// Sanitize a name for use as a Mermaid/DOT identifier.
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| if c == '-' || c == '.' || c == ' ' { '_' } else { c })
+        .map(|c| {
+            if c == '-' || c == '.' || c == ' ' {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
