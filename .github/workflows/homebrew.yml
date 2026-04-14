@@ -9,8 +9,6 @@ jobs:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
@@ -20,16 +18,28 @@ jobs:
         run: |
           SHA=$(curl -sL "https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz" | sha256sum | awk '{print $1}')
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
+          echo "SHA256: $SHA"
 
-      - name: Update formula
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          repository: pererikbergman/homebrew-noupling
-          event-type: update-formula
-          client-payload: |
-            {
-              "version": "${{ steps.version.outputs.version }}",
-              "sha256": "${{ steps.sha.outputs.sha256 }}",
-              "tag": "${{ github.ref_name }}"
-            }
+      - name: Update tap formula
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone https://x-access-token:${TAP_TOKEN}@github.com/pererikbergman/homebrew-noupling.git tap
+          cd tap
+
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.sha.outputs.sha256 }}"
+          TAG="${{ github.ref_name }}"
+          URL="https://github.com/pererikbergman/noupling/archive/refs/tags/${TAG}.tar.gz"
+
+          sed -i "s|url \".*\"|url \"${URL}\"|" Formula/noupling.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/noupling.rb
+
+          echo "Updated formula:"
+          cat Formula/noupling.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/noupling.rb
+          git commit -m "Update noupling to ${VERSION}"
+          git push
