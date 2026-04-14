@@ -1,4 +1,5 @@
 mod analyzer;
+mod baseline;
 mod cli;
 mod core;
 mod diff;
@@ -21,6 +22,7 @@ fn main() {
         Commands::Init { path }
         | Commands::Scan { path, .. }
         | Commands::Hook { path, .. }
+        | Commands::Baseline { path, .. }
         | Commands::Audit { path, .. }
         | Commands::Report { path, .. } => {
             let settings_path = Path::new(path).join(".noupling").join("settings.json");
@@ -34,11 +36,13 @@ fn main() {
         Commands::Init { path } => run_init(&path),
         Commands::Hook { action, path } => run_hook(&action, &path),
         Commands::Scan { path, diff_base } => run_scan(&path, diff_base.as_deref()),
+        Commands::Baseline { action, path } => run_baseline(&action, &path),
         Commands::Audit {
             path,
             snapshot,
             fail_below,
-        } => run_audit(&path, snapshot.as_deref(), fail_below),
+            baseline,
+        } => run_audit(&path, snapshot.as_deref(), fail_below, baseline),
         Commands::Report { path, format } => run_report(&path, &format),
     };
 
@@ -171,7 +175,39 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_audit(path: &str, snapshot_id: Option<&str>, fail_below: Option<f64>) -> anyhow::Result<()> {
+fn run_baseline(action: &str, path: &str) -> anyhow::Result<()> {
+    match action {
+        "save" => {
+            let db = find_db(path)?;
+            let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
+            let snapshot = snap_repo
+                .get_latest()?
+                .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?;
+
+            let module_repo = storage::repository::ModuleRepository::new(&db.conn);
+            let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
+            let modules = module_repo.get_by_snapshot(&snapshot.id)?;
+            let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
+
+            let project_settings = settings::Settings::load(Path::new(path))?;
+            let mut result = analyzer::audit(&modules, &dependencies);
+            result.filter_by_severity(project_settings.thresholds.minimum_severity);
+
+            baseline::save_baseline(Path::new(path), &result)?;
+        }
+        _ => {
+            anyhow::bail!("Unknown baseline action: {}. Use 'save'.", action);
+        }
+    }
+    Ok(())
+}
+
+fn run_audit(
+    path: &str,
+    snapshot_id: Option<&str>,
+    fail_below: Option<f64>,
+    use_baseline: bool,
+) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
@@ -199,7 +235,24 @@ fn run_audit(path: &str, snapshot_id: Option<&str>, fail_below: Option<f64>) -> 
         result.filter_by_changed_files(&changed_files);
     }
 
+    // Apply baseline filter
+    let baseline_info = if use_baseline {
+        let (new_count, resolved_count) = baseline::compare_baseline(Path::new(path), &mut result)?;
+        Some((new_count, resolved_count))
+    } else {
+        None
+    };
+
     print!("{}", reporter::format_text(&result));
+
+    if let Some((new_count, resolved_count)) = baseline_info {
+        println!("\nBaseline comparison:");
+        println!("  New violations: {}", new_count);
+        println!("  Resolved violations: {}", resolved_count);
+        if new_count > 0 {
+            anyhow::bail!("{} new violation(s) introduced since baseline", new_count);
+        }
+    }
 
     if let Some(threshold) = fail_below {
         if result.score < threshold {
