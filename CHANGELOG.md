@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-14
+
+### Added
+
+- **Hotspot detection**: Fan-in/fan-out metrics per module. Identifies architectural bottlenecks (God modules).
+- **Baseline file**: `noupling baseline save` and `noupling audit --baseline` for incremental adoption. Only fail on new violations.
+- **Pre-commit hook**: `noupling hook install/uninstall` to block commits that introduce violations.
+- **Exit code threshold**: `noupling audit --fail-below 80` for CI gating.
+- **Homebrew tap**: `brew tap pererikbergman/noupling && brew install noupling`.
+
+### Fixed
+
+- Windows path separator normalization in scanner and resolver.
+- SHA256 checksum generation on Windows in release workflow.
+
 ## [0.1.0] - 2026-04-14
 
 ### Added
