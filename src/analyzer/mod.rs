@@ -35,6 +35,17 @@ pub struct CouplingViolation {
     pub cycle_order: usize,
 }
 
+/// A module's dependency metrics.
+#[derive(Debug, Clone)]
+pub struct ModuleMetrics {
+    /// Relative path of the module.
+    pub path: String,
+    /// Number of other modules that import this module (incoming).
+    pub fan_in: usize,
+    /// Number of modules this module imports (outgoing).
+    pub fan_out: usize,
+}
+
 /// The result of running an architectural audit on a project snapshot.
 #[derive(Debug)]
 pub struct AuditResult {
@@ -44,6 +55,8 @@ pub struct AuditResult {
     pub score: f64,
     /// Total number of source modules analyzed.
     pub total_modules: usize,
+    /// Per-module fan-in/fan-out metrics, sorted by fan_in descending.
+    pub hotspots: Vec<ModuleMetrics>,
 }
 
 impl AuditResult {
@@ -429,6 +442,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             violations: Vec::new(),
             score: 100.0,
             total_modules: 0,
+            hotspots: Vec::new(),
         };
     }
 
@@ -594,10 +608,28 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     let total_modules = modules.len();
     let score = (100.0 * (1.0 - sum_severity / total_modules as f64)).max(0.0);
 
+    // Compute hotspots (fan-in / fan-out per module)
+    let mut fan_in: FxHashMap<&str, usize> = FxHashMap::default();
+    let mut fan_out: FxHashMap<&str, usize> = FxHashMap::default();
+    for dep in dependencies {
+        *fan_in.entry(dep.to_module_id.as_str()).or_insert(0) += 1;
+        *fan_out.entry(dep.from_module_id.as_str()).or_insert(0) += 1;
+    }
+    let mut hotspots: Vec<ModuleMetrics> = modules
+        .iter()
+        .map(|m| ModuleMetrics {
+            path: m.path.clone(),
+            fan_in: *fan_in.get(m.id.as_str()).unwrap_or(&0),
+            fan_out: *fan_out.get(m.id.as_str()).unwrap_or(&0),
+        })
+        .collect();
+    hotspots.sort_by(|a, b| b.fan_in.cmp(&a.fan_in));
+
     AuditResult {
         violations,
         score,
         total_modules,
+        hotspots,
     }
 }
 
