@@ -73,6 +73,18 @@ pub enum Commands {
         path: String,
     },
 
+    /// Install or uninstall a git pre-commit hook that runs noupling before each commit.
+    /// The hook scans changed files and fails the commit if new violations are introduced.
+    /// Bypass with `git commit --no-verify`.
+    Hook {
+        /// Action: "install" or "uninstall"
+        action: String,
+
+        /// Path to the project root
+        #[arg(default_value = ".")]
+        path: String,
+    },
+
     /// Scan a project directory: discover source files, parse imports via Tree-sitter,
     /// resolve dependencies, and store results in .noupling/history.db.
     /// Each scan creates a new snapshot with a unique ID.

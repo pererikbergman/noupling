@@ -2,6 +2,7 @@ mod analyzer;
 mod cli;
 mod core;
 mod diff;
+mod hook;
 mod reporter;
 mod scanner;
 pub mod settings;
@@ -19,6 +20,7 @@ fn main() {
     match &cli.command {
         Commands::Init { path }
         | Commands::Scan { path, .. }
+        | Commands::Hook { path, .. }
         | Commands::Audit { path, .. }
         | Commands::Report { path, .. } => {
             let settings_path = Path::new(path).join(".noupling").join("settings.json");
@@ -30,6 +32,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { path } => run_init(&path),
+        Commands::Hook { action, path } => run_hook(&action, &path),
         Commands::Scan { path, diff_base } => run_scan(&path, diff_base.as_deref()),
         Commands::Audit {
             path,
@@ -72,6 +75,17 @@ fn load_diff_meta(path: &str) -> Option<Vec<String>> {
         println!("Diff mode: filtered to changes against {}", base);
     }
     Some(files)
+}
+
+fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
+    match action {
+        "install" => hook::install(Path::new(path)),
+        "uninstall" => hook::uninstall(Path::new(path)),
+        _ => anyhow::bail!(
+            "Unknown hook action: {}. Use 'install' or 'uninstall'.",
+            action
+        ),
+    }
 }
 
 fn find_db(project_path: &str) -> anyhow::Result<storage::Database> {
