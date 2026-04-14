@@ -1,5 +1,10 @@
 use std::path::Path;
 
+/// Normalize path separators to forward slashes for cross-platform consistency.
+fn normalize_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 /// Resolves an import path to a relative file path within the project.
 /// Returns None if the import refers to an external dependency.
 pub fn resolve_import(
@@ -303,7 +308,7 @@ fn find_src_root(source_file: &str) -> Option<String> {
     let mut current = source_path.parent()?;
     loop {
         if current.file_name()?.to_str()? == "src" {
-            return Some(current.to_string_lossy().to_string());
+            return Some(normalize_path(&current.to_string_lossy()));
         }
         current = current.parent()?;
     }
@@ -329,7 +334,7 @@ fn try_resolve_segments(
             file_path.push(seg);
         }
     }
-    let candidate = file_path.to_string_lossy().to_string();
+    let candidate = normalize_path(&file_path.to_string_lossy());
     if known_paths.contains(&candidate) {
         return Some(candidate);
     }
@@ -340,7 +345,7 @@ fn try_resolve_segments(
         mod_path.push(seg);
     }
     mod_path.push("mod.rs");
-    let candidate = mod_path.to_string_lossy().to_string();
+    let candidate = normalize_path(&mod_path.to_string_lossy());
     if known_paths.contains(&candidate) {
         return Some(candidate);
     }
@@ -374,7 +379,7 @@ fn resolve_super_import(
     };
 
     let segments: Vec<&str> = remaining.split("::").collect();
-    let src_root = base.to_string_lossy().to_string();
+    let src_root = normalize_path(&base.to_string_lossy());
 
     try_resolve_segments(&segments, &src_root, known_paths)
 }
@@ -388,7 +393,7 @@ fn resolve_self_import(
     let remaining = import_path.strip_prefix("self::")?;
 
     let segments: Vec<&str> = remaining.split("::").collect();
-    let src_root = source_dir.to_string_lossy().to_string();
+    let src_root = normalize_path(&source_dir.to_string_lossy());
 
     try_resolve_segments(&segments, &src_root, known_paths)
 }
