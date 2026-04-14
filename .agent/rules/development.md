@@ -9,7 +9,8 @@ description: Core development rules for all code changes
 
 - Run `cargo fmt` after every change.
 - Run `cargo clippy -- -D warnings` before committing. Zero warnings allowed.
-- Run `cargo test` before committing. All tests must pass.
+- Run `RUSTFLAGS="-Dwarnings" cargo test` before committing. This matches CI which treats warnings as errors.
+- All tests must pass on all platforms (Linux, macOS, Windows).
 
 ## TDD (Test-Driven Development)
 
