@@ -98,6 +98,11 @@ pub enum Commands {
         /// Audit a specific snapshot by ID instead of the latest one
         #[arg(long)]
         snapshot: Option<String>,
+
+        /// Exit with code 1 if health score is below this threshold.
+        /// Use in CI to gate merges: --fail-below 80
+        #[arg(long)]
+        fail_below: Option<f64>,
     },
 
     /// Generate a report file from the latest snapshot's audit results.
@@ -140,9 +145,14 @@ mod tests {
     fn parse_audit_command_no_snapshot() {
         let cli = Cli::parse_from(["noupling", "audit"]);
         match cli.command {
-            Commands::Audit { snapshot, path } => {
+            Commands::Audit {
+                snapshot,
+                path,
+                fail_below,
+            } => {
                 assert!(snapshot.is_none());
                 assert_eq!(path, ".");
+                assert!(fail_below.is_none());
             }
             _ => panic!("Expected Audit command"),
         }
@@ -153,6 +163,15 @@ mod tests {
         let cli = Cli::parse_from(["noupling", "audit", "--snapshot", "abc-123"]);
         match cli.command {
             Commands::Audit { snapshot, .. } => assert_eq!(snapshot, Some("abc-123".to_string())),
+            _ => panic!("Expected Audit command"),
+        }
+    }
+
+    #[test]
+    fn parse_audit_with_fail_below() {
+        let cli = Cli::parse_from(["noupling", "audit", "--fail-below", "80"]);
+        match cli.command {
+            Commands::Audit { fail_below, .. } => assert_eq!(fail_below, Some(80.0)),
             _ => panic!("Expected Audit command"),
         }
     }

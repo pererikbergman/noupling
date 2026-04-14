@@ -31,7 +31,11 @@ fn main() {
     let result = match cli.command {
         Commands::Init { path } => run_init(&path),
         Commands::Scan { path, diff_base } => run_scan(&path, diff_base.as_deref()),
-        Commands::Audit { path, snapshot } => run_audit(&path, snapshot.as_deref()),
+        Commands::Audit {
+            path,
+            snapshot,
+            fail_below,
+        } => run_audit(&path, snapshot.as_deref(), fail_below),
         Commands::Report { path, format } => run_report(&path, &format),
     };
 
@@ -153,7 +157,7 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
+fn run_audit(path: &str, snapshot_id: Option<&str>, fail_below: Option<f64>) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
@@ -182,6 +186,16 @@ fn run_audit(path: &str, snapshot_id: Option<&str>) -> anyhow::Result<()> {
     }
 
     print!("{}", reporter::format_text(&result));
+
+    if let Some(threshold) = fail_below {
+        if result.score < threshold {
+            anyhow::bail!(
+                "Health score {:.1} is below threshold {:.1}",
+                result.score,
+                threshold
+            );
+        }
+    }
 
     Ok(())
 }
