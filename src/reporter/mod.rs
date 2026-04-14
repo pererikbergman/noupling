@@ -12,10 +12,14 @@ pub use graph::{format_dot, format_mermaid};
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;
 
+/// The version string used across all report outputs.
+pub const VERSION: &str = concat!("noupling v", env!("CARGO_PKG_VERSION"));
+
 // ── Comprehensive JSON Report ──
 
 #[derive(Serialize)]
 pub struct JsonReport {
+    pub generator: String,
     pub snapshot_id: String,
     pub score: f64,
     pub total_modules: usize,
@@ -177,6 +181,7 @@ impl JsonReport {
             .collect();
 
         JsonReport {
+            generator: VERSION.to_string(),
             snapshot_id: snapshot_id.to_string(),
             score: result.score,
             total_modules: result.total_modules,
@@ -373,8 +378,8 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     xml.push_str(&format!(
-        "<noupling-report snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
-        xml_escape(&report.snapshot_id), report.score, report.total_modules,
+        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
+        xml_escape(VERSION), xml_escape(&report.snapshot_id), report.score, report.total_modules,
         report.critical_violations, report.total_circular, report.total_coupling,
     ));
 
@@ -609,6 +614,8 @@ pub fn format_text(result: &AuditResult) -> String {
             ));
         }
     }
+
+    output.push_str(&format!("\n{}\n", VERSION));
 
     output
 }
