@@ -34,6 +34,10 @@ Every violation gets a **severity score** based on depth: problems at the root o
 - **PR/CI mode**: `--diff-base main` to only flag new violations
 - **Configurable**: Thresholds, glob ignore patterns, source extensions
 
+<p align="center">
+  <img src="docs/noupling-html.png" alt="noupling HTML Report" width="800">
+</p>
+
 ---
 
 ## Quick Start
