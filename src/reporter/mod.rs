@@ -615,6 +615,20 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Rule violations
+    if !result.rule_violations.is_empty() {
+        output.push_str(&format!(
+            "\nRule Violations ({}):\n",
+            result.rule_violations.len()
+        ));
+        for rv in &result.rule_violations {
+            output.push_str(&format!(
+                "  {} -> {} (line {})\n    {}\n",
+                rv.from_module, rv.to_module, rv.line_number, rv.message
+            ));
+        }
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -778,6 +792,7 @@ mod tests {
             score: 50.0,
             total_modules: 2,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -800,6 +815,7 @@ mod tests {
             score: 100.0,
             total_modules: 5,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -819,6 +835,7 @@ mod tests {
             score: 42.0,
             total_modules: 6,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -832,6 +849,7 @@ mod tests {
             score: 75.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -847,6 +865,7 @@ mod tests {
             score: 100.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -862,6 +881,7 @@ mod tests {
             score: 100.0,
             total_modules: 5,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -885,6 +905,7 @@ mod tests {
             score: 50.0,
             total_modules: 2,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -900,6 +921,7 @@ mod tests {
             score: 100.0,
             total_modules: 3,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

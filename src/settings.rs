@@ -20,6 +20,23 @@ pub struct Settings {
     /// File extensions to include in the scan.
     #[serde(default = "default_source_extensions")]
     pub source_extensions: Vec<String>,
+    /// Custom dependency rules: allow or forbid specific import patterns.
+    #[serde(default)]
+    pub dependency_rules: Vec<DependencyRule>,
+}
+
+/// A custom rule that allows or forbids dependencies matching glob patterns.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyRule {
+    /// Glob pattern for the source module path.
+    pub from: String,
+    /// Glob pattern for the target module path.
+    pub to: String,
+    /// If false, this dependency is forbidden. If true, explicitly allowed.
+    pub allow: bool,
+    /// Custom message shown when the rule is violated.
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +125,7 @@ impl Default for Settings {
             thresholds: default_thresholds(),
             ignore_patterns: default_ignore_patterns(),
             source_extensions: default_source_extensions(),
+            dependency_rules: Vec::new(),
         }
     }
 }

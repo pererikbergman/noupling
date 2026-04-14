@@ -308,6 +308,11 @@ fn run_audit(
     let project_settings = settings::Settings::load(Path::new(path))?;
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.rule_violations = analyzer::check_dependency_rules(
+        &modules,
+        &dependencies,
+        &project_settings.dependency_rules,
+    );
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {
@@ -363,6 +368,11 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let project_settings = settings::Settings::load(Path::new(path))?;
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.rule_violations = analyzer::check_dependency_rules(
+        &modules,
+        &dependencies,
+        &project_settings.dependency_rules,
+    );
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {

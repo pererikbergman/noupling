@@ -144,6 +144,7 @@ mod tests {
             score: 50.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
 
         // Save baseline
@@ -156,6 +157,7 @@ mod tests {
             score: 50.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
@@ -173,6 +175,7 @@ mod tests {
             score: 75.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -185,6 +188,7 @@ mod tests {
             score: 50.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
@@ -203,6 +207,7 @@ mod tests {
             score: 50.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -212,6 +217,7 @@ mod tests {
             score: 75.0,
             total_modules: 4,
             hotspots: Vec::new(),
+            rule_violations: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);
