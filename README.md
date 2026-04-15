@@ -7,7 +7,7 @@
     <a href="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml"><img src="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
     <img src="https://img.shields.io/badge/rust-2021-orange.svg" alt="Rust 2021">
-    <img src="https://img.shields.io/badge/languages-11-green.svg" alt="11 Languages">
+    <img src="https://img.shields.io/badge/languages-14-green.svg" alt="14 Languages">
   </p>
 </p>
 
@@ -26,13 +26,17 @@ Every violation gets a **severity score** based on depth: problems at the root o
 
 ### Key Features
 
-- **11 languages**: C#, Go, Haskell, Java, JavaScript, Kotlin, Python, Rust, Swift, TypeScript, Zig
+- **14 languages**: C#, Dart, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **6 report formats**: JSON, XML, Markdown, HTML, SonarCloud
+- **7 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
+- **Monorepo support**: Independent analysis per module with cross-module dependency validation
+- **Architectural layers**: Define dependency direction, suppress legitimate downward coupling
+- **XS metric**: Quantify refactoring cost per violation, find the weakest link in cycles
+- **Inline suppression**: `// noupling:ignore` to suppress known acceptable coupling
 - **PR/CI mode**: `--diff-base main` to only flag new violations
-- **Configurable**: Thresholds, glob ignore patterns, source extensions
+- **Configurable**: Thresholds, layers, dependency rules, glob ignore patterns
 
 <p align="center">
   <img src="docs/noupling-html.png" alt="noupling HTML Report" width="800">
@@ -113,6 +117,8 @@ noupling report /path/to/project --format xml     # Comprehensive XML
 noupling report /path/to/project --format md      # Multi-file navigable Markdown
 noupling report /path/to/project --format html    # Interactive HTML with drill-down
 noupling report /path/to/project --format sonar   # SonarCloud generic issue import
+noupling report /path/to/project --format mermaid # Mermaid flowchart diagram
+noupling report /path/to/project --format dot     # GraphViz DOT graph
 ```
 
 ### Diff mode (PR/CI gate)
@@ -191,8 +197,10 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
   ],
   "source_extensions": [
     "rs", "kt", "java", "ts", "py", "swift", "cs",
-    "go", "hs", "js", "jsx", "kts", "tsx", "zig"
-  ]
+    "go", "hs", "js", "jsx", "kts", "tsx", "zig",
+    "dart", "php", "rb"
+  ],
+  "allow_inline_suppression": true
 }
 ```
 
@@ -203,7 +211,8 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | `critical_severity` | Violations above this are flagged critical | 0.5 |
 | `minimum_severity` | Hide violations below this (reduce noise) | 0.2 |
 | `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
-| `source_extensions` | File types to scan | 14 extensions |
+| `source_extensions` | File types to scan | 17 extensions |
+| `allow_inline_suppression` | Enable `noupling:ignore` comments | true |
 
 ### Architectural Layers
 
@@ -234,6 +243,31 @@ Forbid specific dependency patterns:
 }
 ```
 
+### Monorepo Modules
+
+Define independent modules within a monorepo, each analyzed separately:
+
+```json
+{
+  "modules": [
+    { "name": "app", "path": "app/src", "depends_on": ["lib-core"] },
+    { "name": "lib-core", "path": "lib/core/src", "depends_on": [] }
+  ]
+}
+```
+
+Cross-module imports not listed in `depends_on` are flagged as violations. Use `--module app` to audit or report a single module.
+
+### Inline Suppression
+
+Suppress known acceptable coupling with a comment on the import line:
+
+```kotlin
+import com.example.legacy.Helper // noupling:ignore
+```
+
+Works with `//`, `#`, and `--` comment styles. Disable with `"allow_inline_suppression": false`.
+
 ---
 
 ## How It Works
@@ -259,12 +293,15 @@ See [docs/architecture.md](docs/architecture.md) for the full technical details.
 | Language | Extensions | Import Pattern |
 | :--- | :--- | :--- |
 | C# | `.cs` | `using` directives |
+| Dart | `.dart` | `import` directives |
 | Go | `.go` | `import` declarations |
 | Haskell | `.hs` | `import` declarations |
 | Java | `.java` | `import` declarations |
 | JavaScript | `.js`, `.jsx` | ES `import` statements |
 | Kotlin | `.kt`, `.kts` | `import` declarations |
+| PHP | `.php` | `use` / `require` / `include` |
 | Python | `.py` | `import` / `from...import` |
+| Ruby | `.rb` | `require` / `require_relative` |
 | Rust | `.rs` | `use` declarations |
 | Swift | `.swift` | `import` declarations |
 | TypeScript | `.ts`, `.tsx` | ES `import` statements |
