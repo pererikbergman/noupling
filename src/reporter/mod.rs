@@ -709,6 +709,51 @@ pub fn format_text(result: &AuditResult) -> String {
     output
 }
 
+pub fn format_monorepo_text(monorepo: &crate::analyzer::MonorepoResult) -> String {
+    let mut output = String::new();
+
+    output.push_str(&format!(
+        "Overall Score: {:.1}/100\n",
+        monorepo.overall_score
+    ));
+    output.push_str(&format!("Total Modules: {}\n\n", monorepo.total_modules));
+    output.push_str(&format!(
+        "{:<20} {:>8} {:>10} {:>12}\n",
+        "MODULE", "SCORE", "MODULES", "VIOLATIONS"
+    ));
+    output.push_str(&format!("{}\n", "-".repeat(52)));
+
+    for (name, result) in &monorepo.module_results {
+        output.push_str(&format!(
+            "{:<20} {:>7.1} {:>10} {:>12}\n",
+            name,
+            result.score,
+            result.total_modules,
+            result.violations.len(),
+        ));
+    }
+
+    if !monorepo.cross_module_violations.is_empty() {
+        output.push_str(&format!(
+            "\nCross-Module Violations ({}):\n",
+            monorepo.cross_module_violations.len()
+        ));
+        for v in &monorepo.cross_module_violations {
+            output.push_str(&format!(
+                "  {} -> {} (not in depends_on)\n",
+                v.from_config, v.to_config
+            ));
+            output.push_str(&format!(
+                "    {} -> {} (line {})\n",
+                v.from_file, v.to_file, v.line_number
+            ));
+        }
+    }
+
+    output.push_str(&format!("\n{}\n", VERSION));
+    output
+}
+
 // Single-file markdown kept for backward compat in tests
 fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
     let report = JsonReport::from_audit(modules, result, snapshot_id);

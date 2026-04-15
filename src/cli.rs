@@ -132,6 +132,11 @@ pub enum Commands {
         /// not in .noupling/baseline.json. Exit code 1 only on new violations.
         #[arg(long)]
         baseline: bool,
+
+        /// Show results for a specific module only (monorepo mode).
+        /// Module names are defined in .noupling/settings.json under "modules".
+        #[arg(long, value_name = "NAME")]
+        module: Option<String>,
     },
 
     /// Show health score history across snapshots. Track architectural drift over time.
@@ -161,6 +166,11 @@ pub enum Commands {
         /// sonar - SonarCloud/SonarQube generic issue import format (sonar.externalIssuesReportPaths).
         #[arg(long)]
         format: String,
+
+        /// Generate report for a specific module only (monorepo mode).
+        /// Module names are defined in .noupling/settings.json under "modules".
+        #[arg(long, value_name = "NAME")]
+        module: Option<String>,
     },
 }
 
@@ -190,6 +200,7 @@ mod tests {
                 path,
                 fail_below,
                 baseline,
+                ..
             } => {
                 assert!(snapshot.is_none());
                 assert_eq!(path, ".");
@@ -231,7 +242,7 @@ mod tests {
     fn parse_report_json() {
         let cli = Cli::parse_from(["noupling", "report", "--format", "json"]);
         match cli.command {
-            Commands::Report { format, path } => {
+            Commands::Report { format, path, .. } => {
                 assert_eq!(format, "json");
                 assert_eq!(path, ".");
             }
