@@ -67,10 +67,10 @@ jobs:
             const newViolations = '${{ steps.audit.outputs.new_violations }}';
             const diffOutput = fs.readFileSync('/tmp/noupling-diff.txt', 'utf8');
 
-            // Build violation details
+            // Build violation details (match severity like [0.33] but not hotspots like [12 in,])
             let details = '';
             const lines = diffOutput.split('\n');
-            const violationLines = lines.filter(l => l.startsWith('  ['));
+            const violationLines = lines.filter(l => /^\s+\[\d+\.\d+\]/.test(l));
             if (violationLines.length > 0) {
               details = '\n\n### New Violations\n\n```\n' + violationLines.join('\n') + '\n```';
             }
