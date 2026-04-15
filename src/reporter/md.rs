@@ -125,6 +125,15 @@ fn render_dir_page(
             if report.total_xs == 1 { "" } else { "s" }
         ));
     }
+    if is_root && report.max_depth > 0 {
+        md.push_str(&format!(
+            "| Max Dependency Depth | {} |\n",
+            report.max_depth
+        ));
+    }
+    if is_root && report.suppressed_count > 0 {
+        md.push_str(&format!("| Suppressed | {} |\n", report.suppressed_count));
+    }
     md.push('\n');
 
     // Contents: child directories

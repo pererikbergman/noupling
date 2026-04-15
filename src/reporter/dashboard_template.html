@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>noupling — Architecture Dashboard</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif; background: #fff; color: #1e293b; }}
+.header {{ background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 1.25rem 2rem; display: flex; align-items: center; justify-content: space-between; }}
+.header h1 {{ font-size: 1.1rem; font-weight: 600; }}
+.header h1 span {{ color: #3b82f6; }}
+.header .score-badge {{ font-size: 2rem; font-weight: 800; }}
+.score-green {{ color: #16a34a; }}
+.score-yellow {{ color: #ca8a04; }}
+.score-red {{ color: #dc2626; }}
+.header .meta {{ font-size: 0.75rem; color: #94a3b8; }}
+.container {{ max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }}
+.cards {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }}
+.card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.25rem; }}
+.card .label {{ font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }}
+.card .value {{ font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }}
+.card .detail {{ font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }}
+section {{ margin-bottom: 2.5rem; }}
+section h2 {{ font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }}
+table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; }}
+th {{ text-align: left; padding: 0.5rem 0.75rem; background: #f8fafc; color: #64748b; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; cursor: pointer; user-select: none; border-bottom: 2px solid #e2e8f0; }}
+th:hover {{ color: #334155; }}
+td {{ padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9; }}
+tr:hover {{ background: #f8fafc; }}
+.score-cell {{ font-weight: 600; }}
+.charts-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }}
+.chart-box {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; }}
+.chart-box h3 {{ font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 0.75rem; }}
+.bar {{ display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.8rem; }}
+.bar-fill {{ height: 20px; border-radius: 3px; min-width: 2px; }}
+.quick-wins {{ list-style: none; }}
+.quick-wins li {{ padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.8rem; display: flex; justify-content: space-between; }}
+.quick-wins .cost {{ font-weight: 600; color: #16a34a; }}
+.quick-wins .type {{ font-size: 0.7rem; color: #94a3b8; }}
+.sunburst-container {{ display: flex; justify-content: center; }}
+.risk-container {{ position: relative; }}
+.risk-label {{ position: absolute; font-size: 0.65rem; color: #cbd5e1; font-weight: 500; }}
+.depth-chain {{ display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; font-size: 0.8rem; }}
+.depth-node {{ background: #e2e8f0; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500; }}
+.depth-arrow {{ color: #94a3b8; }}
+.tooltip {{ position: fixed; background: #1e293b; color: #e2e8f0; border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.7rem; pointer-events: none; opacity: 0; z-index: 100; }}
+footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem; border-top: 1px solid #e2e8f0; }}
+@media print {{ .header {{ background: #fff; }} .card {{ break-inside: avoid; }} }}
+@media (max-width: 768px) {{ .cards {{ grid-template-columns: repeat(2, 1fr); }} .charts-row {{ grid-template-columns: 1fr; }} }}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1><span>nou</span>pling</h1>
+        <div class="meta">Architecture Dashboard</div>
+    </div>
+    <div style="text-align: right">
+        <div class="score-badge" id="score-badge"></div>
+        <div class="meta" id="meta-info"></div>
+    </div>
+</div>
+
+<div class="container">
+
+<!-- Section 1: Metric Cards -->
+<div class="cards" id="cards"></div>
+
+<!-- Section 2: Module Scorecard -->
+<section>
+    <h2>Module Scorecard</h2>
+    <table id="module-table">
+        <thead><tr>
+            <th data-sort="name">Module</th>
+            <th data-sort="score">Score</th>
+            <th data-sort="file_count">Files</th>
+            <th data-sort="violations">Violations</th>
+            <th data-sort="circular">Circular</th>
+            <th data-sort="xs">XS</th>
+            <th data-sort="independence">Independence</th>
+            <th data-sort="instability">Instability</th>
+        </tr></thead>
+        <tbody id="module-tbody"></tbody>
+    </table>
+</section>
+
+<!-- Charts Row -->
+<div class="charts-row">
+    <!-- Section 5: Risk Matrix -->
+    <div class="chart-box">
+        <h3>Risk Matrix (Instability vs Blast Radius)</h3>
+        <div class="risk-container" id="risk-chart"></div>
+    </div>
+
+    <!-- Section 6: Violations -->
+    <div class="chart-box">
+        <h3>Violations</h3>
+        <div id="violation-charts"></div>
+    </div>
+</div>
+
+<div class="charts-row">
+    <!-- Section 3: Sunburst -->
+    <div class="chart-box">
+        <h3>Architecture Map</h3>
+        <div class="sunburst-container" id="sunburst"></div>
+    </div>
+
+    <!-- Section 7: Depth + Quick Wins -->
+    <div class="chart-box">
+        <h3>Dependency Depth &amp; Quick Wins</h3>
+        <div id="depth-section"></div>
+    </div>
+</div>
+
+</div>
+
+<footer>{version}</footer>
+
+<div id="tooltip" class="tooltip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const D = {json};
+const tooltip = document.getElementById("tooltip");
+
+// ── Score badge ──
+const scoreBadge = document.getElementById("score-badge");
+const cls = D.score >= 90 ? "score-green" : D.score >= 70 ? "score-yellow" : "score-red";
+scoreBadge.className = "score-badge " + cls;
+scoreBadge.textContent = D.score.toFixed(1) + "/100";
+document.getElementById("meta-info").textContent = D.total_modules + " modules · " + D.total_violations + " violations";
+
+// ── Metric cards ──
+const cardsHtml = [
+    {{ label: "Health Score", value: D.score.toFixed(1), detail: "out of 100" }},
+    {{ label: "Total XS", value: D.total_xs, detail: "imports to remove" }},
+    {{ label: "Lowest Independence", value: D.lowest_independence ? (D.lowest_independence.score * 100).toFixed(0) + "%" : "—", detail: D.lowest_independence ? D.lowest_independence.name : "all independent" }},
+    {{ label: "Highest Blast Radius", value: D.highest_blast ? D.highest_blast.blast_radius : "0", detail: D.highest_blast ? D.highest_blast.name : "no risk" }},
+].map(c => `<div class="card"><div class="label">${{c.label}}</div><div class="value">${{c.value}}</div><div class="detail">${{c.detail}}</div></div>`).join("");
+document.getElementById("cards").innerHTML = cardsHtml;
+
+// ── Module scorecard ──
+let sortKey = "score";
+let sortAsc = true;
+
+function renderTable() {{
+    const sorted = [...D.modules_table].sort((a, b) => {{
+        const va = a[sortKey], vb = b[sortKey];
+        return sortAsc ? (va < vb ? -1 : va > vb ? 1 : 0) : (va > vb ? -1 : va < vb ? 1 : 0);
+    }});
+    const tbody = document.getElementById("module-tbody");
+    tbody.innerHTML = sorted.map(m => {{
+        const sc = m.score >= 90 ? "score-green" : m.score >= 70 ? "score-yellow" : "score-red";
+        return `<tr>
+            <td><strong>${{m.name}}</strong></td>
+            <td class="score-cell ${{sc}}">${{m.score.toFixed(1)}}</td>
+            <td>${{m.file_count}}</td>
+            <td>${{m.violations || "—"}}</td>
+            <td>${{m.circular || "—"}}</td>
+            <td>${{m.xs || "—"}}</td>
+            <td>${{(m.independence * 100).toFixed(0)}}%</td>
+            <td>${{m.instability.toFixed(2)}}</td>
+        </tr>`;
+    }}).join("");
+}}
+renderTable();
+
+document.querySelectorAll("#module-table th").forEach(th => {{
+    th.addEventListener("click", () => {{
+        const key = th.dataset.sort;
+        if (sortKey === key) sortAsc = !sortAsc;
+        else {{ sortKey = key; sortAsc = key === "name"; }}
+        renderTable();
+    }});
+}});
+
+// ── Risk Matrix ──
+(function() {{
+    const data = D.risk_matrix;
+    if (!data.length) return;
+    const w = 350, h = 250, pad = {{ top: 10, right: 20, bottom: 35, left: 45 }};
+    const svg = d3.select("#risk-chart").append("svg").attr("width", w).attr("height", h);
+    const maxBlast = d3.max(data, d => d.blast_radius) || 10;
+
+    const x = d3.scaleLinear().domain([0, 1]).range([pad.left, w - pad.right]);
+    const y = d3.scaleLinear().domain([0, maxBlast * 1.1]).range([h - pad.bottom, pad.top]);
+    const r = d3.scaleSqrt().domain([1, d3.max(data, d => d.file_count) || 10]).range([4, 20]);
+
+    svg.append("g").attr("transform", `translate(0,${{h - pad.bottom}})`).call(d3.axisBottom(x).ticks(5)).selectAll("text").style("font-size", "9px");
+    svg.append("g").attr("transform", `translate(${{pad.left}},0)`).call(d3.axisLeft(y).ticks(5)).selectAll("text").style("font-size", "9px");
+
+    // Quadrant labels
+    svg.append("text").attr("x", pad.left + 5).attr("y", pad.top + 12).text("Zone of Pain").style("font-size", "8px").style("fill", "#fca5a5");
+    svg.append("text").attr("x", w - pad.right - 40).attr("y", h - pad.bottom - 5).text("Safe").style("font-size", "8px").style("fill", "#86efac");
+
+    // Quadrant line
+    svg.append("line").attr("x1", x(0.5)).attr("y1", pad.top).attr("x2", x(0.5)).attr("y2", h - pad.bottom).attr("stroke", "#e2e8f0").attr("stroke-dasharray", "3,3");
+
+    svg.selectAll("circle").data(data).join("circle")
+        .attr("cx", d => x(d.instability))
+        .attr("cy", d => y(d.blast_radius))
+        .attr("r", d => r(d.file_count))
+        .attr("fill", d => d.score >= 90 ? "#86efac" : d.score >= 70 ? "#fde68a" : "#fca5a5")
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1)
+        .attr("opacity", 0.8)
+        .on("mouseover", (e, d) => {{
+            tooltip.innerHTML = `<strong>${{d.name}}</strong><br>I=${{d.instability.toFixed(2)}} · Blast=${{d.blast_radius}} · ${{d.file_count}} files`;
+            tooltip.style.opacity = 1;
+        }})
+        .on("mousemove", e => {{ tooltip.style.left = (e.clientX + 10) + "px"; tooltip.style.top = (e.clientY - 10) + "px"; }})
+        .on("mouseout", () => {{ tooltip.style.opacity = 0; }});
+
+    svg.append("text").attr("x", w / 2).attr("y", h - 2).text("Instability →").style("font-size", "9px").style("fill", "#94a3b8").style("text-anchor", "middle");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -h / 2).attr("y", 12).text("Blast Radius →").style("font-size", "9px").style("fill", "#94a3b8").style("text-anchor", "middle");
+}})();
+
+// ── Violation charts ──
+(function() {{
+    const el = document.getElementById("violation-charts");
+    const maxAge = Math.max(D.violation_age.new_count, D.violation_age.recent_count, D.violation_age.chronic_count, 1);
+    const maxType = Math.max(D.violation_types.coupling, D.violation_types.circular, 1);
+
+    let html = '<div style="margin-bottom:1rem"><div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;font-weight:600">By Age</div>';
+    [["New", D.violation_age.new_count, "#3b82f6"], ["Recent", D.violation_age.recent_count, "#f59e0b"], ["Chronic", D.violation_age.chronic_count, "#ef4444"]].forEach(([label, count, color]) => {{
+        const w = Math.max((count / maxAge) * 200, count > 0 ? 2 : 0);
+        html += `<div class="bar"><span style="width:55px">${{label}}</span><div class="bar-fill" style="width:${{w}}px;background:${{color}}"></div><span>${{count}}</span></div>`;
+    }});
+
+    html += '</div><div style="margin-bottom:1rem"><div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;font-weight:600">By Type</div>';
+    [["Coupling", D.violation_types.coupling, "#f59e0b"], ["Circular", D.violation_types.circular, "#ef4444"]].forEach(([label, count, color]) => {{
+        const w = Math.max((count / maxType) * 200, count > 0 ? 2 : 0);
+        html += `<div class="bar"><span style="width:55px">${{label}}</span><div class="bar-fill" style="width:${{w}}px;background:${{color}}"></div><span>${{count}}</span></div>`;
+    }});
+
+    html += '</div><div><div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;font-weight:600">Quick Wins (lowest cost to fix)</div><ul class="quick-wins">';
+    D.quick_wins.forEach(w => {{
+        html += `<li><span>${{w.from}} → ${{w.to}} <span class="type">${{w.is_circular ? "circular" : "coupling"}}</span></span><span class="cost">${{w.cost}} import${{w.cost !== 1 ? "s" : ""}}</span></li>`;
+    }});
+    if (!D.quick_wins.length) html += '<li style="color:#94a3b8">No violations</li>';
+    html += '</ul></div>';
+    el.innerHTML = html;
+}})();
+
+// ── Sunburst with health-score colors and dependency edges ──
+(function() {{
+    const w = 400, radius = w / 6;
+    const allDeps = D.sunburst_deps;
+    let currentZoomNode = null;
+
+    const root = d3.hierarchy(D.sunburst_tree).sum(d => d.value || 0).sort((a, b) => b.value - a.value);
+    d3.partition().size([2 * Math.PI, root.height + 1])(root);
+
+    // Assign full paths and current state
+    root.each(d => {{
+        const parts = d.ancestors().reverse().slice(1).map(n => n.data.name);
+        d.fullPath = parts.join("/");
+        d.current = {{ x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 }};
+    }});
+    currentZoomNode = root;
+
+    const arc = d3.arc().startAngle(d => d.x0).endAngle(d => d.x1)
+        .padAngle(d => Math.min((d.x1 - d.x0) / 2, 0.005)).padRadius(radius * 1.5)
+        .innerRadius(d => d.y0 * radius).outerRadius(d => Math.max(d.y0 * radius, d.y1 * radius - 1));
+
+    const svg = d3.select("#sunburst").append("svg").attr("viewBox", [-w/2, -w/2, w, w]).attr("width", w).attr("height", w).style("font", "9px sans-serif");
+
+    // Score-based color
+    function fillColor(d) {{
+        let node = d;
+        while (node) {{
+            if (node.data.score != null) {{
+                const s = node.data.score;
+                if (s >= 90) return d.children ? "rgba(34,197,94,0.5)" : "rgba(34,197,94,0.3)";
+                if (s >= 70) return d.children ? "rgba(234,179,8,0.5)" : "rgba(234,179,8,0.3)";
+                return d.children ? "rgba(239,68,68,0.45)" : "rgba(239,68,68,0.25)";
+            }}
+            node = node.parent;
+        }}
+        let top = d; while (top.depth > 1) top = top.parent;
+        const color = d3.scaleOrdinal(d3.quantize(d3.interpolateRainbow, (root.children || []).length + 1));
+        const c = d3.color(color(top.data.name)); c.opacity = d.children ? 0.6 : 0.4; return c + "";
+    }}
+
+    function arcVisible(d) {{ return d.y1 <= 3 && d.y0 >= 1 && d.x1 > d.x0; }}
+    function labelVisible(d) {{ return d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03; }}
+    function labelTransform(d) {{ const x = (d.x0 + d.x1) / 2 * 180 / Math.PI; const y = (d.y0 + d.y1) / 2 * radius; return `rotate(${{x - 90}}) translate(${{y}},0) rotate(${{x < 180 ? 0 : 180}})`; }}
+
+    const path = svg.append("g").selectAll("path").data(root.descendants().slice(1)).join("path")
+        .attr("fill", d => fillColor(d)).attr("fill-opacity", d => arcVisible(d.current) ? 1 : 0)
+        .attr("pointer-events", d => arcVisible(d.current) ? "auto" : "none").attr("d", d => arc(d.current));
+    path.filter(d => d.children).style("cursor", "pointer").on("click", clicked);
+    path.append("title").text(d => d.ancestors().map(d => d.data.name).reverse().slice(1).join("/") + "\n" + d.value + " files");
+
+    const label = svg.append("g").attr("pointer-events", "none").attr("text-anchor", "middle").style("user-select", "none")
+        .selectAll("text").data(root.descendants().slice(1)).join("text")
+        .attr("dy", "0.35em").attr("fill", "#374151").attr("fill-opacity", d => +labelVisible(d.current)).attr("transform", d => labelTransform(d.current)).text(d => d.data.name);
+
+    const parentCircle = svg.append("circle").datum(root).attr("r", radius).attr("fill", "#f8fafc").attr("stroke", "#e2e8f0").style("cursor", "pointer").on("click", clicked);
+
+    // Edge group (on top)
+    const edgeGroup = svg.append("g");
+
+    // Dependency edge drawing
+    function findOwner(filePath, children) {{
+        for (const child of children) {{
+            if (filePath === child.fullPath || filePath.startsWith(child.fullPath + "/")) return child;
+        }}
+        return null;
+    }}
+
+    // Build violation lookup set
+    const violationDeps = D.sunburst_violation_deps || [];
+    const vSet = new Set();
+    for (const vd of violationDeps) {{
+        const from = findOwner(vd.from, root.children || []);
+        const to = findOwner(vd.to, root.children || []);
+        if (from && to) vSet.add(from.fullPath + "|" + to.fullPath);
+    }}
+
+    function drawEdges() {{
+        const children = currentZoomNode.children || [];
+        edgeGroup.selectAll("path").remove();
+        if (children.length === 0) return;
+
+        // Rebuild violation set for current zoom level
+        const localVSet = new Set();
+        for (const vd of violationDeps) {{
+            const from = findOwner(vd.from, children);
+            const to = findOwner(vd.to, children);
+            if (from && to && from !== to) localVSet.add(from.fullPath + "|" + to.fullPath);
+        }}
+
+        const edgeMap = new Map();
+        for (const dep of allDeps) {{
+            const from = findOwner(dep.from, children);
+            const to = findOwner(dep.to, children);
+            if (from && to && from !== to) {{
+                const key = from.fullPath + "|" + to.fullPath;
+                if (!edgeMap.has(key)) edgeMap.set(key, {{ from, to, count: 0, isViolation: localVSet.has(key) }});
+                edgeMap.get(key).count++;
+            }}
+        }}
+
+        edgeGroup.selectAll("path").data(Array.from(edgeMap.values())).join("path")
+            .attr("fill", "none")
+            .attr("stroke", d => d.isViolation ? "#ef4444" : "#94a3b8")
+            .attr("stroke-opacity", d => d.isViolation ? 0.25 : 0.12)
+            .attr("stroke-width", 1)
+            .style("pointer-events", "stroke")
+            .attr("d", d => {{
+                const a1 = (d.from.current.x0 + d.from.current.x1) / 2;
+                const r1 = d.from.current.y0 * radius;
+                const a2 = (d.to.current.x0 + d.to.current.x1) / 2;
+                const r2 = d.to.current.y0 * radius;
+                const x1 = Math.sin(a1) * r1, y1 = -Math.cos(a1) * r1;
+                const x2 = Math.sin(a2) * r2, y2 = -Math.cos(a2) * r2;
+                const cx = 0.15 * (x1 + x2) / 2, cy = 0.15 * (y1 + y2) / 2;
+                return `M${{x1}},${{y1}} Q${{cx}},${{cy}} ${{x2}},${{y2}}`;
+            }})
+            .on("mouseover", (e, d) => {{
+                const type = d.isViolation ? ' · <span style="color:#ef4444">violation</span>' : "";
+                tooltip.innerHTML = `<strong>${{d.from.data.name}}</strong> → <strong>${{d.to.data.name}}</strong><br>${{d.count}} import${{d.count !== 1 ? "s" : ""}}${{type}}`;
+                tooltip.style.opacity = 1;
+                d3.select(e.target).attr("stroke", d.isViolation ? "#ef4444" : "#3b82f6").attr("stroke-opacity", 0.7).attr("stroke-width", 2);
+            }})
+            .on("mousemove", e => {{ tooltip.style.left = (e.clientX + 10) + "px"; tooltip.style.top = (e.clientY - 10) + "px"; }})
+            .on("mouseout", (e, d) => {{
+                tooltip.style.opacity = 0;
+                d3.select(e.target)
+                    .attr("stroke", d.isViolation ? "#ef4444" : "#94a3b8")
+                    .attr("stroke-opacity", d.isViolation ? 0.25 : 0.12)
+                    .attr("stroke-width", 1);
+            }});
+    }}
+
+    drawEdges();
+
+    function clicked(event, p) {{
+        parentCircle.datum(p.parent || root);
+        currentZoomNode = p;
+        root.each(d => d.target = {{ x0: Math.max(0, Math.min(1, (d.x0 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI, x1: Math.max(0, Math.min(1, (d.x1 - p.x0) / (p.x1 - p.x0))) * 2 * Math.PI, y0: Math.max(0, d.y0 - p.depth), y1: Math.max(0, d.y1 - p.depth) }});
+        edgeGroup.selectAll("path").remove();
+        const t = svg.transition().duration(750);
+        path.transition(t).tween("data", d => {{ const i = d3.interpolate(d.current, d.target); return t => d.current = i(t); }})
+            .filter(function(d) {{ return +this.getAttribute("fill-opacity") || arcVisible(d.target); }})
+            .attr("fill-opacity", d => arcVisible(d.target) ? 1 : 0).attr("pointer-events", d => arcVisible(d.target) ? "auto" : "none").attrTween("d", d => () => arc(d.current));
+        label.filter(function(d) {{ return +this.getAttribute("fill-opacity") || labelVisible(d.target); }}).transition(t)
+            .attr("fill-opacity", d => +labelVisible(d.target)).attrTween("transform", d => () => labelTransform(d.current));
+        t.end().then(() => drawEdges()).catch(() => {{}});
+    }}
+}})();
+
+// ── Depth & Critical Path ──
+(function() {{
+    const el = document.getElementById("depth-section");
+    let html = `<div style="margin-bottom:1rem"><div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;font-weight:600">Maximum Depth: <span style="color:#1e293b;font-size:1.1rem">${{D.max_depth}}</span></div>`;
+    if (D.critical_path.length > 0) {{
+        html += '<div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem">Critical Path:</div><div class="depth-chain">';
+        D.critical_path.forEach((p, i) => {{
+            if (i > 0) html += '<span class="depth-arrow">→</span>';
+            html += `<span class="depth-node">${{p}}</span>`;
+        }});
+        html += '</div>';
+    }}
+    html += '</div>';
+    el.innerHTML = html;
+}})();
+</script>
+</body>
+</html>

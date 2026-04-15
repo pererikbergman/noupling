@@ -717,9 +717,14 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
             reporter::generate_bundle_report(&report_modules, &report_deps, &result, &file_path)?;
             println!("Report saved to {}", file_path.display());
         }
+        "dashboard" => {
+            let file_path = report_dir.join("dashboard.html");
+            reporter::generate_dashboard(&report_modules, &report_deps, &result, &file_path)?;
+            println!("Report saved to {}", file_path.display());
+        }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', or 'bundle'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', or 'dashboard'.",
                 format
             );
         }
