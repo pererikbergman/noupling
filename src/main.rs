@@ -128,6 +128,7 @@ fn run_trend(path: &str, last: usize) -> anyhow::Result<()> {
 
         let mut result = analyzer::audit(&modules, &dependencies);
         result.filter_by_severity(project_settings.thresholds.minimum_severity);
+        result.filter_by_layers(&project_settings.layers);
 
         let delta = match prev_score {
             Some(prev) => {
@@ -271,6 +272,7 @@ fn run_baseline(action: &str, path: &str) -> anyhow::Result<()> {
             let project_settings = settings::Settings::load(Path::new(path))?;
             let mut result = analyzer::audit(&modules, &dependencies);
             result.filter_by_severity(project_settings.thresholds.minimum_severity);
+            result.filter_by_layers(&project_settings.layers);
 
             baseline::save_baseline(Path::new(path), &result)?;
         }
@@ -308,6 +310,7 @@ fn run_audit(
     let project_settings = settings::Settings::load(Path::new(path))?;
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &modules,
         &dependencies,
@@ -370,6 +373,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let project_settings = settings::Settings::load(Path::new(path))?;
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &modules,
         &dependencies,
