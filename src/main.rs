@@ -51,7 +51,11 @@ fn main() {
             baseline,
             module.as_deref(),
         ),
-        Commands::Trend { path, last } => run_trend(&path, last),
+        Commands::Trend {
+            path,
+            last,
+            by_module,
+        } => run_trend(&path, last, by_module),
         Commands::Report {
             path,
             format,
@@ -114,7 +118,7 @@ fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
     }
 }
 
-fn run_trend(path: &str, last: usize) -> anyhow::Result<()> {
+fn run_trend(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
     let module_repo = storage::repository::ModuleRepository::new(&db.conn);
@@ -133,6 +137,16 @@ fn run_trend(path: &str, last: usize) -> anyhow::Result<()> {
     } else {
         &snapshots
     };
+
+    if by_module {
+        return run_trend_by_module(
+            display_snapshots,
+            &module_repo,
+            &dep_repo,
+            &project_settings,
+            snapshots.len(),
+        );
+    }
 
     println!(
         "{:<12} {:<22} {:>8} {:>10} {:>10} {:>8}",
@@ -187,6 +201,111 @@ fn run_trend(path: &str, last: usize) -> anyhow::Result<()> {
         "\nShowing {} of {} snapshots",
         display_snapshots.len(),
         snapshots.len()
+    );
+
+    Ok(())
+}
+
+fn run_trend_by_module(
+    snapshots: &[crate::core::Snapshot],
+    module_repo: &storage::repository::ModuleRepository,
+    dep_repo: &storage::repository::DependencyRepository,
+    settings: &settings::Settings,
+    total_snapshots: usize,
+) -> anyhow::Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // Collect per-directory scores for each snapshot
+    let mut all_dirs: BTreeSet<String> = BTreeSet::new();
+    let mut snapshot_scores: Vec<(String, BTreeMap<String, f64>)> = Vec::new();
+
+    for snap in snapshots {
+        let modules = module_repo.get_by_snapshot(&snap.id)?;
+        let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
+
+        let mut result = analyzer::audit(&modules, &dependencies);
+        result.filter_by_severity(settings.thresholds.minimum_severity);
+        result.filter_by_layers(&settings.layers);
+
+        // Compute per-top-level-directory scores
+        let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
+        let mut dir_modules: BTreeMap<String, usize> = BTreeMap::new();
+
+        for m in &modules {
+            if let Some(top) = m.path.split('/').next() {
+                if m.path.contains('/') {
+                    *dir_modules.entry(top.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        for v in &result.violations {
+            if let Some(top) = v.dir_a.split('/').next() {
+                *dir_severity.entry(top.to_string()).or_insert(0.0) += v.severity;
+            }
+        }
+
+        let mut scores: BTreeMap<String, f64> = BTreeMap::new();
+        for (dir, count) in &dir_modules {
+            let sev = dir_severity.get(dir).copied().unwrap_or(0.0);
+            let score = (100.0 * (1.0 - sev / *count as f64)).max(0.0);
+            scores.insert(dir.clone(), score);
+            all_dirs.insert(dir.clone());
+        }
+
+        let short_id = if snap.id.len() > 8 {
+            snap.id[..8].to_string()
+        } else {
+            snap.id.clone()
+        };
+        snapshot_scores.push((short_id, scores));
+    }
+
+    if all_dirs.is_empty() {
+        println!("No modules found across snapshots.");
+        return Ok(());
+    }
+
+    // Print header
+    let dirs: Vec<String> = all_dirs.into_iter().collect();
+    print!("{:<12}", "SNAPSHOT");
+    for dir in &dirs {
+        print!(" {:>12}", dir);
+    }
+    println!();
+    println!("{}", "-".repeat(12 + dirs.len() * 13));
+
+    // Print rows with delta indicators
+    let mut prev_scores: BTreeMap<String, f64> = BTreeMap::new();
+    for (snap_id, scores) in &snapshot_scores {
+        print!("{:<12}", snap_id);
+        for dir in &dirs {
+            let score = scores.get(dir).copied().unwrap_or(0.0);
+            let delta = prev_scores
+                .get(dir)
+                .map(|&prev| score - prev)
+                .unwrap_or(0.0);
+            let arrow = if delta > 0.5 {
+                "+"
+            } else if delta < -0.5 {
+                "-"
+            } else {
+                " "
+            };
+            print!(" {:>10.1}{}", score, arrow);
+        }
+        println!();
+        for dir in &dirs {
+            if let Some(&score) = scores.get(dir) {
+                prev_scores.insert(dir.clone(), score);
+            }
+        }
+    }
+
+    println!(
+        "\nShowing {} of {} snapshots",
+        snapshots.len(),
+        total_snapshots
     );
 
     Ok(())
