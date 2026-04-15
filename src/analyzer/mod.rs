@@ -35,6 +35,10 @@ pub struct CouplingViolation {
     pub cycle_hop_files: Vec<(String, String, i32)>,
     /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.).
     pub cycle_order: usize,
+    /// For circular deps: the weakest hop to break (fewest imports). Format: "dir_a -> dir_b (N imports)".
+    pub weakest_link: Option<String>,
+    /// For circular deps: number of imports to remove at the weakest link to break the cycle.
+    pub break_cost: usize,
 }
 
 /// A module's dependency metrics.
@@ -65,6 +69,8 @@ pub struct AuditResult {
     pub layer_violations: Vec<LayerViolation>,
     /// Per-directory cohesion metrics.
     pub cohesion: Vec<CohesionMetrics>,
+    /// Total excess: sum of all imports that need removal to fix all violations.
+    pub total_xs: usize,
 }
 
 /// Cohesion metrics for a directory.
@@ -373,6 +379,8 @@ struct DetectedCycle {
     /// For each hop in the cycle, the file that causes the dependency (from_file -> to_file)
     /// Length is dir_path.len() - 1 (one edge per hop)
     hop_files: Vec<(String, String, i32)>,
+    /// For each hop, how many imports cross that edge. Used to find the weakest link.
+    hop_import_counts: Vec<usize>,
 }
 
 /// Detect circular dependencies among sibling directories using their D_acc sets.
@@ -390,8 +398,10 @@ fn detect_sibling_cycles(
 
     // Build adjacency: sibling A -> sibling B if D_acc(A) contains a module under B
     let mut adj: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
-    // Track which file causes each edge for hop_files
+    // Track which file causes each edge for hop_files (first match only, for display)
     let mut edge_files: FxHashMap<(usize, usize), (String, String, i32)> = FxHashMap::default();
+    // Track total import count per edge for XS metric (weakest_link / break_cost)
+    let mut edge_import_count: FxHashMap<(usize, usize), usize> = FxHashMap::default();
 
     for (i, dir_a) in siblings.iter().enumerate() {
         if let Some(deps_a) = dacc.get(dir_a) {
@@ -404,13 +414,15 @@ fn detect_sibling_cycles(
                         let b_prefix = format!("{}/", dir_b);
                         if target_dir == dir_b || target_dir.starts_with(&b_prefix) {
                             adj.entry(i).or_default().push(j);
-                            if !edge_files.contains_key(&(i, j)) {
-                                for dep in dependencies {
-                                    if &dep.to_module_id == target_id {
-                                        let from_dir = id_to_dir.get(dep.from_module_id.as_str());
-                                        let a_prefix = format!("{}/", dir_a);
-                                        if let Some(fd) = from_dir {
-                                            if fd == dir_a || fd.starts_with(&a_prefix) {
+                            // Count all imports for this edge
+                            let a_prefix = format!("{}/", dir_a);
+                            for dep in dependencies {
+                                if &dep.to_module_id == target_id {
+                                    let from_dir = id_to_dir.get(dep.from_module_id.as_str());
+                                    if let Some(fd) = from_dir {
+                                        if fd == dir_a || fd.starts_with(&a_prefix) {
+                                            *edge_import_count.entry((i, j)).or_insert(0) += 1;
+                                            edge_files.entry((i, j)).or_insert_with(|| {
                                                 let from_file = id_to_path
                                                     .get(dep.from_module_id.as_str())
                                                     .unwrap_or(&"")
@@ -419,12 +431,8 @@ fn detect_sibling_cycles(
                                                     .get(dep.to_module_id.as_str())
                                                     .unwrap_or(&"")
                                                     .to_string();
-                                                edge_files.insert(
-                                                    (i, j),
-                                                    (from_file, to_file, dep.line_number),
-                                                );
-                                                break;
-                                            }
+                                                (from_file, to_file, dep.line_number)
+                                            });
                                         }
                                     }
                                 }
@@ -460,6 +468,7 @@ fn detect_sibling_cycles(
             &mut seen_keys,
             siblings,
             &edge_files,
+            &edge_import_count,
         );
     }
 
@@ -477,6 +486,7 @@ fn find_all_cycles_from(
     seen_keys: &mut FxHashSet<String>,
     siblings: &[String],
     edge_files: &FxHashMap<(usize, usize), (String, String, i32)>,
+    edge_import_count: &FxHashMap<(usize, usize), usize>,
 ) {
     if let Some(neighbors) = adj.get(&current) {
         for &next in neighbors {
@@ -497,6 +507,7 @@ fn find_all_cycles_from(
                     dir_path.push(siblings[start].clone());
 
                     let mut hop_files = Vec::new();
+                    let mut hop_import_counts = Vec::new();
                     for w in 0..path.len() {
                         let from_idx = path[w];
                         let to_idx = if w + 1 < path.len() {
@@ -509,11 +520,17 @@ fn find_all_cycles_from(
                             .cloned()
                             .unwrap_or_default();
                         hop_files.push(files);
+                        let count = edge_import_count
+                            .get(&(from_idx, to_idx))
+                            .copied()
+                            .unwrap_or(1);
+                        hop_import_counts.push(count);
                     }
 
                     cycles.push(DetectedCycle {
                         dir_path,
                         hop_files,
+                        hop_import_counts,
                     });
                 }
             } else if !visited.contains(&next) && next > start {
@@ -522,7 +539,8 @@ fn find_all_cycles_from(
                 visited.insert(next);
                 path.push(next);
                 find_all_cycles_from(
-                    start, next, adj, path, visited, cycles, seen_keys, siblings, edge_files,
+                    start, next, adj, path, visited, cycles, seen_keys, siblings,
+                    edge_files, edge_import_count,
                 );
                 path.pop();
                 visited.remove(&next);
@@ -541,7 +559,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
     }
 
@@ -584,6 +602,33 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             }
             let first_dir = &cycle.dir_path[0];
             let last_target = &cycle.dir_path[cycle.dir_path.len() - 2];
+
+            // Find weakest link: hop with fewest imports
+            let (weakest_link, break_cost) = if !cycle.hop_import_counts.is_empty() {
+                let min_idx = cycle
+                    .hop_import_counts
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, &count)| count)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0);
+                let from_dir = &cycle.dir_path[min_idx];
+                let to_dir = &cycle.dir_path[min_idx + 1];
+                let count = cycle.hop_import_counts[min_idx];
+                (
+                    Some(format!(
+                        "{} -> {} ({} import{})",
+                        from_dir,
+                        to_dir,
+                        count,
+                        if count == 1 { "" } else { "s" }
+                    )),
+                    count,
+                )
+            } else {
+                (None, 0)
+            };
+
             violations.push(CouplingViolation {
                 dir_a: first_dir.clone(),
                 dir_b: last_target.clone(),
@@ -597,6 +642,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
                 cycle_order: cycle.dir_path.len() - 1, // -1 because last entry closes the cycle
+                weakest_link,
+                break_cost,
             });
         }
 
@@ -639,7 +686,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0,
+                                                    cycle_order: 0, weakest_link: None, break_cost: 0,
                                                 });
                                             }
                                         }
@@ -680,7 +727,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0,
+                                                    cycle_order: 0, weakest_link: None, break_cost: 0,
                                                 });
                                             }
                                         }
@@ -786,6 +833,12 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         .collect();
     cohesion.sort_by(|a, b| a.cohesion.partial_cmp(&b.cohesion).unwrap());
 
+    // Calculate total XS: sum of weights for coupling + break_cost for circular
+    let total_xs: usize = violations
+        .iter()
+        .map(|v| if v.is_circular { v.break_cost } else { v.weight })
+        .sum();
+
     AuditResult {
         violations,
         score,
@@ -794,6 +847,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         rule_violations: Vec::new(),
         layer_violations: Vec::new(),
         cohesion,
+        total_xs,
     }
 }
 

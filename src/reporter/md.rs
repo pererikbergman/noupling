@@ -118,6 +118,13 @@ fn render_dir_page(
     }
     md.push_str(&format!("| Modules | {} |\n", dir.module_count));
     md.push_str(&format!("| Violations | {} |\n", violations));
+    if is_root && report.total_xs > 0 {
+        md.push_str(&format!(
+            "| Total XS | {} import{} to remove |\n",
+            report.total_xs,
+            if report.total_xs == 1 { "" } else { "s" }
+        ));
+    }
     md.push('\n');
 
     // Contents: child directories
@@ -226,6 +233,13 @@ fn render_dir_page(
                         }
                     }
                     md.push_str("\n</details>\n\n");
+
+                    if let Some(ref wl) = v.weakest_link {
+                        md.push_str(&format!(
+                            "> **Weakest link:** {} (break cost: {} import{})\n\n",
+                            wl, v.break_cost, if v.break_cost == 1 { "" } else { "s" }
+                        ));
+                    }
                 }
             }
         }
