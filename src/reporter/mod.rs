@@ -762,6 +762,37 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Dependency depth
+    if result.max_depth > 0 {
+        output.push_str(&format!(
+            "\nDependency Depth: {} (longest chain)\n",
+            result.max_depth
+        ));
+        if !result.critical_path.is_empty() {
+            output.push_str("  Critical path: ");
+            for (i, p) in result.critical_path.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(" -> ");
+                }
+                let short = std::path::Path::new(p)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(p);
+                output.push_str(short);
+            }
+            output.push('\n');
+        }
+    }
+
+    // Violation age summary
+    let age = &result.violation_age;
+    if age.new_count > 0 || age.recent_count > 0 || age.chronic_count > 0 {
+        output.push_str(&format!(
+            "\nViolation Age: {} new, {} recent, {} chronic\n",
+            age.new_count, age.recent_count, age.chronic_count
+        ));
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -944,6 +975,7 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::ViolationAgeSummary;
 
     fn make_violation(from: &str, to: &str, severity: f64, depth: i32) -> CouplingViolation {
         CouplingViolation {
@@ -978,6 +1010,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1006,6 +1041,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1031,6 +1069,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1050,6 +1091,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1071,6 +1115,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1092,6 +1139,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1121,6 +1171,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -1142,6 +1195,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 

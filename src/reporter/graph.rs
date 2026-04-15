@@ -201,6 +201,7 @@ fn sanitize(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::ViolationAgeSummary;
     use crate::core::ModuleType;
 
     fn make_module(path: &str) -> Module {
@@ -255,6 +256,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -282,6 +286,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -306,6 +313,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 

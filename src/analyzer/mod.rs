@@ -79,8 +79,25 @@ pub struct AuditResult {
     pub total_xs: usize,
     /// Per-module independence scores (internal vs external dependency ratio).
     pub independence: Vec<ModuleIndependence>,
+    /// Maximum dependency chain depth and the critical path.
+    pub max_depth: usize,
+    /// The longest dependency chain (file paths from root to deepest leaf).
+    pub critical_path: Vec<String>,
+    /// Violation age summary: new, recent, chronic counts.
+    pub violation_age: ViolationAgeSummary,
     /// Number of imports suppressed by `noupling:ignore` comments.
     pub suppressed_count: usize,
+}
+
+/// Summary of violation ages across snapshots.
+#[derive(Debug, Clone, Default)]
+pub struct ViolationAgeSummary {
+    /// Violations that first appeared in the latest snapshot.
+    pub new_count: usize,
+    /// Violations that have existed for 2-4 snapshots.
+    pub recent_count: usize,
+    /// Violations that have existed for 5+ snapshots.
+    pub chronic_count: usize,
 }
 
 /// Cohesion metrics for a directory.
@@ -595,6 +612,9 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
     }
@@ -977,6 +997,93 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         })
         .sum();
 
+    // Compute dependency depth via longest path (DP on forward graph)
+    let id_to_idx: FxHashMap<&str, usize> = modules
+        .iter()
+        .enumerate()
+        .map(|(i, m)| (m.id.as_str(), i))
+        .collect();
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); modules.len()];
+    for dep in dependencies {
+        if let (Some(&from), Some(&to)) = (
+            id_to_idx.get(dep.from_module_id.as_str()),
+            id_to_idx.get(dep.to_module_id.as_str()),
+        ) {
+            adj[from].push(to);
+        }
+    }
+
+    // Deduplicate adjacency lists
+    for list in &mut adj {
+        list.sort();
+        list.dedup();
+    }
+
+    // Iterative longest path using Kahn's algorithm (topological sort)
+    // For nodes in cycles, depth stays 0.
+    let n = modules.len();
+    let mut in_degree = vec![0usize; n];
+    for edges in &adj {
+        for &to in edges {
+            in_degree[to] += 1;
+        }
+    }
+
+    // Reverse topological order via BFS (Kahn's)
+    let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+    let mut depth_val: Vec<usize> = vec![0; n];
+    let mut parent_of: Vec<Option<usize>> = vec![None; n];
+
+    // Start from leaves (in_degree == 0 in reverse graph = out_degree == 0)
+    // Actually, we want longest path FROM each node, so we process in reverse topo order.
+    // Use reverse graph + forward BFS.
+    let mut rev_adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (from, edges) in adj.iter().enumerate() {
+        for &to in edges {
+            rev_adj[to].push(from);
+        }
+    }
+
+    let mut out_degree: Vec<usize> = adj.iter().map(|e| e.len()).collect();
+    for (i, &deg) in out_degree.iter().enumerate() {
+        if deg == 0 {
+            queue.push_back(i);
+        }
+    }
+
+    while let Some(node) = queue.pop_front() {
+        for &pred in &rev_adj[node] {
+            let new_depth = depth_val[node] + 1;
+            if new_depth > depth_val[pred] {
+                depth_val[pred] = new_depth;
+                parent_of[pred] = Some(node);
+            }
+            out_degree[pred] -= 1;
+            if out_degree[pred] == 0 {
+                queue.push_back(pred);
+            }
+        }
+    }
+
+    // Find the node with the longest path
+    let (max_depth, start_idx) = depth_val
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, &d)| d)
+        .map(|(i, &d)| (d, i))
+        .unwrap_or((0, 0));
+
+    // Reconstruct the critical path
+    let mut critical_path = Vec::new();
+    if max_depth > 0 {
+        let mut current = start_idx;
+        critical_path.push(modules[current].path.clone());
+        while let Some(next) = parent_of[current] {
+            critical_path.push(modules[next].path.clone());
+            current = next;
+        }
+    }
+
     AuditResult {
         violations,
         score,
@@ -987,7 +1094,43 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         cohesion,
         total_xs,
         independence,
+        max_depth,
+        critical_path,
+        violation_age: ViolationAgeSummary::default(),
         suppressed_count: 0,
+    }
+}
+
+/// Compute violation ages by comparing current violations against historical snapshots.
+/// Returns an updated ViolationAgeSummary.
+pub fn compute_violation_age(
+    current_violations: &[CouplingViolation],
+    historical_violation_sets: &[Vec<(String, String)>], // Vec of (from_module, to_module) per snapshot
+) -> ViolationAgeSummary {
+    let mut new_count = 0;
+    let mut recent_count = 0;
+    let mut chronic_count = 0;
+
+    for v in current_violations {
+        let fingerprint = (v.from_module.clone(), v.to_module.clone());
+        let age = historical_violation_sets
+            .iter()
+            .filter(|snap_violations| snap_violations.contains(&fingerprint))
+            .count();
+
+        if age == 0 {
+            new_count += 1;
+        } else if age < 5 {
+            recent_count += 1;
+        } else {
+            chronic_count += 1;
+        }
+    }
+
+    ViolationAgeSummary {
+        new_count,
+        recent_count,
+        chronic_count,
     }
 }
 
@@ -1909,5 +2052,97 @@ mod tests {
             .find(|h| h.path == "src/c.rs")
             .unwrap();
         assert_eq!(c.blast_radius, 2);
+    }
+
+    #[test]
+    fn dependency_depth_linear_chain() {
+        // a -> b -> c: max depth = 2
+        let modules = vec![
+            make_module("a", "src/a.rs"),
+            make_module("b", "src/b.rs"),
+            make_module("c", "src/c.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a".to_string(),
+                to_module_id: "b".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "b".to_string(),
+                to_module_id: "c".to_string(),
+                line_number: 1,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        assert_eq!(result.max_depth, 2);
+        assert_eq!(result.critical_path.len(), 3);
+    }
+
+    #[test]
+    fn dependency_depth_no_deps() {
+        let modules = vec![make_module("a", "src/a.rs"), make_module("b", "src/b.rs")];
+        let result = audit(&modules, &[]);
+        assert_eq!(result.max_depth, 0);
+    }
+
+    #[test]
+    fn violation_age_all_new() {
+        let violations = vec![CouplingViolation {
+            dir_a: "src/a".to_string(),
+            dir_b: "src/b".to_string(),
+            from_module: "src/a/main.rs".to_string(),
+            to_module: "src/b/lib.rs".to_string(),
+            line_number: 1,
+            depth: 1,
+            weight: 1,
+            severity: 0.5,
+            is_circular: false,
+            cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+            weakest_link: None,
+            break_cost: 0,
+        }];
+        // No historical snapshots
+        let age = compute_violation_age(&violations, &[]);
+        assert_eq!(age.new_count, 1);
+        assert_eq!(age.recent_count, 0);
+        assert_eq!(age.chronic_count, 0);
+    }
+
+    #[test]
+    fn violation_age_chronic() {
+        let violations = vec![CouplingViolation {
+            dir_a: "src/a".to_string(),
+            dir_b: "src/b".to_string(),
+            from_module: "src/a/main.rs".to_string(),
+            to_module: "src/b/lib.rs".to_string(),
+            line_number: 1,
+            depth: 1,
+            weight: 1,
+            severity: 0.5,
+            is_circular: false,
+            cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+            weakest_link: None,
+            break_cost: 0,
+        }];
+        // Same violation in 6 historical snapshots -> chronic
+        let fp = vec![("src/a/main.rs".to_string(), "src/b/lib.rs".to_string())];
+        let historical: Vec<Vec<(String, String)>> = vec![
+            fp.clone(),
+            fp.clone(),
+            fp.clone(),
+            fp.clone(),
+            fp.clone(),
+            fp,
+        ];
+        let age = compute_violation_age(&violations, &historical);
+        assert_eq!(age.new_count, 0);
+        assert_eq!(age.chronic_count, 1);
     }
 }
