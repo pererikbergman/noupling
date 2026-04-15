@@ -113,6 +113,7 @@ fn chrono_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::ViolationAgeSummary;
 
     fn make_coupling(from: &str, to: &str) -> CouplingViolation {
         CouplingViolation {
@@ -152,6 +153,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -170,6 +174,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
@@ -193,6 +200,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
@@ -211,6 +221,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
@@ -235,6 +248,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
@@ -250,6 +266,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();

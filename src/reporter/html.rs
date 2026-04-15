@@ -751,6 +751,7 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 mod tests {
     use super::*;
     use crate::analyzer::CouplingViolation;
+    use crate::analyzer::ViolationAgeSummary;
     use crate::core::ModuleType;
 
     fn make_module(id: &str, path: &str) -> Module {
@@ -785,6 +786,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -808,6 +812,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -837,6 +844,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 
@@ -882,6 +892,9 @@ mod tests {
             cohesion: Vec::new(),
             total_xs: 0,
             independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
             suppressed_count: 0,
         };
 

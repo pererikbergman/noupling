@@ -534,6 +534,25 @@ fn run_audit(
     // Load suppressed count from scan
     result.suppressed_count = load_suppressed_count(path);
 
+    // Compute violation age from snapshot history
+    let all_snapshots = snap_repo.get_all()?;
+    let mut historical: Vec<Vec<(String, String)>> = Vec::new();
+    for s in &all_snapshots {
+        if s.id == snapshot.id {
+            continue;
+        }
+        let s_mods = module_repo.get_by_snapshot(&s.id)?;
+        let s_deps = dep_repo.get_by_snapshot(&s.id)?;
+        let s_result = analyzer::audit(&s_mods, &s_deps);
+        let fingerprints: Vec<(String, String)> = s_result
+            .violations
+            .iter()
+            .map(|v| (v.from_module.clone(), v.to_module.clone()))
+            .collect();
+        historical.push(fingerprints);
+    }
+    result.violation_age = analyzer::compute_violation_age(&result.violations, &historical);
+
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {
         result.filter_by_changed_files(&changed_files);
