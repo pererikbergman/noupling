@@ -706,6 +706,27 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Module independence
+    let low_independence: Vec<_> = result
+        .independence
+        .iter()
+        .filter(|m| m.independence < 0.7)
+        .take(10)
+        .collect();
+    if !low_independence.is_empty() {
+        output.push_str("\nLow Independence:\n");
+        for m in &low_independence {
+            output.push_str(&format!(
+                "  {:.0}% {} ({} files, {} internal, {} external)\n",
+                m.independence * 100.0,
+                m.dir,
+                m.file_count,
+                m.internal_deps,
+                m.external_deps
+            ));
+        }
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -921,6 +942,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -948,6 +970,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -972,6 +995,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -990,6 +1014,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1010,6 +1035,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1030,6 +1056,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1058,6 +1085,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1078,6 +1106,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 

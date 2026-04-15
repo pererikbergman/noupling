@@ -254,6 +254,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -280,6 +281,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -303,6 +305,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
 

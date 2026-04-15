@@ -73,6 +73,8 @@ pub struct AuditResult {
     pub cohesion: Vec<CohesionMetrics>,
     /// Total excess: sum of all imports that need removal to fix all violations.
     pub total_xs: usize,
+    /// Per-module independence scores (internal vs external dependency ratio).
+    pub independence: Vec<ModuleIndependence>,
     /// Number of imports suppressed by `noupling:ignore` comments.
     pub suppressed_count: usize,
 }
@@ -88,6 +90,21 @@ pub struct CohesionMetrics {
     pub internal_deps: usize,
     /// Cohesion score: internal_deps / (file_count * (file_count - 1)). Range 0.0 to 1.0.
     pub cohesion: f64,
+}
+
+/// Independence score for a top-level module/directory.
+#[derive(Debug, Clone)]
+pub struct ModuleIndependence {
+    /// Directory path.
+    pub dir: String,
+    /// Number of files in this module.
+    pub file_count: usize,
+    /// Dependencies where both source and target are within this module.
+    pub internal_deps: usize,
+    /// Dependencies where source is in this module but target is outside.
+    pub external_deps: usize,
+    /// Independence score: internal / (internal + external). Range 0.0 to 1.0.
+    pub independence: f64,
 }
 
 /// A violation of a custom dependency rule.
@@ -573,6 +590,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            independence: Vec::new(),
             suppressed_count: 0,
         };
     }
@@ -854,6 +872,57 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         .collect();
     cohesion.sort_by(|a, b| a.cohesion.partial_cmp(&b.cohesion).unwrap());
 
+    // Compute per-module independence (top-level directories)
+    let mut top_dirs: FxHashMap<String, FxHashSet<&str>> = FxHashMap::default();
+    for module in modules {
+        // Get the first path component as the top-level directory
+        let top = module
+            .path
+            .split('/')
+            .next()
+            .unwrap_or(&module.path)
+            .to_string();
+        // Only group if there's depth (file is not at root)
+        if module.path.contains('/') {
+            top_dirs.entry(top).or_default().insert(module.id.as_str());
+        }
+    }
+
+    let mut independence: Vec<ModuleIndependence> = top_dirs
+        .iter()
+        .filter(|(_, files)| files.len() >= 2)
+        .map(|(dir, files)| {
+            let internal = dependencies
+                .iter()
+                .filter(|d| {
+                    files.contains(d.from_module_id.as_str())
+                        && files.contains(d.to_module_id.as_str())
+                })
+                .count();
+            let external = dependencies
+                .iter()
+                .filter(|d| {
+                    files.contains(d.from_module_id.as_str())
+                        && !files.contains(d.to_module_id.as_str())
+                })
+                .count();
+            let total = internal + external;
+            let score = if total > 0 {
+                internal as f64 / total as f64
+            } else {
+                1.0
+            };
+            ModuleIndependence {
+                dir: dir.clone(),
+                file_count: files.len(),
+                internal_deps: internal,
+                external_deps: external,
+                independence: score,
+            }
+        })
+        .collect();
+    independence.sort_by(|a, b| a.independence.partial_cmp(&b.independence).unwrap());
+
     // Calculate total XS: sum of weights for coupling + break_cost for circular
     let total_xs: usize = violations
         .iter()
@@ -875,6 +944,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         layer_violations: Vec::new(),
         cohesion,
         total_xs,
+        independence,
         suppressed_count: 0,
     }
 }
@@ -1582,5 +1652,87 @@ mod tests {
         let result = audit_modules(&modules, &deps, &configs);
         assert!(result.module_results.is_empty());
         assert_eq!(result.overall_score, 100.0);
+    }
+
+    #[test]
+    fn independence_fully_internal() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+        ];
+        let deps = vec![Dependency {
+            from_module_id: "a1".to_string(),
+            to_module_id: "a2".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let app = result.independence.iter().find(|m| m.dir == "app");
+        assert!(app.is_some());
+        let app = app.unwrap();
+        assert_eq!(app.internal_deps, 1);
+        assert_eq!(app.external_deps, 0);
+        assert!((app.independence - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn independence_mixed_deps() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+            make_module("l1", "lib/core.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "a2".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "l1".to_string(),
+                line_number: 2,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        let app = result.independence.iter().find(|m| m.dir == "app");
+        assert!(app.is_some());
+        let app = app.unwrap();
+        assert_eq!(app.internal_deps, 1);
+        assert_eq!(app.external_deps, 1);
+        assert!((app.independence - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn independence_sorted_lowest_first() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+            make_module("l1", "lib/core.rs"),
+            make_module("l2", "lib/helper.rs"),
+        ];
+        let deps = vec![
+            // app: 1 internal, 1 external = 0.5
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "a2".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "l1".to_string(),
+                line_number: 2,
+            },
+            // lib: 1 internal, 0 external = 1.0
+            Dependency {
+                from_module_id: "l1".to_string(),
+                to_module_id: "l2".to_string(),
+                line_number: 1,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        assert_eq!(result.independence.len(), 2);
+        // Sorted lowest first
+        assert_eq!(result.independence[0].dir, "app");
+        assert_eq!(result.independence[1].dir, "lib");
     }
 }
