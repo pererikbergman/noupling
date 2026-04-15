@@ -35,39 +35,39 @@
       <h2>v0.3.0 &mdash; The Architecture-Aware Release</h2>
       <div class="date">April 2026</div>
 
-      <h3><span class="tag tag-feat">feat</span> Monorepo support (#84)</h3>
+      <h3><span class="tag tag-feat">feat</span> Monorepo support (<a href="https://github.com/pererikbergman/noupling/issues/84">#84</a>)</h3>
       <p><strong>The friction:</strong> Large codebases with multiple modules (app, lib-core, lib-network) were analyzed as a single blob. A coupling violation in <code>lib-core</code> dragged down the score for the entire repo, making the number meaningless for teams that owned individual modules.</p>
       <p><strong>The implementation:</strong> Each module defined in <code>settings.json</code> gets independent D_acc computation, BFS coupling detection, and cycle finding. Cross-module imports are validated against a declared <code>depends_on</code> graph. The overall score is a weighted average by file count.</p>
       <p><strong>The ripple effect:</strong> Teams can now own their module's health score independently. The <code>--module</code> flag lets CI pipelines gate on individual modules, and cross-module violations make implicit dependencies explicit.</p>
 
-      <h3><span class="tag tag-feat">feat</span> Inline suppression (#73)</h3>
+      <h3><span class="tag tag-feat">feat</span> Inline suppression (<a href="https://github.com/pererikbergman/noupling/issues/73">#73</a>)</h3>
       <p><strong>The friction:</strong> Some coupling is intentional. A data layer importing a domain entity for mapping is architecturally correct in many patterns, but noupling flagged it. Teams had no escape hatch short of disabling the tool.</p>
       <p><strong>The implementation:</strong> <code>// noupling:ignore</code> on the import line (or the line above) excludes that dependency from analysis. Works with <code>//</code>, <code>#</code>, and <code>--</code> comment styles. The suppressed count is tracked and reported so suppressions don't become invisible.</p>
       <p><strong>The ripple effect:</strong> Teams can adopt noupling incrementally without false-positive friction, while the suppressed count prevents <code>noupling:ignore</code> from becoming the new <code>@SuppressWarnings("all")</code>.</p>
 
-      <h3><span class="tag tag-feat">feat</span> XS metric &mdash; weakest link analysis (#112)</h3>
+      <h3><span class="tag tag-feat">feat</span> XS metric &mdash; weakest link analysis (<a href="https://github.com/pererikbergman/noupling/issues/112">#112</a>)</h3>
       <p><strong>The friction:</strong> Circular dependencies were detected and scored, but the output didn't answer the practical question: "which import should I remove first?" Teams saw a cycle of order 5 and didn't know where to start.</p>
       <p><strong>The implementation:</strong> For each circular dependency, track import counts per hop. The hop with the fewest imports is the <strong>weakest link</strong>&mdash;the cheapest edge to cut. <code>total_xs</code> sums all imports needing removal across all violations.</p>
       <p><strong>The ripple effect:</strong> Refactoring is now prioritizable. A cycle with break cost 2 is a 10-minute fix. One with break cost 128 is a planned effort. The HTML report shows per-hop XS counts in expandable details.</p>
 
-      <h3><span class="tag tag-feat">feat</span> Architectural layer enforcement (#92, #110)</h3>
+      <h3><span class="tag tag-feat">feat</span> Architectural layer enforcement (<a href="https://github.com/pererikbergman/noupling/issues/92">#92</a>, <a href="https://github.com/pererikbergman/noupling/issues/110">#110</a>)</h3>
       <p><strong>The friction:</strong> Clean architecture projects (presentation &rarr; domain &rarr; data) had dozens of "violations" that were actually correct downward dependencies. The noise made real violations invisible.</p>
       <p><strong>The implementation:</strong> Define ordered layers in <code>settings.json</code>. Dependencies flowing downward are suppressed from coupling violations. Upward dependencies (data &rarr; presentation) are flagged as both coupling and layer violations.</p>
 
-      <h3><span class="tag tag-feat">feat</span> Custom dependency rules (#91)</h3>
+      <h3><span class="tag tag-feat">feat</span> Custom dependency rules (<a href="https://github.com/pererikbergman/noupling/issues/91">#91</a>)</h3>
       <p>Glob-based allow/forbid rules for specific import patterns. Enforce boundaries like "UI must not import data layer directly" with custom messages.</p>
 
-      <h3><span class="tag tag-feat">feat</span> Per-directory cohesion scoring (#64)</h3>
+      <h3><span class="tag tag-feat">feat</span> Per-directory cohesion scoring (<a href="https://github.com/pererikbergman/noupling/issues/64">#64</a>)</h3>
       <p>Measures how much files within a directory depend on each other. Low cohesion flags directories that group unrelated code&mdash;candidates for splitting.</p>
 
       <h3>Also in this release:</h3>
       <ul>
-        <li><span class="tag tag-feat">feat</span> GitHub PR comment bot workflow (#80)</li>
-        <li><span class="tag tag-feat">feat</span> Trend command for score history (#66)</li>
-        <li><span class="tag tag-feat">feat</span> Version string in all reports (#101)</li>
+        <li><span class="tag tag-feat">feat</span> GitHub PR comment bot workflow (<a href="https://github.com/pererikbergman/noupling/issues/80">#80</a>)</li>
+        <li><span class="tag tag-feat">feat</span> Trend command for score history (<a href="https://github.com/pererikbergman/noupling/issues/66">#66</a>)</li>
+        <li><span class="tag tag-feat">feat</span> Version string in all reports (<a href="https://github.com/pererikbergman/noupling/issues/101">#101</a>)</li>
         <li><span class="tag tag-refactor">refactor</span> Expandable cycle paths with CSS triangles in HTML report</li>
         <li><span class="tag tag-fix">fix</span> Filter hotspot lines from PR comment violations section</li>
-        <li><span class="tag tag-docs">docs</span> Comprehensive documentation site (#115)</li>
+        <li><span class="tag tag-docs">docs</span> Comprehensive documentation site (<a href="https://github.com/pererikbergman/noupling/issues/115">#115</a>)</li>
       </ul>
     </article>
 
