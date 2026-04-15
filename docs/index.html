@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>noupling — Detect coupling violations and circular dependencies</title>
+  <meta name="description" content="noupling scans your codebase, builds a dependency graph from actual imports, and quantifies how coupled your modules are. 11 languages. Tree-sitter parsing. One health score.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container-wide">
+    <a href="index.html" class="logo"><span>nou</span>pling</a>
+    <ul>
+      <li><a href="index.html" class="active">Home</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="changelog.html">Changelog</a></li>
+      <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
+      <li><span class="badge">v0.3.0</span></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ── Hero ─────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="container">
+      <h1>Most linters check style.<br><em>This one checks architecture.</em></h1>
+      <p class="subtitle">
+        noupling scans your project, builds a dependency graph from actual import statements,
+        and gives you a single health score you can track over time and gate in CI.
+      </p>
+      <div class="actions">
+        <a href="docs.html" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/pererikbergman/noupling" class="btn btn-secondary">View on GitHub</a>
+      </div>
+
+      <div class="hero-code">
+<pre><code><span class="comment"># Install</span>
+<span class="cmd">brew</span> tap pererikbergman/noupling
+<span class="cmd">brew</span> install noupling
+
+<span class="comment"># Scan, audit, report</span>
+<span class="cmd">noupling</span> scan <span class="path">.</span>
+<span class="cmd">noupling</span> audit <span class="path">.</span> <span class="flag">--fail-below</span> <span class="path">80</span>
+<span class="cmd">noupling</span> report <span class="path">.</span> <span class="flag">--format</span> <span class="path">html</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ─────────────────────────────────────── -->
+  <section class="features">
+    <div class="container">
+      <h2>Architecture, quantified</h2>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="icon">&#128269;</span>
+          <h3>Detect coupling violations</h3>
+          <p>Sibling modules that depend on each other break architectural boundaries. noupling finds every one, scores severity by depth, and tells you exactly which import to fix.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon">&#128260;</span>
+          <h3>Find circular dependencies</h3>
+          <p>Dependency chains that form loops prevent independent development. The XS metric identifies the weakest link in every cycle&mdash;the cheapest edge to cut.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon">&#128200;</span>
+          <h3>One health score (0&ndash;100)</h3>
+          <p>Track architectural drift across snapshots. Gate CI with <code>--fail-below</code>. Drill into interactive HTML reports to see exactly where coupling lives.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon">&#9889;</span>
+          <h3>11 languages, one tool</h3>
+          <p>Tree-sitter parses actual ASTs&mdash;no regex. From Kotlin to Rust to Python, the same analysis runs everywhere. Rayon parallelizes scanning across all cores.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon">&#128736;</span>
+          <h3>Configurable layers &amp; rules</h3>
+          <p>Define architectural layers so downward dependencies aren't flagged. Add custom rules to forbid specific import patterns. Suppress known violations inline.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon">&#128230;</span>
+          <h3>7 report formats</h3>
+          <p>JSON, XML, Markdown, interactive HTML, SonarCloud, Mermaid, and GraphViz DOT. Integrate with any CI system or documentation pipeline.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Before / After ───────────────────────────────── -->
+  <section class="comparison">
+    <div class="container">
+      <h2>Before and after</h2>
+      <p class="lead">The shift from hoping your architecture holds to knowing it does.</p>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Coupled State</th>
+            <th>Noupled State</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Architecture review</strong></td>
+            <td class="text-red">Manual, inconsistent, happens after the damage</td>
+            <td class="text-green">Automated on every PR, quantified, gated</td>
+          </tr>
+          <tr>
+            <td><strong>Circular dependencies</strong></td>
+            <td class="text-red">Discovered during a painful refactor</td>
+            <td class="text-green">Caught at commit time with exact break cost</td>
+          </tr>
+          <tr>
+            <td><strong>New developer impact</strong></td>
+            <td class="text-red">"I touched one file and 40 tests broke"</td>
+            <td class="text-green">Boundaries are explicit and enforced</td>
+          </tr>
+          <tr>
+            <td><strong>Architecture health</strong></td>
+            <td class="text-red">A gut feeling that degrades quarterly</td>
+            <td class="text-green">A number: 82.3/100, trending up since March</td>
+          </tr>
+          <tr>
+            <td><strong>Incremental adoption</strong></td>
+            <td class="text-red">All-or-nothing rewrite fantasies</td>
+            <td class="text-green">Baseline existing debt, only fail on new violations</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Languages ────────────────────────────────────── -->
+  <section class="languages">
+    <div class="container">
+      <h2>Supported languages</h2>
+      <div class="lang-grid">
+        <div class="lang-tag">C# <small>.cs</small></div>
+        <div class="lang-tag">Go <small>.go</small></div>
+        <div class="lang-tag">Haskell <small>.hs</small></div>
+        <div class="lang-tag">Java <small>.java</small></div>
+        <div class="lang-tag">JavaScript <small>.js .jsx</small></div>
+        <div class="lang-tag">Kotlin <small>.kt .kts</small></div>
+        <div class="lang-tag">Python <small>.py</small></div>
+        <div class="lang-tag">Rust <small>.rs</small></div>
+        <div class="lang-tag">Swift <small>.swift</small></div>
+        <div class="lang-tag">TypeScript <small>.ts .tsx</small></div>
+        <div class="lang-tag">Zig <small>.zig</small></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <p>noupling &middot; <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE">MIT License</a> &middot; Built with Rust &middot; Parsed by Tree-sitter</p>
+  </div>
+</footer>
+
+</body>
+</html>
