@@ -402,7 +402,13 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
                 let wl_attr = cycle
                     .weakest_link
                     .as_ref()
-                    .map(|wl| format!(" weakestLink=\"{}\" breakCost=\"{}\"", xml_escape(wl), cycle.break_cost))
+                    .map(|wl| {
+                        format!(
+                            " weakestLink=\"{}\" breakCost=\"{}\"",
+                            xml_escape(wl),
+                            cycle.break_cost
+                        )
+                    })
                     .unwrap_or_default();
                 xml.push_str(&format!(
                     "      <cycle order=\"{}\" severity=\"{:.2}\"{}>\n",
@@ -834,7 +840,10 @@ mod tests {
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
-            cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+            weakest_link: None,
+            break_cost: 0,
             line_number: 0,
             weight: 0,
         }
@@ -850,7 +859,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -875,7 +885,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -897,7 +908,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -913,7 +925,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let text = format_text(&result);
@@ -931,7 +944,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let text = format_text(&result);
@@ -949,7 +963,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -975,7 +990,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -993,7 +1009,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

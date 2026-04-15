@@ -127,7 +127,10 @@ mod tests {
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
-            cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+            weakest_link: None,
+            break_cost: 0,
         }
     }
 
@@ -146,7 +149,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         // Save baseline
@@ -161,7 +165,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
@@ -181,7 +186,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -196,7 +202,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
@@ -217,7 +224,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -229,7 +237,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);

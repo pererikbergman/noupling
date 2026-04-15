@@ -694,10 +694,7 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
             ));
         } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
             let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-            full_paths.push_str(&format!(
-                "<strong>{}</strong>: {}<br>",
-                dir_short, to_file
-            ));
+            full_paths.push_str(&format!("<strong>{}</strong>: {}<br>", dir_short, to_file));
         } else {
             full_paths.push_str(&format!("<strong>{}</strong><br>", dir_short));
         }
@@ -785,7 +782,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -805,7 +803,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -831,7 +830,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -861,7 +861,10 @@ mod tests {
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),
-                cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
+                cycle_order: 0,
+                cycle_hop_counts: Vec::new(),
+                weakest_link: None,
+                break_cost: 0,
                 line_number: 0,
                 weight: 0,
             }],
@@ -870,7 +873,8 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
