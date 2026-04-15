@@ -28,6 +28,9 @@ pub fn resolve_import(
         "java" => resolve_java_import(import_path, known_paths),
         "js" | "jsx" => resolve_typescript_import(import_path, source_file, known_paths),
         "py" => resolve_python_import(import_path, source_file, known_paths),
+        "dart" => resolve_dart_import(import_path, source_file, known_paths),
+        "php" => resolve_php_import(import_path, source_file, known_paths),
+        "rb" => resolve_ruby_import(import_path, source_file, known_paths),
         "zig" => resolve_zig_import(import_path, source_file, known_paths),
         _ => None,
     }
@@ -592,4 +595,76 @@ mod tests {
         let result = resolve_import("../components/Button", "src/pages/Home.ts", root, &paths);
         assert_eq!(result, Some("src/components/Button.tsx".to_string()));
     }
+}
+
+fn resolve_dart_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    if import_path.starts_with("package:") {
+        let after_package = import_path.strip_prefix("package:")?;
+        let after_name = after_package.split_once('/')?.1;
+        let candidate = format!("lib/{}", after_name);
+        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+            return Some(found.clone());
+        }
+        return known_paths
+            .iter()
+            .find(|p| p.ends_with(after_name))
+            .cloned();
+    }
+
+    let source_dir = Path::new(source_file).parent()?;
+    let resolved = normalize_path(&source_dir.join(import_path).to_string_lossy());
+    known_paths
+        .iter()
+        .find(|p| **p == resolved || p.ends_with(&resolved))
+        .cloned()
+}
+
+fn resolve_php_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    let as_path = if !import_path.ends_with(".php") && import_path.contains('/') {
+        format!("{}.php", import_path)
+    } else {
+        import_path.to_string()
+    };
+
+    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&as_path)) {
+        return Some(found.clone());
+    }
+
+    let source_dir = Path::new(source_file).parent()?;
+    let resolved = normalize_path(&source_dir.join(import_path).to_string_lossy());
+    known_paths
+        .iter()
+        .find(|p| **p == resolved || p.ends_with(&resolved))
+        .cloned()
+}
+
+fn resolve_ruby_import(
+    import_path: &str,
+    source_file: &str,
+    known_paths: &[String],
+) -> Option<String> {
+    let with_ext = if import_path.ends_with(".rb") {
+        import_path.to_string()
+    } else {
+        format!("{}.rb", import_path)
+    };
+
+    let source_dir = Path::new(source_file).parent()?;
+    let resolved = normalize_path(&source_dir.join(&with_ext).to_string_lossy());
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| **p == resolved || p.ends_with(&resolved))
+    {
+        return Some(found.clone());
+    }
+
+    known_paths.iter().find(|p| p.ends_with(&with_ext)).cloned()
 }

@@ -614,6 +614,191 @@ fn collect_zig_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<
     }
 }
 
+// ── Dart parser ──
+
+pub fn parse_dart_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_dart::LANGUAGE.into())
+        .expect("Failed to set Dart language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_dart_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_dart_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
+    if node.kind() == "import_or_export" {
+        let line_number = (node.start_position().row + 1) as i32;
+        // The string literal is nested: import_or_export > library_import > import_specification > configurable_uri > uri > string_literal
+        if let Some(text) = find_first_string_literal(node, source) {
+            let path = text.trim_matches('\'').trim_matches('"').to_string();
+            if !path.starts_with("dart:") && !path.is_empty() {
+                imports.push(ImportEntry { path, line_number });
+            }
+        }
+        return;
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_dart_imports(child, source, imports);
+    }
+}
+
+fn find_first_string_literal(node: tree_sitter::Node, source: &str) -> Option<String> {
+    if node.kind() == "string_literal" {
+        return Some(node_text(node, source));
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if let Some(text) = find_first_string_literal(child, source) {
+            return Some(text);
+        }
+    }
+    None
+}
+
+// ── PHP parser ──
+
+pub fn parse_php_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_php::LANGUAGE_PHP.into())
+        .expect("Failed to set PHP language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_php_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_php_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
+    match node.kind() {
+        "namespace_use_declaration" => {
+            let line_number = (node.start_position().row + 1) as i32;
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "namespace_use_clause" {
+                    let text = node_text(child, source).trim().replace('\\', "/");
+                    if !text.is_empty() {
+                        imports.push(ImportEntry {
+                            path: text,
+                            line_number,
+                        });
+                    }
+                } else if child.kind() == "namespace_use_group" {
+                    let mut group_cursor = child.walk();
+                    for group_child in child.children(&mut group_cursor) {
+                        if group_child.kind() == "namespace_use_clause" {
+                            let text = node_text(group_child, source).trim().replace('\\', "/");
+                            if !text.is_empty() {
+                                imports.push(ImportEntry {
+                                    path: text,
+                                    line_number,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "include_expression"
+        | "include_once_expression"
+        | "require_expression"
+        | "require_once_expression" => {
+            let line_number = (node.start_position().row + 1) as i32;
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "string" || child.kind() == "encapsed_string" {
+                    let text = node_text(child, source);
+                    let path = text.trim_matches('\'').trim_matches('"').to_string();
+                    if !path.is_empty() {
+                        imports.push(ImportEntry { path, line_number });
+                    }
+                }
+            }
+        }
+        _ => {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                collect_php_imports(child, source, imports);
+            }
+        }
+    }
+}
+
+// ── Ruby parser ──
+
+pub fn parse_ruby_imports(source: &str) -> Vec<ImportEntry> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_ruby::LANGUAGE.into())
+        .expect("Failed to set Ruby language");
+
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    let mut imports = Vec::new();
+    collect_ruby_imports(tree.root_node(), source, &mut imports);
+    imports
+}
+
+fn collect_ruby_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
+    if node.kind() == "call" {
+        let mut cursor = node.walk();
+        let mut method_name = String::new();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" && method_name.is_empty() {
+                method_name = node_text(child, source);
+            }
+        }
+        if method_name == "require" || method_name == "require_relative" || method_name == "load" {
+            let line_number = (node.start_position().row + 1) as i32;
+            let mut cursor2 = node.walk();
+            for child in node.children(&mut cursor2) {
+                if child.kind() == "argument_list" {
+                    let mut arg_cursor = child.walk();
+                    for arg in child.children(&mut arg_cursor) {
+                        if arg.kind() == "string" {
+                            let text = node_text(arg, source);
+                            let path = text.trim_matches('\'').trim_matches('"').to_string();
+                            if !path.is_empty() {
+                                imports.push(ImportEntry { path, line_number });
+                            }
+                            return;
+                        }
+                    }
+                }
+                if child.kind() == "string" {
+                    let text = node_text(child, source);
+                    let path = text.trim_matches('\'').trim_matches('"').to_string();
+                    if !path.is_empty() {
+                        imports.push(ImportEntry { path, line_number });
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_ruby_imports(child, source, imports);
+    }
+}
+
 fn node_text(node: tree_sitter::Node, source: &str) -> String {
     source[node.byte_range()].to_string()
 }
@@ -1031,6 +1216,74 @@ mod tests {
     #[test]
     fn zig_handles_empty_source() {
         let imports = parse_zig_imports("");
+        assert!(imports.is_empty());
+    }
+
+    // ── Dart parser ──
+
+    #[test]
+    fn dart_parses_imports() {
+        let source = "import 'package:flutter/material.dart';\nimport 'src/utils.dart';\n";
+        let imports = parse_dart_imports(source);
+        assert_eq!(imports.len(), 2);
+    }
+
+    #[test]
+    fn dart_skips_stdlib() {
+        let source = "import 'dart:core';\nimport 'dart:async';\nimport 'src/model.dart';\n";
+        let imports = parse_dart_imports(source);
+        assert_eq!(imports.len(), 1);
+    }
+
+    #[test]
+    fn dart_handles_empty_source() {
+        let imports = parse_dart_imports("");
+        assert!(imports.is_empty());
+    }
+
+    // ── PHP parser ──
+
+    #[test]
+    fn php_parses_use_statement() {
+        let source = "<?php\nuse App\\Models\\User;\nuse App\\Services\\AuthService;\n";
+        let imports = parse_php_imports(source);
+        assert!(imports.len() >= 2, "got {} imports", imports.len());
+    }
+
+    #[test]
+    fn php_parses_require() {
+        let source = "<?php\nrequire_once 'vendor/autoload.php';\nrequire 'config.php';\n";
+        let imports = parse_php_imports(source);
+        assert!(imports.len() >= 2, "got {} imports", imports.len());
+    }
+
+    #[test]
+    fn php_handles_empty_source() {
+        let imports = parse_php_imports("");
+        assert!(imports.is_empty());
+    }
+
+    // ── Ruby parser ──
+
+    #[test]
+    fn ruby_parses_require() {
+        let source = "require 'json'\nrequire 'net/http'\n";
+        let imports = parse_ruby_imports(source);
+        assert_eq!(imports.len(), 2);
+        assert_eq!(imports[0].path, "json");
+        assert_eq!(imports[1].path, "net/http");
+    }
+
+    #[test]
+    fn ruby_parses_require_relative() {
+        let source = "require_relative 'lib/utils'\nrequire_relative '../models/user'\n";
+        let imports = parse_ruby_imports(source);
+        assert_eq!(imports.len(), 2);
+    }
+
+    #[test]
+    fn ruby_handles_empty_source() {
+        let imports = parse_ruby_imports("");
         assert!(imports.is_empty());
     }
 }
