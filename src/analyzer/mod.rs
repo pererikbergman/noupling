@@ -141,6 +141,53 @@ impl AuditResult {
         self.recalculate_score();
     }
 
+    /// Remove coupling violations that follow the defined layer direction (downward).
+    /// Keeps circular violations and violations where modules have no layer assigned.
+    pub fn filter_by_layers(&mut self, layers: &[crate::settings::Layer]) {
+        if layers.is_empty() {
+            return;
+        }
+
+        // Build layer matchers and index
+        let layer_matchers: Vec<(usize, globset::GlobMatcher)> = layers
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| {
+                globset::Glob::new(&l.pattern)
+                    .ok()
+                    .map(|g| (i, g.compile_matcher()))
+            })
+            .collect();
+
+        let get_layer = |path: &str| -> Option<usize> {
+            for (idx, matcher) in &layer_matchers {
+                if matcher.is_match(path) {
+                    return Some(*idx);
+                }
+            }
+            None
+        };
+
+        self.violations.retain(|v| {
+            // Always keep circular violations
+            if v.is_circular {
+                return true;
+            }
+
+            let from_layer = get_layer(&v.from_module);
+            let to_layer = get_layer(&v.to_module);
+
+            match (from_layer, to_layer) {
+                // Both have layers: suppress downward deps (from_idx < to_idx)
+                // Keep: same layer (from_idx == to_idx) or upward (from_idx > to_idx)
+                (Some(from_idx), Some(to_idx)) => from_idx >= to_idx,
+                // One or both unassigned: keep the violation
+                _ => true,
+            }
+        });
+        self.recalculate_score();
+    }
+
     /// Remove violations below the given severity threshold and recalculate the score.
     pub fn filter_by_severity(&mut self, minimum_severity: f64) {
         // Circular violations are always kept regardless of severity
