@@ -17,7 +17,7 @@
       <li><a href="docs.html" class="active">Docs</a></li>
       <li><a href="changelog.html">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.4.0</span></li>
+      <li><span class="badge">v0.4.1</span></li>
     </ul>
   </div>
 </nav>
@@ -140,7 +140,7 @@ noupling audit . --fail-below 80</code></pre>
       <h2 id="cmd-report">report</h2>
       <p>Generate a report file from the latest snapshot.</p>
 <pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME]</code></pre>
-      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>. See <a href="#report-formats">Report Formats</a>.</p>
+      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>. See <a href="#report-formats">Report Formats</a>.</p>
 
 
       <h2 id="cmd-trend">trend</h2>
@@ -303,6 +303,7 @@ noupling audit .</code></pre>
           <tr><td><code>sonar</code></td><td><code>.noupling/noupling-sonar.json</code></td><td>SonarCloud/SonarQube integration</td></tr>
           <tr><td><code>mermaid</code></td><td><code>.noupling/report.mermaid</code></td><td>Embed in Markdown, quick overview</td></tr>
           <tr><td><code>dot</code></td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
+          <tr><td><code>bundle</code></td><td><code>.noupling/bundle.html</code></td><td>Zoomable sunburst with dependency edges</td></tr>
         </tbody>
       </table>
 

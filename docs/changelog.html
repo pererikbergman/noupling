@@ -17,7 +17,7 @@
       <li><a href="docs.html">Docs</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.4.0</span></li>
+      <li><span class="badge">v0.4.1</span></li>
     </ul>
   </div>
 </nav>
@@ -29,6 +29,17 @@
     <p class="lead">
       Not a commit log. A narrative of architectural decisions&mdash;what broke, what was built, and why each change exists.
     </p>
+
+    <!-- ── v0.4.1 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.4.1 &mdash; The Visualization Release</h2>
+      <div class="date">April 2026</div>
+
+      <h3><span class="tag tag-feat">feat</span> Sunburst dependency visualization (<a href="https://github.com/pererikbergman/noupling/issues/123">#123</a>)</h3>
+      <p><strong>The friction:</strong> Existing reports showed violations as lists and tables. Teams couldn't see the overall shape of their architecture&mdash;where coupling clusters lived, how dependencies flowed between layers, or which areas were cleanly separated.</p>
+      <p><strong>The implementation:</strong> A zoomable D3.js sunburst where concentric rings represent the directory hierarchy, color-coded by health score. Curved dependency edges connect inner ring segments, aggregated from all children underneath (using D_acc). Click any segment to zoom in with a smooth 750ms animated transition. Click the center to zoom back out. Edge hover tooltips show the exact from/to connection and import count.</p>
+      <p><strong>The ripple effect:</strong> Architecture becomes visible at a glance. Dense edge bundles between two areas immediately reveal coupling hotspots. The drill-down lets teams explore from the 10,000-foot view down to individual directory pairs.</p>
+    </article>
 
     <!-- ── v0.4.0 ─────────────────────────────────────── -->
     <article class="release">
