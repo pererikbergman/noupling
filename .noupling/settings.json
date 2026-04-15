@@ -1,0 +1,59 @@
+{
+  "thresholds": {
+    "score_green": 90.0,
+    "score_yellow": 70.0,
+    "critical_severity": 0.5,
+    "minimum_severity": 0.2,
+    "hotspot_fan_in": 10,
+    "min_cohesion": 0.1
+  },
+  "ignore_patterns": [
+    "**/.git/**",
+    "**/target/**",
+    "**/node_modules/**",
+    "**/.noupling/**",
+    "**/.agent/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/.gradle/**",
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "**/zig-cache/**",
+    "**/zig-out/**",
+    "**/generated/**",
+    "**/.idea/**",
+    "**/.vscode/**",
+    "**/examples/**",
+    "**/tests/**",
+    "**/docs/**"
+  ],
+  "source_extensions": [
+    "rs",
+    "kt",
+    "kts",
+    "ts",
+    "tsx",
+    "swift",
+    "cs",
+    "go",
+    "hs",
+    "java",
+    "js",
+    "jsx",
+    "py",
+    "dart",
+    "php",
+    "rb",
+    "zig"
+  ],
+  "dependency_rules": [],
+  "layers": [
+    { "name": "reporter", "pattern": "**/reporter/**" },
+    { "name": "scanner", "pattern": "**/scanner/**" },
+    { "name": "storage", "pattern": "**/storage/**" },
+    { "name": "analyzer", "pattern": "**/analyzer/**" },
+    { "name": "core", "pattern": "**/core/**" }
+  ],
+  "allow_inline_suppression": true,
+  "modules": []
+}
