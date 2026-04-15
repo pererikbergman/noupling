@@ -148,6 +148,10 @@ pub enum Commands {
         /// Show only the last N snapshots
         #[arg(long, default_value = "20")]
         last: usize,
+
+        /// Show per-module score trends instead of overall score
+        #[arg(long)]
+        by_module: bool,
     },
 
     /// Generate a report file from the latest snapshot's audit results.
