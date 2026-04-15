@@ -83,6 +83,15 @@ fn load_diff_meta(path: &str) -> Option<Vec<String>> {
     Some(files)
 }
 
+fn load_suppressed_count(path: &str) -> usize {
+    let meta_path = Path::new(path).join(".noupling").join("suppressed.json");
+    let content = std::fs::read_to_string(&meta_path).ok();
+    content
+        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+        .and_then(|v| v["suppressed_count"].as_u64())
+        .unwrap_or(0) as usize
+}
+
 fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
     match action {
         "install" => hook::install(Path::new(path)),
@@ -212,8 +221,24 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     println!("Created snapshot: {}", snapshot.id);
 
     // Always scan the full project (needed for dependency resolution)
-    let result = scanner::scan_project(project_path, &snapshot.id)?;
+    let scan_settings = settings::Settings::load(project_path)?;
+    let result = scanner::scan_project(
+        project_path,
+        &snapshot.id,
+        scan_settings.allow_inline_suppression,
+    )?;
     println!("Discovered {} modules", result.modules.len());
+    if result.suppressed_count > 0 {
+        println!(
+            "{} import{} suppressed by noupling:ignore comments",
+            result.suppressed_count,
+            if result.suppressed_count == 1 {
+                ""
+            } else {
+                "s"
+            }
+        );
+    }
 
     let module_repo = storage::repository::ModuleRepository::new(&db.conn);
     module_repo.bulk_insert(&result.modules)?;
@@ -235,6 +260,15 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     let dep_repo = storage::repository::DependencyRepository::new(&db.conn);
     dep_repo.bulk_insert(&unique_deps)?;
     println!("Found {} dependencies", unique_deps.len());
+
+    // Store suppressed count for audit/report
+    let suppressed_path = project_path.join(".noupling").join("suppressed.json");
+    if result.suppressed_count > 0 {
+        let meta = serde_json::json!({ "suppressed_count": result.suppressed_count });
+        std::fs::write(&suppressed_path, serde_json::to_string(&meta)?)?;
+    } else {
+        let _ = std::fs::remove_file(&suppressed_path);
+    }
 
     // Store diff metadata alongside the snapshot
     if let Some(ref files) = changed_files {
@@ -319,6 +353,9 @@ fn run_audit(
     result.layer_violations =
         analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
 
+    // Load suppressed count from scan
+    result.suppressed_count = load_suppressed_count(path);
+
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {
         result.filter_by_changed_files(&changed_files);
@@ -381,6 +418,9 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     );
     result.layer_violations =
         analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
+
+    // Load suppressed count from scan
+    result.suppressed_count = load_suppressed_count(path);
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {

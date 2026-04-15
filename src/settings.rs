@@ -26,6 +26,13 @@ pub struct Settings {
     /// Architectural layers (ordered top to bottom). Dependencies may only flow downward.
     #[serde(default)]
     pub layers: Vec<Layer>,
+    /// Whether `noupling:ignore` inline comments are allowed. Default: true.
+    #[serde(default = "default_allow_inline_suppression")]
+    pub allow_inline_suppression: bool,
+}
+
+fn default_allow_inline_suppression() -> bool {
+    true
 }
 
 /// An architectural layer. Dependencies may only flow downward (higher index = lower layer).
@@ -146,6 +153,7 @@ impl Default for Settings {
             source_extensions: default_source_extensions(),
             dependency_rules: Vec::new(),
             layers: Vec::new(),
+            allow_inline_suppression: default_allow_inline_suppression(),
         }
     }
 }

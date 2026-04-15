@@ -24,6 +24,7 @@ pub struct JsonReport {
     pub score: f64,
     pub total_modules: usize,
     pub total_xs: usize,
+    pub suppressed_count: usize,
     pub critical_violations: usize,
     pub total_circular: usize,
     pub total_coupling: usize,
@@ -191,6 +192,7 @@ impl JsonReport {
             score: result.score,
             total_modules: result.total_modules,
             total_xs: result.total_xs,
+            suppressed_count: result.suppressed_count,
             critical_violations,
             total_circular: circular.len(),
             total_coupling: coupling.len(),
@@ -607,6 +609,17 @@ pub fn format_text(result: &AuditResult) -> String {
             if result.total_xs == 1 { "" } else { "s" }
         ));
     }
+    if result.suppressed_count > 0 {
+        output.push_str(&format!(
+            "Suppressed: {} import{} via noupling:ignore\n",
+            result.suppressed_count,
+            if result.suppressed_count == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ));
+    }
 
     if !result.violations.is_empty() {
         output.push('\n');
@@ -861,6 +874,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -887,6 +901,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -910,6 +925,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -927,6 +943,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let text = format_text(&result);
@@ -946,6 +963,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let text = format_text(&result);
@@ -965,6 +983,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -992,6 +1011,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1011,6 +1031,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

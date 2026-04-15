@@ -254,6 +254,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let mermaid = format_mermaid(&modules, &result);
@@ -279,6 +280,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let dot = format_dot(&modules, &result);
@@ -301,6 +303,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let mermaid = format_mermaid(&modules, &result);
