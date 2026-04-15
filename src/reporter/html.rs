@@ -637,7 +637,7 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
         return String::new();
     }
 
-    // Short cycle display
+    // Short cycle display with file names
     let mut hops = String::new();
     for (i, dir) in v.cycle_path.iter().enumerate() {
         if i > 0 {
@@ -702,8 +702,7 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
     }
 
     format!(
-        "<span class=\"cycle-path\">{}</span><br>\
-        <details><summary class=\"hop-file\">Show full paths</summary>\
+        "<details><summary class=\"cycle-path\">{}</summary>\
         <div class=\"full-paths\">{}</div></details>",
         hops, full_paths
     )
