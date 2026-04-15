@@ -64,6 +64,9 @@ pub struct Thresholds {
     /// Modules with fan-in (incoming imports) above this are flagged as hotspots.
     #[serde(default = "default_hotspot_fan_in")]
     pub hotspot_fan_in: usize,
+    /// Directories with cohesion below this are flagged as low cohesion.
+    #[serde(default = "default_min_cohesion")]
+    pub min_cohesion: f64,
 }
 
 fn default_thresholds() -> Thresholds {
@@ -73,6 +76,7 @@ fn default_thresholds() -> Thresholds {
         critical_severity: default_critical_severity(),
         minimum_severity: default_minimum_severity(),
         hotspot_fan_in: default_hotspot_fan_in(),
+        min_cohesion: default_min_cohesion(),
     }
 }
 
@@ -90,6 +94,9 @@ fn default_minimum_severity() -> f64 {
 }
 fn default_hotspot_fan_in() -> usize {
     10
+}
+fn default_min_cohesion() -> f64 {
+    0.1
 }
 
 fn default_ignore_patterns() -> Vec<String> {

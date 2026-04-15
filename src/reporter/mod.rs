@@ -643,6 +643,23 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Cohesion (low cohesion directories)
+    let low_cohesion: Vec<_> = result
+        .cohesion
+        .iter()
+        .filter(|c| c.cohesion < 0.1 && c.file_count >= 3)
+        .take(10)
+        .collect();
+    if !low_cohesion.is_empty() {
+        output.push_str("\nLow Cohesion:\n");
+        for c in &low_cohesion {
+            output.push_str(&format!(
+                "  {:.2} {} ({} files, {} internal deps)\n",
+                c.cohesion, c.dir, c.file_count, c.internal_deps
+            ));
+        }
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -808,6 +825,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -832,6 +850,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -853,6 +872,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -868,6 +888,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -885,6 +906,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -902,6 +924,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -927,6 +950,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -944,6 +968,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

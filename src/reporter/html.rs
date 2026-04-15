@@ -776,6 +776,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -795,6 +796,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -820,6 +822,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -858,6 +861,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
+            cohesion: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
