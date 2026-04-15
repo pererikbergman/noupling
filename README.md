@@ -205,6 +205,35 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
 | `source_extensions` | File types to scan | 14 extensions |
 
+### Architectural Layers
+
+Define layers to suppress coupling violations that follow the intended dependency direction:
+
+```json
+{
+  "layers": [
+    { "name": "presentation", "pattern": "**/ui/**" },
+    { "name": "domain", "pattern": "**/domain/**" },
+    { "name": "data", "pattern": "**/data/**" }
+  ]
+}
+```
+
+Dependencies may only flow **downward** (presentation -> domain -> data). Downward dependencies are not flagged as coupling violations. Upward dependencies (data -> presentation) are flagged as both coupling and layer violations.
+
+### Custom Dependency Rules
+
+Forbid specific dependency patterns:
+
+```json
+{
+  "dependency_rules": [
+    { "from": "**/ui/**", "to": "**/data/**", "allow": false,
+      "message": "UI must not depend on data layer directly" }
+  ]
+}
+```
+
 ---
 
 ## How It Works
