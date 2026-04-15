@@ -54,6 +54,8 @@ pub struct ModuleMetrics {
     pub fan_out: usize,
     /// Martin's Instability: fan_out / (fan_in + fan_out). Range 0.0 (stable) to 1.0 (unstable).
     pub instability: f64,
+    /// Number of modules transitively affected if this module changes.
+    pub blast_radius: usize,
 }
 
 /// The result of running an architectural audit on a project snapshot.
@@ -816,13 +818,40 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     let total_modules = modules.len();
     let score = (100.0 * (1.0 - sum_severity / total_modules as f64)).max(0.0);
 
-    // Compute hotspots (fan-in / fan-out per module)
+    // Compute hotspots (fan-in / fan-out / instability / blast radius per module)
     let mut fan_in: FxHashMap<&str, usize> = FxHashMap::default();
     let mut fan_out: FxHashMap<&str, usize> = FxHashMap::default();
+    let mut reverse_adj: FxHashMap<&str, FxHashSet<&str>> = FxHashMap::default();
     for dep in dependencies {
         *fan_in.entry(dep.to_module_id.as_str()).or_insert(0) += 1;
         *fan_out.entry(dep.from_module_id.as_str()).or_insert(0) += 1;
+        reverse_adj
+            .entry(dep.to_module_id.as_str())
+            .or_default()
+            .insert(dep.from_module_id.as_str());
     }
+
+    // BFS on reverse graph for blast radius
+    let blast_radius: FxHashMap<&str, usize> = modules
+        .iter()
+        .map(|m| {
+            let mut visited: FxHashSet<&str> = FxHashSet::default();
+            let mut queue: std::collections::VecDeque<&str> = std::collections::VecDeque::new();
+            queue.push_back(m.id.as_str());
+            visited.insert(m.id.as_str());
+            while let Some(current) = queue.pop_front() {
+                if let Some(dependents) = reverse_adj.get(current) {
+                    for &dep in dependents {
+                        if visited.insert(dep) {
+                            queue.push_back(dep);
+                        }
+                    }
+                }
+            }
+            (m.id.as_str(), visited.len().saturating_sub(1))
+        })
+        .collect();
+
     let mut hotspots: Vec<ModuleMetrics> = modules
         .iter()
         .map(|m| {
@@ -838,6 +867,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 } else {
                     0.0
                 },
+                blast_radius: *blast_radius.get(m.id.as_str()).unwrap_or(&0),
             }
         })
         .collect();
@@ -1817,5 +1847,67 @@ mod tests {
         assert_eq!(b.fan_in, 1);
         assert_eq!(b.fan_out, 1);
         assert!((b.instability - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn blast_radius_leaf_is_zero() {
+        let modules = vec![make_module("a", "src/a.rs"), make_module("b", "src/b.rs")];
+        let deps = vec![Dependency {
+            from_module_id: "a".to_string(),
+            to_module_id: "b".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let a = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/a.rs")
+            .unwrap();
+        assert_eq!(a.blast_radius, 0);
+    }
+
+    #[test]
+    fn blast_radius_direct() {
+        let modules = vec![make_module("a", "src/a.rs"), make_module("b", "src/b.rs")];
+        let deps = vec![Dependency {
+            from_module_id: "a".to_string(),
+            to_module_id: "b".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let b = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/b.rs")
+            .unwrap();
+        assert_eq!(b.blast_radius, 1);
+    }
+
+    #[test]
+    fn blast_radius_transitive() {
+        let modules = vec![
+            make_module("a", "src/a.rs"),
+            make_module("b", "src/b.rs"),
+            make_module("c", "src/c.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a".to_string(),
+                to_module_id: "b".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "b".to_string(),
+                to_module_id: "c".to_string(),
+                line_number: 1,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        let c = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/c.rs")
+            .unwrap();
+        assert_eq!(c.blast_radius, 2);
     }
 }

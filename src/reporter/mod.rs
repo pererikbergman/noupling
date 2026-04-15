@@ -678,6 +678,24 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Highest blast radius
+    let mut by_blast: Vec<_> = result
+        .hotspots
+        .iter()
+        .filter(|h| h.blast_radius > 0)
+        .collect();
+    by_blast.sort_by(|a, b| b.blast_radius.cmp(&a.blast_radius));
+    let top_blast: Vec<_> = by_blast.into_iter().take(10).collect();
+    if !top_blast.is_empty() {
+        output.push_str("\nHighest Blast Radius:\n");
+        for h in &top_blast {
+            output.push_str(&format!(
+                "  [{}] {} ({} in, {} out)\n",
+                h.blast_radius, h.path, h.fan_in, h.fan_out
+            ));
+        }
+    }
+
     // Rule violations
     if !result.rule_violations.is_empty() {
         output.push_str(&format!(
