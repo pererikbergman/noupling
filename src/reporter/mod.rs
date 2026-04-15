@@ -661,6 +661,23 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Zone of pain: stable modules (low instability) with high fan-in
+    let zone_of_pain: Vec<_> = result
+        .hotspots
+        .iter()
+        .filter(|h| h.instability < 0.3 && h.fan_in >= 5)
+        .take(10)
+        .collect();
+    if !zone_of_pain.is_empty() {
+        output.push_str("\nZone of Pain (stable, high fan-in):\n");
+        for h in &zone_of_pain {
+            output.push_str(&format!(
+                "  I={:.2} [{} in, {} out] {}\n",
+                h.instability, h.fan_in, h.fan_out, h.path
+            ));
+        }
+    }
+
     // Rule violations
     if !result.rule_violations.is_empty() {
         output.push_str(&format!(

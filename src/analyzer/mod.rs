@@ -52,6 +52,8 @@ pub struct ModuleMetrics {
     pub fan_in: usize,
     /// Number of modules this module imports (outgoing).
     pub fan_out: usize,
+    /// Martin's Instability: fan_out / (fan_in + fan_out). Range 0.0 (stable) to 1.0 (unstable).
+    pub instability: f64,
 }
 
 /// The result of running an architectural audit on a project snapshot.
@@ -823,10 +825,20 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     }
     let mut hotspots: Vec<ModuleMetrics> = modules
         .iter()
-        .map(|m| ModuleMetrics {
-            path: m.path.clone(),
-            fan_in: *fan_in.get(m.id.as_str()).unwrap_or(&0),
-            fan_out: *fan_out.get(m.id.as_str()).unwrap_or(&0),
+        .map(|m| {
+            let fi = *fan_in.get(m.id.as_str()).unwrap_or(&0);
+            let fo = *fan_out.get(m.id.as_str()).unwrap_or(&0);
+            let total = fi + fo;
+            ModuleMetrics {
+                path: m.path.clone(),
+                fan_in: fi,
+                fan_out: fo,
+                instability: if total > 0 {
+                    fo as f64 / total as f64
+                } else {
+                    0.0
+                },
+            }
         })
         .collect();
     hotspots.sort_by(|a, b| b.fan_in.cmp(&a.fan_in));
@@ -1711,7 +1723,6 @@ mod tests {
             make_module("l2", "lib/helper.rs"),
         ];
         let deps = vec![
-            // app: 1 internal, 1 external = 0.5
             Dependency {
                 from_module_id: "a1".to_string(),
                 to_module_id: "a2".to_string(),
@@ -1722,7 +1733,6 @@ mod tests {
                 to_module_id: "l1".to_string(),
                 line_number: 2,
             },
-            // lib: 1 internal, 0 external = 1.0
             Dependency {
                 from_module_id: "l1".to_string(),
                 to_module_id: "l2".to_string(),
@@ -1731,8 +1741,81 @@ mod tests {
         ];
         let result = audit(&modules, &deps);
         assert_eq!(result.independence.len(), 2);
-        // Sorted lowest first
         assert_eq!(result.independence[0].dir, "app");
         assert_eq!(result.independence[1].dir, "lib");
+    }
+
+    #[test]
+    fn instability_pure_consumer() {
+        let modules = vec![
+            make_module("a1", "src/app/main.rs"),
+            make_module("l1", "src/lib/core.rs"),
+        ];
+        let deps = vec![Dependency {
+            from_module_id: "a1".to_string(),
+            to_module_id: "l1".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let a1 = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/app/main.rs")
+            .unwrap();
+        assert_eq!(a1.fan_out, 1);
+        assert_eq!(a1.fan_in, 0);
+        assert!((a1.instability - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn instability_pure_provider() {
+        let modules = vec![
+            make_module("a1", "src/app/main.rs"),
+            make_module("l1", "src/lib/core.rs"),
+        ];
+        let deps = vec![Dependency {
+            from_module_id: "a1".to_string(),
+            to_module_id: "l1".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let l1 = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/lib/core.rs")
+            .unwrap();
+        assert_eq!(l1.fan_in, 1);
+        assert_eq!(l1.fan_out, 0);
+        assert!((l1.instability - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn instability_balanced() {
+        let modules = vec![
+            make_module("a", "src/a.rs"),
+            make_module("b", "src/b.rs"),
+            make_module("c", "src/c.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a".to_string(),
+                to_module_id: "b".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "b".to_string(),
+                to_module_id: "c".to_string(),
+                line_number: 1,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        let b = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/b.rs")
+            .unwrap();
+        assert_eq!(b.fan_in, 1);
+        assert_eq!(b.fan_out, 1);
+        assert!((b.instability - 0.5).abs() < 0.01);
     }
 }
