@@ -23,6 +23,7 @@ pub struct JsonReport {
     pub snapshot_id: String,
     pub score: f64,
     pub total_modules: usize,
+    pub total_xs: usize,
     pub critical_violations: usize,
     pub total_circular: usize,
     pub total_coupling: usize,
@@ -46,6 +47,8 @@ pub struct JsonCircularViolation {
     pub cycle_path: Vec<String>,
     pub cycle_short_path: Vec<String>,
     pub hop_files: Vec<JsonHopFile>,
+    pub weakest_link: Option<String>,
+    pub break_cost: usize,
 }
 
 #[derive(Serialize)]
@@ -149,6 +152,8 @@ impl JsonReport {
                     cycle_path: v.cycle_path.clone(),
                     cycle_short_path: short_path,
                     hop_files,
+                    weakest_link: v.weakest_link.clone(),
+                    break_cost: v.break_cost,
                 });
         }
 
@@ -185,6 +190,7 @@ impl JsonReport {
             snapshot_id: snapshot_id.to_string(),
             score: result.score,
             total_modules: result.total_modules,
+            total_xs: result.total_xs,
             critical_violations,
             total_circular: circular.len(),
             total_coupling: coupling.len(),
@@ -378,9 +384,9 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     xml.push_str(&format!(
-        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
+        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" totalXs=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
         xml_escape(VERSION), xml_escape(&report.snapshot_id), report.score, report.total_modules,
-        report.critical_violations, report.total_circular, report.total_coupling,
+        report.total_xs, report.critical_violations, report.total_circular, report.total_coupling,
     ));
 
     // Circular dependencies
@@ -393,9 +399,14 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
                 cycles.len()
             ));
             for cycle in cycles {
+                let wl_attr = cycle
+                    .weakest_link
+                    .as_ref()
+                    .map(|wl| format!(" weakestLink=\"{}\" breakCost=\"{}\"", xml_escape(wl), cycle.break_cost))
+                    .unwrap_or_default();
                 xml.push_str(&format!(
-                    "      <cycle order=\"{}\" severity=\"{:.2}\">\n",
-                    cycle.cycle_order, cycle.severity
+                    "      <cycle order=\"{}\" severity=\"{:.2}\"{}>\n",
+                    cycle.cycle_order, cycle.severity, wl_attr
                 ));
                 xml.push_str("        <path>\n");
                 for dir in &cycle.cycle_path {
@@ -511,7 +522,11 @@ pub fn format_sonar(result: &AuditResult) -> String {
                 }));
             }
 
-            let effort = (v.cycle_order as i32) * 30;
+            let effort = if v.break_cost > 0 {
+                v.break_cost as i32 * 15
+            } else {
+                (v.cycle_order as i32) * 30
+            };
             let mut issue = serde_json::json!({
                 "engineId": "noupling",
                 "ruleId": "noupling:circular-dependency",
@@ -579,6 +594,13 @@ pub fn format_text(result: &AuditResult) -> String {
     output.push_str(&format!("Health Score: {:.1}/100\n", result.score));
     output.push_str(&format!("Total Modules: {}\n", result.total_modules));
     output.push_str(&format!("Violations: {}\n", result.violations.len()));
+    if result.total_xs > 0 {
+        output.push_str(&format!(
+            "Total XS: {} import{} to remove\n",
+            result.total_xs,
+            if result.total_xs == 1 { "" } else { "s" }
+        ));
+    }
 
     if !result.violations.is_empty() {
         output.push('\n');
@@ -595,6 +617,9 @@ pub fn format_text(result: &AuditResult) -> String {
                 v.severity, label, v.from_module, v.to_module, v.depth
             ));
             output.push_str(&format!("         {} <> {}\n", v.dir_a, v.dir_b));
+            if let Some(ref wl) = v.weakest_link {
+                output.push_str(&format!("         Weakest link: {}\n", wl));
+            }
         }
     }
 
@@ -809,7 +834,7 @@ mod tests {
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
-            cycle_order: 0,
+            cycle_order: 0, weakest_link: None, break_cost: 0,
             line_number: 0,
             weight: 0,
         }
@@ -825,7 +850,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -850,7 +875,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -872,7 +897,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -888,7 +913,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let text = format_text(&result);
@@ -906,7 +931,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let text = format_text(&result);
@@ -924,7 +949,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -950,7 +975,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -968,7 +993,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

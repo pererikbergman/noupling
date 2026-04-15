@@ -232,7 +232,7 @@ mod tests {
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
-            cycle_order: 0,
+            cycle_order: 0, weakest_link: None, break_cost: 0,
         }
     }
 
@@ -249,7 +249,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let mermaid = format_mermaid(&modules, &result);
@@ -273,7 +273,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let dot = format_dot(&modules, &result);
@@ -294,7 +294,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let mermaid = format_mermaid(&modules, &result);

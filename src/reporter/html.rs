@@ -31,6 +31,8 @@ struct ViolationInfo {
     cycle_path: Vec<String>,
     cycle_hop_files: Vec<(String, String, i32)>,
     cycle_order: usize,
+    weakest_link: Option<String>,
+    break_cost: usize,
 }
 
 struct ReportData {
@@ -236,6 +238,8 @@ fn build_report_data(
             cycle_path: violation.cycle_path.clone(),
             cycle_hop_files: violation.cycle_hop_files.clone(),
             cycle_order: violation.cycle_order,
+            weakest_link: violation.weakest_link.clone(),
+            break_cost: violation.break_cost,
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -693,11 +697,20 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
         }
     }
 
+    let weakest = if let Some(ref wl) = v.weakest_link {
+        format!(
+            "<br><small class=\"hop-file\">Weakest link: {} (break cost: {} import{})</small>",
+            wl, v.break_cost, if v.break_cost == 1 { "" } else { "s" }
+        )
+    } else {
+        String::new()
+    };
+
     format!(
-        "<span class=\"cycle-path\">{}</span><br>\
+        "<span class=\"cycle-path\">{}</span>{}<br>\
         <details><summary class=\"hop-file\">Show full paths</summary>\
         <div class=\"full-paths\">{}</div></details>",
-        hops, full_paths
+        hops, weakest, full_paths
     )
 }
 
@@ -776,7 +789,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -796,7 +809,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -822,7 +835,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -852,7 +865,7 @@ mod tests {
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),
-                cycle_order: 0,
+                cycle_order: 0, weakest_link: None, break_cost: 0,
                 line_number: 0,
                 weight: 0,
             }],
@@ -861,7 +874,7 @@ mod tests {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(),
+            cohesion: Vec::new(), total_xs: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
