@@ -580,9 +580,12 @@ tr:hover {{ background: #f8fafc; }}
 .hop-file {{ color: #6b7280; font-weight: 400; cursor: pointer; }}
 .full-paths {{ margin-top: 0.4rem; padding: 0.4rem 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.78rem; color: #64748b; line-height: 1.7; word-break: break-all; }}
 .full-paths strong {{ color: #991b1b; }}
-details summary {{ list-style: none; }}
+details summary {{ list-style: none; cursor: pointer; }}
 details summary::marker {{ display: none; content: ''; }}
 details summary::before {{ content: ''; }}
+details summary.cycle-path {{ list-style: disclosure-closed; }}
+details summary.cycle-path::marker {{ display: revert; content: revert; }}
+details[open] summary.cycle-path {{ list-style: disclosure-open; }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
