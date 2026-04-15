@@ -237,7 +237,9 @@ fn render_dir_page(
                     if let Some(ref wl) = v.weakest_link {
                         md.push_str(&format!(
                             "> **Weakest link:** {} (break cost: {} import{})\n\n",
-                            wl, v.break_cost, if v.break_cost == 1 { "" } else { "s" }
+                            wl,
+                            v.break_cost,
+                            if v.break_cost == 1 { "" } else { "s" }
                         ));
                     }
                 }

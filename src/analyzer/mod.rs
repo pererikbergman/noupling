@@ -541,8 +541,16 @@ fn find_all_cycles_from(
                 visited.insert(next);
                 path.push(next);
                 find_all_cycles_from(
-                    start, next, adj, path, visited, cycles, seen_keys, siblings,
-                    edge_files, edge_import_count,
+                    start,
+                    next,
+                    adj,
+                    path,
+                    visited,
+                    cycles,
+                    seen_keys,
+                    siblings,
+                    edge_files,
+                    edge_import_count,
                 );
                 path.pop();
                 visited.remove(&next);
@@ -561,7 +569,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
             layer_violations: Vec::new(),
-            cohesion: Vec::new(), total_xs: 0,
+            cohesion: Vec::new(),
+            total_xs: 0,
         };
     }
 
@@ -689,7 +698,10 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
+                                                    cycle_order: 0,
+                                                    cycle_hop_counts: Vec::new(),
+                                                    weakest_link: None,
+                                                    break_cost: 0,
                                                 });
                                             }
                                         }
@@ -730,7 +742,10 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
+                                                    cycle_order: 0,
+                                                    cycle_hop_counts: Vec::new(),
+                                                    weakest_link: None,
+                                                    break_cost: 0,
                                                 });
                                             }
                                         }
@@ -839,7 +854,13 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     // Calculate total XS: sum of weights for coupling + break_cost for circular
     let total_xs: usize = violations
         .iter()
-        .map(|v| if v.is_circular { v.break_cost } else { v.weight })
+        .map(|v| {
+            if v.is_circular {
+                v.break_cost
+            } else {
+                v.weight
+            }
+        })
         .sum();
 
     AuditResult {
