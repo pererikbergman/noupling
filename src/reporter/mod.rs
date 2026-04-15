@@ -1,3 +1,4 @@
+mod bundle;
 mod graph;
 mod html;
 mod md;
@@ -8,6 +9,7 @@ use std::collections::BTreeMap;
 use crate::analyzer::{AuditResult, CouplingViolation};
 use crate::core::Module;
 
+pub use bundle::generate_bundle_report;
 pub use graph::{format_dot, format_mermaid};
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;

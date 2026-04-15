@@ -578,9 +578,14 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
                 file_path.display()
             );
         }
+        "bundle" => {
+            let file_path = report_dir.join("bundle.html");
+            reporter::generate_bundle_report(&report_modules, &report_deps, &result, &file_path)?;
+            println!("Report saved to {}", file_path.display());
+        }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', or 'dot'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', or 'bundle'.",
                 format
             );
         }
