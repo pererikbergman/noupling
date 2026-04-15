@@ -52,6 +52,8 @@ pub struct ModuleMetrics {
     pub fan_in: usize,
     /// Number of modules this module imports (outgoing).
     pub fan_out: usize,
+    /// Number of modules transitively affected if this module changes.
+    pub blast_radius: usize,
 }
 
 /// The result of running an architectural audit on a project snapshot.
@@ -799,16 +801,50 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     // Compute hotspots (fan-in / fan-out per module)
     let mut fan_in: FxHashMap<&str, usize> = FxHashMap::default();
     let mut fan_out: FxHashMap<&str, usize> = FxHashMap::default();
+    // Reverse adjacency: if A imports B, then B's change affects A
+    let mut reverse_adj: FxHashMap<&str, FxHashSet<&str>> = FxHashMap::default();
     for dep in dependencies {
         *fan_in.entry(dep.to_module_id.as_str()).or_insert(0) += 1;
         *fan_out.entry(dep.from_module_id.as_str()).or_insert(0) += 1;
+        reverse_adj
+            .entry(dep.to_module_id.as_str())
+            .or_default()
+            .insert(dep.from_module_id.as_str());
     }
+
+    // Compute blast radius via BFS on reverse graph
+    let blast_radius: FxHashMap<&str, usize> = modules
+        .iter()
+        .map(|m| {
+            let mut visited: FxHashSet<&str> = FxHashSet::default();
+            let mut queue: std::collections::VecDeque<&str> = std::collections::VecDeque::new();
+            queue.push_back(m.id.as_str());
+            visited.insert(m.id.as_str());
+            while let Some(current) = queue.pop_front() {
+                if let Some(dependents) = reverse_adj.get(current) {
+                    for &dep in dependents {
+                        if visited.insert(dep) {
+                            queue.push_back(dep);
+                        }
+                    }
+                }
+            }
+            // Subtract 1 to exclude self
+            (m.id.as_str(), visited.len().saturating_sub(1))
+        })
+        .collect();
+
     let mut hotspots: Vec<ModuleMetrics> = modules
         .iter()
-        .map(|m| ModuleMetrics {
-            path: m.path.clone(),
-            fan_in: *fan_in.get(m.id.as_str()).unwrap_or(&0),
-            fan_out: *fan_out.get(m.id.as_str()).unwrap_or(&0),
+        .map(|m| {
+            let fi = *fan_in.get(m.id.as_str()).unwrap_or(&0);
+            let fo = *fan_out.get(m.id.as_str()).unwrap_or(&0);
+            ModuleMetrics {
+                path: m.path.clone(),
+                fan_in: fi,
+                fan_out: fo,
+                blast_radius: *blast_radius.get(m.id.as_str()).unwrap_or(&0),
+            }
         })
         .collect();
     hotspots.sort_by(|a, b| b.fan_in.cmp(&a.fan_in));
@@ -1582,5 +1618,70 @@ mod tests {
         let result = audit_modules(&modules, &deps, &configs);
         assert!(result.module_results.is_empty());
         assert_eq!(result.overall_score, 100.0);
+    }
+
+    #[test]
+    fn blast_radius_leaf_is_zero() {
+        // A module nothing depends on has blast radius 0
+        let modules = vec![make_module("a", "src/a.rs"), make_module("b", "src/b.rs")];
+        let deps = vec![Dependency {
+            from_module_id: "a".to_string(),
+            to_module_id: "b".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let a = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/a.rs")
+            .unwrap();
+        assert_eq!(a.blast_radius, 0, "leaf module should have blast radius 0");
+    }
+
+    #[test]
+    fn blast_radius_direct() {
+        // b is imported by a, so b's blast radius is 1
+        let modules = vec![make_module("a", "src/a.rs"), make_module("b", "src/b.rs")];
+        let deps = vec![Dependency {
+            from_module_id: "a".to_string(),
+            to_module_id: "b".to_string(),
+            line_number: 1,
+        }];
+        let result = audit(&modules, &deps);
+        let b = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/b.rs")
+            .unwrap();
+        assert_eq!(b.blast_radius, 1);
+    }
+
+    #[test]
+    fn blast_radius_transitive() {
+        // a -> b -> c: c's blast radius is 2 (b and a are transitively affected)
+        let modules = vec![
+            make_module("a", "src/a.rs"),
+            make_module("b", "src/b.rs"),
+            make_module("c", "src/c.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a".to_string(),
+                to_module_id: "b".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "b".to_string(),
+                to_module_id: "c".to_string(),
+                line_number: 1,
+            },
+        ];
+        let result = audit(&modules, &deps);
+        let c = result
+            .hotspots
+            .iter()
+            .find(|h| h.path == "src/c.rs")
+            .unwrap();
+        assert_eq!(c.blast_radius, 2, "c should affect b and a transitively");
     }
 }
