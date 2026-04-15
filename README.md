@@ -146,6 +146,15 @@ Scans the full project for import resolution but filters results to changed file
   run: noupling report . --format sonar
 ```
 
+### PR Comment Bot
+
+Copy `.github/workflows/noupling-pr.yml` from this repo to your project. It automatically comments on PRs with:
+- Health score
+- Total and new violations
+- Violation details
+
+The workflow installs noupling from the latest release, runs a diff scan, and posts a comment. Updates existing comments on force-pushes.
+
 ### SonarCloud
 
 Generate the generic issue import file and reference it in your Sonar config:
