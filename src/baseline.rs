@@ -151,6 +151,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         // Save baseline
@@ -167,6 +168,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
@@ -188,6 +190,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -204,6 +207,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
@@ -226,6 +230,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -239,6 +244,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);

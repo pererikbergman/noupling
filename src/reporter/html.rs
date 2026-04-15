@@ -784,6 +784,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -805,6 +806,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -832,6 +834,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -875,6 +878,7 @@ mod tests {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();

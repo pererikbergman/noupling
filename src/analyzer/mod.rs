@@ -73,6 +73,8 @@ pub struct AuditResult {
     pub cohesion: Vec<CohesionMetrics>,
     /// Total excess: sum of all imports that need removal to fix all violations.
     pub total_xs: usize,
+    /// Number of imports suppressed by `noupling:ignore` comments.
+    pub suppressed_count: usize,
 }
 
 /// Cohesion metrics for a directory.
@@ -571,6 +573,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             layer_violations: Vec::new(),
             cohesion: Vec::new(),
             total_xs: 0,
+            suppressed_count: 0,
         };
     }
 
@@ -872,6 +875,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         layer_violations: Vec::new(),
         cohesion,
         total_xs,
+        suppressed_count: 0,
     }
 }
 
