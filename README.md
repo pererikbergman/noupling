@@ -29,8 +29,9 @@ Every violation gets a **severity score** based on depth: problems at the root o
 - **14 languages**: C#, Dart, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **7 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT
+- **8 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
+- **Sunburst visualization**: Zoomable D3.js dependency graph with animated drill-down
 - **Monorepo support**: Independent analysis per module with cross-module dependency validation
 - **Architectural layers**: Define dependency direction, suppress legitimate downward coupling
 - **XS metric**: Quantify refactoring cost per violation, find the weakest link in cycles
@@ -119,6 +120,7 @@ noupling report /path/to/project --format html    # Interactive HTML with drill-
 noupling report /path/to/project --format sonar   # SonarCloud generic issue import
 noupling report /path/to/project --format mermaid # Mermaid flowchart diagram
 noupling report /path/to/project --format dot     # GraphViz DOT graph
+noupling report /path/to/project --format bundle  # Zoomable sunburst with dependency edges
 ```
 
 ### Diff mode (PR/CI gate)
