@@ -29,10 +29,25 @@ pub struct Settings {
     /// Whether `noupling:ignore` inline comments are allowed. Default: true.
     #[serde(default = "default_allow_inline_suppression")]
     pub allow_inline_suppression: bool,
+    /// Monorepo modules. Each gets independent analysis. If empty, whole project is one module.
+    #[serde(default)]
+    pub modules: Vec<ModuleConfig>,
 }
 
 fn default_allow_inline_suppression() -> bool {
     true
+}
+
+/// A module within a monorepo. Each module is analyzed independently.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleConfig {
+    /// Human-readable name (e.g., "app", "lib-core").
+    pub name: String,
+    /// Relative path from project root (e.g., "app/src").
+    pub path: String,
+    /// Module names this module may import from. Unlisted cross-module imports are violations.
+    #[serde(default)]
+    pub depends_on: Vec<String>,
 }
 
 /// An architectural layer. Dependencies may only flow downward (higher index = lower layer).
@@ -154,6 +169,7 @@ impl Default for Settings {
             dependency_rules: Vec::new(),
             layers: Vec::new(),
             allow_inline_suppression: default_allow_inline_suppression(),
+            modules: Vec::new(),
         }
     }
 }

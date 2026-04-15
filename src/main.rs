@@ -43,9 +43,20 @@ fn main() {
             snapshot,
             fail_below,
             baseline,
-        } => run_audit(&path, snapshot.as_deref(), fail_below, baseline),
+            module,
+        } => run_audit(
+            &path,
+            snapshot.as_deref(),
+            fail_below,
+            baseline,
+            module.as_deref(),
+        ),
         Commands::Trend { path, last } => run_trend(&path, last),
-        Commands::Report { path, format } => run_report(&path, &format),
+        Commands::Report {
+            path,
+            format,
+            module,
+        } => run_report(&path, &format, module.as_deref()),
     };
 
     if let Err(e) = result {
@@ -322,6 +333,7 @@ fn run_audit(
     snapshot_id: Option<&str>,
     fail_below: Option<f64>,
     use_baseline: bool,
+    module_filter: Option<&str>,
 ) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
@@ -342,6 +354,57 @@ fn run_audit(
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
     let project_settings = settings::Settings::load(Path::new(path))?;
+
+    // Monorepo mode: multiple configured modules
+    if !project_settings.modules.is_empty() {
+        let monorepo = analyzer::audit_modules(&modules, &dependencies, &project_settings.modules);
+
+        if let Some(name) = module_filter {
+            // Single module output
+            let (_, result) = monorepo
+                .module_results
+                .iter()
+                .find(|(n, _)| n == name)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Module '{}' not found. Available: {}",
+                        name,
+                        monorepo
+                            .module_results
+                            .iter()
+                            .map(|(n, _)| n.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
+            print!("{}", reporter::format_text(result));
+            if let Some(threshold) = fail_below {
+                if result.score < threshold {
+                    anyhow::bail!(
+                        "Module '{}' score {:.1} is below threshold {:.1}",
+                        name,
+                        result.score,
+                        threshold
+                    );
+                }
+            }
+        } else {
+            // Multi-module summary
+            print!("{}", reporter::format_monorepo_text(&monorepo));
+            if let Some(threshold) = fail_below {
+                if monorepo.overall_score < threshold {
+                    anyhow::bail!(
+                        "Overall score {:.1} is below threshold {:.1}",
+                        monorepo.overall_score,
+                        threshold
+                    );
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    // Single-project mode (existing behavior)
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
     result.filter_by_layers(&project_settings.layers);
@@ -393,7 +456,7 @@ fn run_audit(
     Ok(())
 }
 
-fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
+fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
@@ -408,16 +471,45 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
     let project_settings = settings::Settings::load(Path::new(path))?;
-    let mut result = analyzer::audit(&modules, &dependencies);
+
+    // If --module specified with monorepo config, filter to that module's files
+    let (report_modules, report_deps) = if let Some(name) = module_filter {
+        let cfg = project_settings
+            .modules
+            .iter()
+            .find(|m| m.name == name)
+            .ok_or_else(|| anyhow::anyhow!("Module '{}' not found in settings", name))?;
+        let prefix = format!("{}/", cfg.path);
+        let filtered_modules: Vec<_> = modules
+            .iter()
+            .filter(|m| m.path.starts_with(&prefix) || m.path == cfg.path)
+            .cloned()
+            .collect();
+        let module_ids: std::collections::HashSet<&str> =
+            filtered_modules.iter().map(|m| m.id.as_str()).collect();
+        let filtered_deps: Vec<_> = dependencies
+            .iter()
+            .filter(|d| {
+                module_ids.contains(d.from_module_id.as_str())
+                    && module_ids.contains(d.to_module_id.as_str())
+            })
+            .cloned()
+            .collect();
+        (filtered_modules, filtered_deps)
+    } else {
+        (modules, dependencies)
+    };
+
+    let mut result = analyzer::audit(&report_modules, &report_deps);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
     result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
-        &modules,
-        &dependencies,
+        &report_modules,
+        &report_deps,
         &project_settings.dependency_rules,
     );
     result.layer_violations =
-        analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
+        analyzer::check_layer_rules(&report_modules, &report_deps, &project_settings.layers);
 
     // Load suppressed count from scan
     result.suppressed_count = load_suppressed_count(path);
@@ -432,7 +524,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
 
     match format {
         "json" => {
-            let report = reporter::JsonReport::from_audit(&modules, &result, &snapshot.id);
+            let report = reporter::JsonReport::from_audit(&report_modules, &result, &snapshot.id);
             let content = report.to_json()?;
             let file_path = report_dir.join("report.json");
             std::fs::write(&file_path, &content)?;
@@ -440,11 +532,11 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
         }
         "md" => {
             let md_dir = report_dir.join("report-md");
-            reporter::generate_markdown_report(&modules, &result, &snapshot.id, &md_dir)?;
+            reporter::generate_markdown_report(&report_modules, &result, &snapshot.id, &md_dir)?;
             println!("Report saved to {}/README.md", md_dir.display());
         }
         "xml" => {
-            let content = reporter::format_xml(&modules, &result, &snapshot.id);
+            let content = reporter::format_xml(&report_modules, &result, &snapshot.id);
             let file_path = report_dir.join("report.xml");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
@@ -462,7 +554,7 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
         "html" => {
             let html_dir = report_dir.join("report");
             reporter::generate_html_report(
-                &modules,
+                &report_modules,
                 &result,
                 &snapshot.id,
                 &html_dir,
@@ -471,13 +563,13 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
             println!("Report saved to {}/index.html", html_dir.display());
         }
         "mermaid" => {
-            let content = reporter::format_mermaid(&modules, &result);
+            let content = reporter::format_mermaid(&report_modules, &result);
             let file_path = report_dir.join("report.mermaid");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
         "dot" => {
-            let content = reporter::format_dot(&modules, &result);
+            let content = reporter::format_dot(&report_modules, &result);
             let file_path = report_dir.join("report.dot");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
