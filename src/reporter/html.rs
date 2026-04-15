@@ -31,8 +31,7 @@ struct ViolationInfo {
     cycle_path: Vec<String>,
     cycle_hop_files: Vec<(String, String, i32)>,
     cycle_order: usize,
-    weakest_link: Option<String>,
-    break_cost: usize,
+    cycle_hop_counts: Vec<usize>,
 }
 
 struct ReportData {
@@ -238,8 +237,7 @@ fn build_report_data(
             cycle_path: violation.cycle_path.clone(),
             cycle_hop_files: violation.cycle_hop_files.clone(),
             cycle_order: violation.cycle_order,
-            weakest_link: violation.weakest_link.clone(),
-            break_cost: violation.break_cost,
+            cycle_hop_counts: violation.cycle_hop_counts.clone(),
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -673,44 +671,41 @@ fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
         }
     }
 
-    // Full path details
+    // Full path details — one line per hop with XS count
     let mut full_paths = String::new();
     for (i, dir) in v.cycle_path.iter().enumerate() {
-        if i > 0 {
-            full_paths.push_str("<br>");
-        }
         let dir_short = std::path::Path::new(dir)
             .file_name()
             .and_then(|f| f.to_str())
             .unwrap_or(dir);
+        let xs_label = if i < v.cycle_hop_counts.len() {
+            let count = v.cycle_hop_counts[i];
+            format!(" <small class=\"hop-file\">(XS {})</small>", count)
+        } else {
+            String::new()
+        };
         if i < v.cycle_hop_files.len() {
             let (from_file, _, _) = &v.cycle_hop_files[i];
             full_paths.push_str(&format!(
-                "<strong>{}</strong>: {} &#8594;",
-                dir_short, from_file
+                "<strong>{}</strong>: {} &#8594;{}<br>",
+                dir_short, from_file, xs_label
             ));
         } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
             let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-            full_paths.push_str(&format!("<strong>{}</strong>: {}", dir_short, to_file));
+            full_paths.push_str(&format!(
+                "<strong>{}</strong>: {}<br>",
+                dir_short, to_file
+            ));
         } else {
-            full_paths.push_str(&format!("<strong>{}</strong>", dir_short));
+            full_paths.push_str(&format!("<strong>{}</strong><br>", dir_short));
         }
     }
 
-    let weakest = if let Some(ref wl) = v.weakest_link {
-        format!(
-            "<br><small class=\"hop-file\">Weakest link: {} (break cost: {} import{})</small>",
-            wl, v.break_cost, if v.break_cost == 1 { "" } else { "s" }
-        )
-    } else {
-        String::new()
-    };
-
     format!(
-        "<span class=\"cycle-path\">{}</span>{}<br>\
+        "<span class=\"cycle-path\">{}</span><br>\
         <details><summary class=\"hop-file\">Show full paths</summary>\
         <div class=\"full-paths\">{}</div></details>",
-        hops, weakest, full_paths
+        hops, full_paths
     )
 }
 
@@ -865,7 +860,7 @@ mod tests {
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),
-                cycle_order: 0, weakest_link: None, break_cost: 0,
+                cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
                 line_number: 0,
                 weight: 0,
             }],

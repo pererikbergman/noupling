@@ -35,6 +35,8 @@ pub struct CouplingViolation {
     pub cycle_hop_files: Vec<(String, String, i32)>,
     /// For circular deps: number of nodes in the cycle (2 = mutual, 3 = triangle, etc.).
     pub cycle_order: usize,
+    /// For circular deps: number of imports crossing each hop in the cycle.
+    pub cycle_hop_counts: Vec<usize>,
     /// For circular deps: the weakest hop to break (fewest imports). Format: "dir_a -> dir_b (N imports)".
     pub weakest_link: Option<String>,
     /// For circular deps: number of imports to remove at the weakest link to break the cycle.
@@ -642,6 +644,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
                 cycle_order: cycle.dir_path.len() - 1, // -1 because last entry closes the cycle
+                cycle_hop_counts: cycle.hop_import_counts.clone(),
                 weakest_link,
                 break_cost,
             });
@@ -686,7 +689,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0, weakest_link: None, break_cost: 0,
+                                                    cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
                                                 });
                                             }
                                         }
@@ -727,7 +730,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
-                                                    cycle_order: 0, weakest_link: None, break_cost: 0,
+                                                    cycle_order: 0, cycle_hop_counts: Vec::new(), weakest_link: None, break_cost: 0,
                                                 });
                                             }
                                         }
