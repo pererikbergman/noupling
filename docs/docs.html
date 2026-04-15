@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — noupling</title>
+  <meta name="description" content="Complete documentation for noupling: installation, CLI reference, configuration, architectural layers, monorepo support, CI integration, and report formats.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container-wide">
+    <a href="index.html" class="logo"><span>nou</span>pling</a>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="docs.html" class="active">Docs</a></li>
+      <li><a href="changelog.html">Changelog</a></li>
+      <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
+      <li><span class="badge">v0.3.0</span></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container-wide">
+  <div class="docs-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────── -->
+    <aside class="docs-sidebar">
+      <h4>Basics</h4>
+      <a href="#installation">Installation</a>
+      <a href="#quick-start">Quick Start</a>
+      <a href="#health-score">Health Score</a>
+
+      <h4>CLI Reference</h4>
+      <a href="#cmd-scan">scan</a>
+      <a href="#cmd-audit">audit</a>
+      <a href="#cmd-report">report</a>
+      <a href="#cmd-trend">trend</a>
+      <a href="#cmd-baseline">baseline</a>
+      <a href="#cmd-hook">hook</a>
+
+      <h4>Configuration</h4>
+      <a href="#thresholds">Thresholds</a>
+      <a href="#ignore-patterns">Ignore Patterns</a>
+      <a href="#layers">Architectural Layers</a>
+      <a href="#dependency-rules">Dependency Rules</a>
+      <a href="#inline-suppression">Inline Suppression</a>
+
+      <h4>Advanced</h4>
+      <a href="#monorepo">Monorepo Support</a>
+      <a href="#xs-metric">XS Metric</a>
+      <a href="#diff-mode">Diff Mode</a>
+      <a href="#ci-integration">CI Integration</a>
+      <a href="#report-formats">Report Formats</a>
+
+      <h4>Concepts</h4>
+      <a href="#coupling">Coupling Violations</a>
+      <a href="#circular">Circular Dependencies</a>
+      <a href="#hotspots">Hotspots &amp; Cohesion</a>
+      <a href="#agentic-dx">Agentic DX</a>
+    </aside>
+
+    <!-- ── Content ──────────────────────────────────── -->
+    <section class="docs-content">
+
+      <!-- Basics -->
+      <h2 id="installation">Installation</h2>
+
+      <h3>Homebrew (macOS / Linux)</h3>
+<pre><code class="language-bash">brew tap pererikbergman/noupling
+brew install noupling</code></pre>
+
+      <h3>From source</h3>
+<pre><code class="language-bash">git clone https://github.com/pererikbergman/noupling.git
+cd noupling
+cargo install --path .</code></pre>
+
+      <h3>Prebuilt binaries</h3>
+      <p>Download from <a href="https://github.com/pererikbergman/noupling/releases">GitHub Releases</a>. Available for Linux (x86_64, aarch64), macOS (Apple Silicon, Intel), and Windows.</p>
+
+
+      <h2 id="quick-start">Quick Start</h2>
+<pre><code class="language-bash"><span class="comment"># 1. Scan your project</span>
+noupling scan /path/to/project
+
+<span class="comment"># 2. See the health score</span>
+noupling audit /path/to/project
+
+<span class="comment"># 3. Generate an interactive HTML report</span>
+noupling report /path/to/project --format html
+
+<span class="comment"># 4. Gate in CI</span>
+noupling scan . --diff-base origin/main
+noupling audit . --fail-below 80</code></pre>
+
+      <p>A <code>.noupling/settings.json</code> is auto-created on first run with sensible defaults. Edit it to customize thresholds, ignore patterns, and source extensions.</p>
+
+
+      <h2 id="health-score">Health Score</h2>
+      <p>The health score is a single number (0&ndash;100) that quantifies your architecture's coupling:</p>
+<pre><code>Score = 100 &times; (1 - sum_of_severities / total_modules)</code></pre>
+
+      <table>
+        <thead><tr><th>Range</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td class="text-green"><strong>90&ndash;100</strong></td><td>Healthy</td><td>Maintain</td></tr>
+          <tr><td class="text-yellow"><strong>70&ndash;89</strong></td><td>Warning</td><td>Investigate new violations</td></tr>
+          <tr><td class="text-red"><strong>0&ndash;69</strong></td><td>Needs attention</td><td>Prioritize decoupling</td></tr>
+        </tbody>
+      </table>
+
+
+      <!-- CLI Reference -->
+      <h2 id="cmd-scan">scan</h2>
+      <p>Discover source files, parse imports, resolve dependencies, store in SQLite.</p>
+<pre><code class="language-bash">noupling scan &lt;PATH&gt; [--diff-base &lt;BRANCH&gt;]</code></pre>
+      <table>
+        <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--diff-base</code></td><td>Filter results to files changed vs. this branch. Scans full project for resolution.</td></tr>
+        </tbody>
+      </table>
+
+
+      <h2 id="cmd-audit">audit</h2>
+      <p>Analyze the latest snapshot and display violations.</p>
+<pre><code class="language-bash">noupling audit [PATH] [--fail-below N] [--baseline] [--snapshot ID] [--module NAME]</code></pre>
+      <table>
+        <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>--fail-below</code></td><td>Exit code 1 if score is below this. Use in CI.</td></tr>
+          <tr><td><code>--baseline</code></td><td>Only report violations not in the saved baseline.</td></tr>
+          <tr><td><code>--snapshot</code></td><td>Audit a specific snapshot instead of the latest.</td></tr>
+          <tr><td><code>--module</code></td><td>Show results for one module only (monorepo).</td></tr>
+        </tbody>
+      </table>
+
+
+      <h2 id="cmd-report">report</h2>
+      <p>Generate a report file from the latest snapshot.</p>
+<pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME]</code></pre>
+      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>. See <a href="#report-formats">Report Formats</a>.</p>
+
+
+      <h2 id="cmd-trend">trend</h2>
+      <p>Show health score history across snapshots.</p>
+<pre><code class="language-bash">noupling trend [PATH] [--last N]</code></pre>
+
+
+      <h2 id="cmd-baseline">baseline</h2>
+      <p>Save current violations as accepted. Future <code>--baseline</code> audits only flag new ones.</p>
+<pre><code class="language-bash">noupling baseline save [PATH]</code></pre>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Commit <code>.noupling/baseline.json</code> to your repo. New team members inherit the accepted baseline and only see violations they introduce.
+      </div>
+
+
+      <h2 id="cmd-hook">hook</h2>
+      <p>Install a git pre-commit hook that fails on new violations.</p>
+<pre><code class="language-bash">noupling hook install [PATH]
+noupling hook uninstall [PATH]</code></pre>
+      <p>Bypass with <code>git commit --no-verify</code>.</p>
+
+
+      <!-- Configuration -->
+      <h2 id="thresholds">Thresholds</h2>
+<pre><code class="language-json">{
+  "thresholds": {
+    "score_green": 90.0,
+    "score_yellow": 70.0,
+    "critical_severity": 0.5,
+    "minimum_severity": 0.2,
+    "hotspot_fan_in": 10,
+    "min_cohesion": 0.1
+  }
+}</code></pre>
+      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> flags violations as critical in reports.</p>
+
+
+      <h2 id="ignore-patterns">Ignore Patterns</h2>
+<pre><code class="language-json">{
+  "ignore_patterns": [
+    "**/.git/**", "**/build/**", "**/node_modules/**",
+    "**/generated/**", "**/__pycache__/**"
+  ]
+}</code></pre>
+      <p>Glob patterns (gitignore-style). Any matching file is excluded from analysis.</p>
+
+
+      <h2 id="layers">Architectural Layers</h2>
+      <p>Define layers so dependencies flowing <strong>downward</strong> (earlier &rarr; later) aren't flagged as coupling.</p>
+<pre><code class="language-json">{
+  "layers": [
+    { "name": "presentation", "pattern": "**/ui/**" },
+    { "name": "domain", "pattern": "**/domain/**" },
+    { "name": "data", "pattern": "**/data/**" }
+  ]
+}</code></pre>
+      <ul>
+        <li><code>presentation &rarr; domain</code>: allowed (downward)</li>
+        <li><code>data &rarr; presentation</code>: <strong>violation</strong> (upward)</li>
+      </ul>
+
+      <div class="callout-warn callout">
+        <strong>Guardrail:</strong> Layers suppress coupling violations but don't eliminate dependencies. If you find yourself adding many layers to make violations disappear, the real problem is your module boundaries.
+      </div>
+
+
+      <h2 id="dependency-rules">Dependency Rules</h2>
+<pre><code class="language-json">{
+  "dependency_rules": [
+    {
+      "from": "**/ui/**",
+      "to": "**/data/**",
+      "allow": false,
+      "message": "UI must not depend on data layer directly"
+    }
+  ]
+}</code></pre>
+
+
+      <h2 id="inline-suppression">Inline Suppression</h2>
+      <p>Suppress a specific import with a <code>noupling:ignore</code> comment on the same line or the line above:</p>
+<pre><code class="language-kotlin">import com.example.legacy.Helper // noupling:ignore
+
+// noupling:ignore
+import com.example.legacy.OtherHelper</code></pre>
+      <p>Works with <code>//</code>, <code>#</code>, and <code>--</code> comment styles. Disable globally with <code>"allow_inline_suppression": false</code>.</p>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Treat <code>noupling:ignore</code> like <code>@SuppressWarnings</code>&mdash;use it sparingly for genuinely acceptable coupling, not to silence inconvenient truths.
+      </div>
+
+
+      <!-- Advanced -->
+      <h2 id="monorepo">Monorepo Support</h2>
+      <p>Define independent modules, each analyzed separately with its own health score.</p>
+<pre><code class="language-json">{
+  "modules": [
+    { "name": "app", "path": "app/src", "depends_on": ["lib-core"] },
+    { "name": "lib-core", "path": "lib/core/src", "depends_on": [] }
+  ]
+}</code></pre>
+      <p><code>depends_on</code> declares the allowed cross-module import graph. Unlisted imports are flagged as cross-module violations.</p>
+<pre><code class="language-bash"><span class="comment"># Multi-module summary</span>
+noupling audit .
+
+<span class="comment"># Single module detail</span>
+noupling audit . --module app</code></pre>
+      <p>The overall score is a weighted average by file count. Files outside all modules are ignored. If <code>modules</code> is empty, the project is analyzed as a single module (backward compatible).</p>
+
+
+      <h2 id="xs-metric">XS Metric</h2>
+      <p><strong>XS (Excess)</strong> quantifies the refactoring cost of violations.</p>
+      <ul>
+        <li><strong>Coupling violations:</strong> XS = number of import statements (the weight)</li>
+        <li><strong>Circular dependencies:</strong> XS = break cost at the weakest link</li>
+        <li><strong>Total XS:</strong> sum across all violations = total imports to remove</li>
+      </ul>
+      <p>The <strong>weakest link</strong> is the hop in a cycle with the fewest imports&mdash;the cheapest edge to cut. The HTML report shows per-hop XS counts in expandable cycle details.</p>
+
+
+      <h2 id="diff-mode">Diff Mode</h2>
+<pre><code class="language-bash">noupling scan . --diff-base origin/main
+noupling audit .</code></pre>
+      <p>Scans the full project (needed for import resolution) but filters audit results to only violations touching changed files. Use in PRs to only fail on <strong>new</strong> issues.</p>
+
+
+      <h2 id="ci-integration">CI Integration</h2>
+
+      <h3>GitHub Actions</h3>
+<pre><code class="language-yaml">- name: Install noupling
+  run: |
+    curl -sL "https://github.com/pererikbergman/noupling/releases/latest/download/noupling-linux-x86_64" -o noupling
+    chmod +x noupling
+    sudo mv noupling /usr/local/bin/
+
+- name: Scan (diff mode)
+  run: noupling scan . --diff-base origin/main
+
+- name: Audit
+  run: noupling audit . --fail-below 80</code></pre>
+
+      <h3>SonarCloud</h3>
+<pre><code class="language-bash">noupling report . --format sonar</code></pre>
+      <p>Add to <code>sonar-project.properties</code>:</p>
+<pre><code>sonar.externalIssuesReportPaths=.noupling/noupling-sonar.json</code></pre>
+
+      <h3>PR Comment Bot</h3>
+      <p>Copy <code>.github/workflows/noupling-pr.yml</code> from the noupling repo. It posts a health score comment on every PR and updates it on force-pushes.</p>
+
+
+      <h2 id="report-formats">Report Formats</h2>
+      <table>
+        <thead><tr><th>Format</th><th>File</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><code>html</code></td><td><code>.noupling/report/</code></td><td>Interactive drill-down, sharing with team</td></tr>
+          <tr><td><code>json</code></td><td><code>.noupling/report.json</code></td><td>Programmatic consumption, custom dashboards</td></tr>
+          <tr><td><code>xml</code></td><td><code>.noupling/report.xml</code></td><td>Enterprise CI, XSLT pipelines</td></tr>
+          <tr><td><code>md</code></td><td><code>.noupling/report-md/</code></td><td>GitHub wiki, documentation sites</td></tr>
+          <tr><td><code>sonar</code></td><td><code>.noupling/noupling-sonar.json</code></td><td>SonarCloud/SonarQube integration</td></tr>
+          <tr><td><code>mermaid</code></td><td><code>.noupling/report.mermaid</code></td><td>Embed in Markdown, quick overview</td></tr>
+          <tr><td><code>dot</code></td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
+        </tbody>
+      </table>
+
+
+      <!-- Concepts -->
+      <h2 id="coupling">Coupling Violations</h2>
+      <p>A coupling violation occurs when sibling directories depend on each other. Severity is depth-weighted:</p>
+<pre><code>severity = weight / (depth + 1)</code></pre>
+      <p>Root-level coupling (depth 0) is most severe. Multiple imports between the same pair are aggregated by weight.</p>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Not all coupling is bad. Use <a href="#layers">Layers</a> to declare intended dependency directions so legitimate downward dependencies aren't flagged.
+      </div>
+
+
+      <h2 id="circular">Circular Dependencies</h2>
+      <p>A cycle exists when imports form a loop: A &rarr; B &rarr; C &rarr; A. Detected via DFS on sibling adjacency graphs built from D_acc (accumulated external dependencies).</p>
+<pre><code>severity = total_modules / (depth + 1) / 10</code></pre>
+      <p>Cycles are grouped by <strong>order</strong>: 2 (mutual), 3 (triangular), N. Each includes the weakest link and break cost via the <a href="#xs-metric">XS metric</a>.</p>
+
+
+      <h2 id="hotspots">Hotspots &amp; Cohesion</h2>
+      <p><strong>Hotspots</strong> are modules with high fan-in (many dependents). Changes to hotspots ripple widely. Default threshold: 10 incoming imports.</p>
+      <p><strong>Cohesion</strong> measures how much files within a directory depend on each other:</p>
+<pre><code>cohesion = internal_deps / (file_count &times; (file_count - 1))</code></pre>
+      <p>Low cohesion (&lt; 0.1) suggests a directory groups unrelated code that might belong in separate packages.</p>
+
+
+      <h2 id="agentic-dx">Agentic Developer Experience</h2>
+      <p>When using noupling with AI coding assistants, describe features in terms of <strong>intent</strong> rather than API:</p>
+      <ul>
+        <li>"Check if my project has circular dependencies" &rarr; <code>noupling scan . && noupling audit .</code></li>
+        <li>"Only fail the PR if I introduced new coupling" &rarr; <code>noupling scan . --diff-base main && noupling audit . --fail-below 80</code></li>
+        <li>"Show me the easiest cycle to break" &rarr; look for the lowest <code>break_cost</code> in <code>noupling audit</code> output</li>
+        <li>"Suppress this known violation" &rarr; add <code>// noupling:ignore</code> on the import line</li>
+        <li>"This dependency is architecturally correct" &rarr; define it in <code>layers</code> or <code>depends_on</code></li>
+      </ul>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Feed the JSON report to your AI assistant for codebase-aware architectural advice: <code>noupling report . --format json</code>, then share <code>.noupling/report.json</code> as context.
+      </div>
+
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <p>noupling &middot; <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE">MIT License</a> &middot; Built with Rust &middot; Parsed by Tree-sitter</p>
+  </div>
+</footer>
+
+</body>
+</html>
