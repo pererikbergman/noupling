@@ -80,6 +80,9 @@ pub fn scan_project(
                 "java" => parser::parse_java_imports(&source),
                 "js" | "jsx" => parser::parse_javascript_imports(&source),
                 "py" => parser::parse_python_imports(&source),
+                "dart" => parser::parse_dart_imports(&source),
+                "php" => parser::parse_php_imports(&source),
+                "rb" => parser::parse_ruby_imports(&source),
                 "zig" => parser::parse_zig_imports(&source),
                 _ => return None,
             };

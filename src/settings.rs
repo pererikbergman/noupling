@@ -156,6 +156,9 @@ fn default_source_extensions() -> Vec<String> {
         "js".to_string(),
         "jsx".to_string(),
         "py".to_string(),
+        "dart".to_string(),
+        "php".to_string(),
+        "rb".to_string(),
         "zig".to_string(),
     ]
 }
