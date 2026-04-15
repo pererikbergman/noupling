@@ -61,6 +61,8 @@ pub struct AuditResult {
     pub hotspots: Vec<ModuleMetrics>,
     /// Violations of custom dependency rules from settings.json.
     pub rule_violations: Vec<RuleViolation>,
+    /// Violations of architectural layer ordering.
+    pub layer_violations: Vec<LayerViolation>,
 }
 
 /// A violation of a custom dependency rule.
@@ -74,6 +76,21 @@ pub struct RuleViolation {
     pub line_number: i32,
     /// Custom message from the rule definition.
     pub message: String,
+}
+
+/// A violation of architectural layer ordering.
+#[derive(Debug, Clone)]
+pub struct LayerViolation {
+    /// Source file path.
+    pub from_module: String,
+    /// Target file path.
+    pub to_module: String,
+    /// Line number of the import.
+    pub line_number: i32,
+    /// Layer of the source module.
+    pub from_layer: String,
+    /// Layer of the target module (higher layer being imported).
+    pub to_layer: String,
 }
 
 impl AuditResult {
@@ -461,6 +478,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             total_modules: 0,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
     }
 
@@ -669,7 +687,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         score,
         total_modules,
         hotspots,
-        rule_violations: Vec::new(), // Populated by check_dependency_rules() after audit
+        rule_violations: Vec::new(),
+        layer_violations: Vec::new(),
     }
 }
 
@@ -724,6 +743,73 @@ pub fn check_dependency_rules(
                     } else {
                         rule.message.clone()
                     },
+                });
+            }
+        }
+    }
+
+    violations
+}
+
+/// Check dependencies against architectural layer ordering.
+/// Dependencies may only flow downward (higher index = lower layer).
+pub fn check_layer_rules(
+    modules: &[Module],
+    dependencies: &[Dependency],
+    layers: &[crate::settings::Layer],
+) -> Vec<LayerViolation> {
+    if layers.is_empty() {
+        return Vec::new();
+    }
+
+    // Build glob matchers for each layer
+    let layer_matchers: Vec<(usize, &str, globset::GlobMatcher)> = layers
+        .iter()
+        .enumerate()
+        .filter_map(|(i, l)| {
+            globset::Glob::new(&l.pattern)
+                .ok()
+                .map(|g| (i, l.name.as_str(), g.compile_matcher()))
+        })
+        .collect();
+
+    let id_to_path: FxHashMap<&str, &str> = modules
+        .iter()
+        .map(|m| (m.id.as_str(), m.path.as_str()))
+        .collect();
+
+    // Assign each module to a layer (first matching pattern wins)
+    let mut module_layer: FxHashMap<&str, (usize, &str)> = FxHashMap::default();
+    for module in modules {
+        for (idx, name, matcher) in &layer_matchers {
+            if matcher.is_match(&module.path) {
+                module_layer.insert(module.id.as_str(), (*idx, name));
+                break;
+            }
+        }
+    }
+
+    let mut violations = Vec::new();
+
+    for dep in dependencies {
+        let from_layer = module_layer.get(dep.from_module_id.as_str());
+        let to_layer = module_layer.get(dep.to_module_id.as_str());
+
+        if let (Some((from_idx, _from_name)), Some((to_idx, to_name))) = (from_layer, to_layer) {
+            // Violation: importing from a higher layer (lower index = higher layer)
+            if to_idx < from_idx {
+                let from_path = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"");
+                let to_path = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"");
+                let from_name = module_layer
+                    .get(dep.from_module_id.as_str())
+                    .map(|(_, n)| *n)
+                    .unwrap_or("");
+                violations.push(LayerViolation {
+                    from_module: from_path.to_string(),
+                    to_module: to_path.to_string(),
+                    line_number: dep.line_number,
+                    from_layer: from_name.to_string(),
+                    to_layer: to_name.to_string(),
                 });
             }
         }

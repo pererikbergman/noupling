@@ -248,6 +248,7 @@ mod tests {
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);
@@ -270,6 +271,7 @@ mod tests {
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let dot = format_dot(&modules, &result);
@@ -289,6 +291,7 @@ mod tests {
             total_modules: 1,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);
