@@ -23,6 +23,18 @@ pub struct Settings {
     /// Custom dependency rules: allow or forbid specific import patterns.
     #[serde(default)]
     pub dependency_rules: Vec<DependencyRule>,
+    /// Architectural layers (ordered top to bottom). Dependencies may only flow downward.
+    #[serde(default)]
+    pub layers: Vec<Layer>,
+}
+
+/// An architectural layer. Dependencies may only flow downward (higher index = lower layer).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Layer {
+    /// Human-readable name (e.g., "presentation", "domain", "data").
+    pub name: String,
+    /// Glob pattern matching module paths in this layer.
+    pub pattern: String,
 }
 
 /// A custom rule that allows or forbids dependencies matching glob patterns.
@@ -126,6 +138,7 @@ impl Default for Settings {
             ignore_patterns: default_ignore_patterns(),
             source_extensions: default_source_extensions(),
             dependency_rules: Vec::new(),
+            layers: Vec::new(),
         }
     }
 }

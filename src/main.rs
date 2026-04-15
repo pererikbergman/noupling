@@ -313,6 +313,8 @@ fn run_audit(
         &dependencies,
         &project_settings.dependency_rules,
     );
+    result.layer_violations =
+        analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {
@@ -373,6 +375,8 @@ fn run_report(path: &str, format: &str) -> anyhow::Result<()> {
         &dependencies,
         &project_settings.dependency_rules,
     );
+    result.layer_violations =
+        analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {

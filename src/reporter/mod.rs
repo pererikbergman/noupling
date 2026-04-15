@@ -629,6 +629,20 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Layer violations
+    if !result.layer_violations.is_empty() {
+        output.push_str(&format!(
+            "\nLayer Violations ({}):\n",
+            result.layer_violations.len()
+        ));
+        for lv in &result.layer_violations {
+            output.push_str(&format!(
+                "  {} ({}) -> {} ({}) (line {})\n",
+                lv.from_module, lv.from_layer, lv.to_module, lv.to_layer, lv.line_number
+            ));
+        }
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -793,6 +807,7 @@ mod tests {
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -816,6 +831,7 @@ mod tests {
             total_modules: 5,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -836,6 +852,7 @@ mod tests {
             total_modules: 6,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -850,6 +867,7 @@ mod tests {
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -866,6 +884,7 @@ mod tests {
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -882,6 +901,7 @@ mod tests {
             total_modules: 5,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -906,6 +926,7 @@ mod tests {
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -922,6 +943,7 @@ mod tests {
             total_modules: 3,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");
