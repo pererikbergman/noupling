@@ -416,6 +416,22 @@ fn short_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
+/// Render a file path as `parent: file.ext` for display.
+fn module_label(path: &str) -> String {
+    let p = std::path::Path::new(path);
+    let file = p.file_name().and_then(|f| f.to_str()).unwrap_or(path);
+    let parent = p
+        .parent()
+        .and_then(|d| d.file_name())
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    if parent.is_empty() {
+        file.to_string()
+    } else {
+        format!("<span class=\"module-tag\">{}</span> {}", parent, file)
+    }
+}
+
 fn score_color(score: f64, green: f64, yellow: f64) -> &'static str {
     if score >= green {
         "#22c55e"
@@ -569,26 +585,25 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 } else {
                     "#6b7280"
                 };
-                let from_short = std::path::Path::new(&v.from_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.from_module);
-                let to_short = std::path::Path::new(&v.to_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.to_module);
+                let from_label = module_label(&v.from_module);
+                let to_label = module_label(&v.to_module);
                 violations_html.push_str(&format!(
                     "<div class=\"violation-card\">
                         <div class=\"violation-sev\" style=\"color:{}\">{:.2}</div>
                         <div class=\"violation-body\">
-                            <div class=\"violation-title\"><strong>{}</strong> &rarr; <strong>{}</strong></div>
+                            <div class=\"violation-title\">{} &rarr; {}</div>
                             <div class=\"violation-detail\" title=\"{}\">{}</div>
                             <div class=\"violation-detail\" title=\"{}\">{}</div>
                         </div>
                     </div>\n",
-                    sev_clr, v.severity, from_short, to_short,
-                    v.from_module, v.from_module,
-                    v.to_module, v.to_module,
+                    sev_clr,
+                    v.severity,
+                    from_label,
+                    to_label,
+                    v.from_module,
+                    v.from_module,
+                    v.to_module,
+                    v.to_module,
                 ));
             }
             violations_html.push_str("</div>\n");
@@ -610,17 +625,11 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 } else {
                     "#6b7280"
                 };
-                let from_short = std::path::Path::new(&v.from_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.from_module);
-                let to_short = std::path::Path::new(&v.to_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.to_module);
+                let from_label = module_label(&v.from_module);
+                let to_label = module_label(&v.to_module);
                 violations_html.push_str(&format!(
                     "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
-                    sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
+                    sev_clr, v.severity, v.from_module, from_label, v.to_module, to_label,
                 ));
             }
             violations_html.push_str("</table>\n");
@@ -644,17 +653,11 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         for v in &sorted_metrics {
-            let from_short = std::path::Path::new(&v.from_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.from_module);
-            let to_short = std::path::Path::new(&v.to_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.to_module);
+            let from_label = module_label(&v.from_module);
+            let to_label = module_label(&v.to_module);
             violations_html.push_str(&format!(
                 "<tr><td><span class=\"severity\" style=\"color:#94a3b8\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
-                v.severity, v.from_module, from_short, v.to_module, to_short,
+                v.severity, v.from_module, from_label, v.to_module, to_label,
             ));
         }
         violations_html.push_str("</table>\n");
@@ -714,6 +717,7 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
 .violations-promoted {{ margin-bottom: 1rem; }}
 .section-hint {{ font-size: 0.75rem; color: #64748b; margin-bottom: 0.6rem; font-style: italic; }}
+.module-tag {{ display: inline-block; background: #e0f2fe; color: #075985; font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.35rem; border-radius: 3px; margin-right: 0.25rem; vertical-align: middle; }}
 .score-hint {{ font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; line-height: 1.4; }}
 .info-icon {{ color: #94a3b8; font-size: 0.7rem; cursor: help; margin-left: 0.15rem; }}
 .summary-card[title] {{ cursor: help; }}
