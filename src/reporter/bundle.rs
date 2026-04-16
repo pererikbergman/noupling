@@ -82,20 +82,28 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
 
     let tree = build_tree(&dir_files);
 
-    // Compute per-directory scores from violations
+    // Compute per-directory scores from violations.
+    // Each module is counted in every ancestor directory, and each violation
+    // is assigned to the common parent of its two directories (matching the
+    // HTML report's logic so colors are meaningful).
     let mut dir_violation_severity: HashMap<String, f64> = HashMap::new();
     let mut dir_module_count: HashMap<String, usize> = HashMap::new();
     for m in modules {
         let rel = strip_path_prefix(&m.path, &common);
-        let parent = std::path::Path::new(&rel)
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        *dir_module_count.entry(parent).or_insert(0) += 1;
+        let parts: Vec<&str> = rel.split('/').collect();
+        // Count this module in every ancestor directory
+        for end in 1..parts.len() {
+            let dir = parts[..end].join("/");
+            *dir_module_count.entry(dir).or_insert(0) += 1;
+        }
     }
     for v in &result.violations {
-        let dir = strip_path_prefix(&v.dir_a, &common);
-        *dir_violation_severity.entry(dir).or_insert(0.0) += v.severity;
+        let a = strip_path_prefix(&v.dir_a, &common);
+        let b = strip_path_prefix(&v.dir_b, &common);
+        let parent = common_parent_of(&a, &b);
+        if !parent.is_empty() {
+            *dir_violation_severity.entry(parent).or_insert(0.0) += v.severity;
+        }
     }
 
     let tree = apply_scores(tree, &dir_violation_severity, &dir_module_count);
@@ -254,9 +262,10 @@ fn apply_scores(
             format!("{}/{}", path, node.name)
         };
 
-        if let Some(&s) = sev.get(&full_path) {
-            let modules = cnt.get(&full_path).copied().unwrap_or(1) as f64;
-            node.score = Some((100.0 * (1.0 - s / modules.max(1.0))).max(0.0));
+        // Always assign a score for non-leaf nodes so the sunburst is fully colored
+        if let Some(&modules) = cnt.get(&full_path) {
+            let s = sev.get(&full_path).copied().unwrap_or(0.0);
+            node.score = Some((100.0 * (1.0 - s / (modules as f64).max(1.0))).clamp(0.0, 100.0));
         }
 
         let child_path = if node.name == "root" {
@@ -294,6 +303,26 @@ fn find_common_path_prefix(paths: &[&str]) -> String {
         len -= 1;
     }
     first[..len].join("/")
+}
+
+/// Return the deepest common parent directory of two paths.
+/// e.g. ("a/b/c", "a/b/d") -> "a/b"
+fn common_parent_of(a: &str, b: &str) -> String {
+    let a_parts: Vec<&str> = a.split('/').collect();
+    let b_parts: Vec<&str> = b.split('/').collect();
+    let mut len = 0;
+    for (x, y) in a_parts.iter().zip(b_parts.iter()) {
+        if x == y {
+            len += 1;
+        } else {
+            break;
+        }
+    }
+    if len > 0 {
+        a_parts[..len].join("/")
+    } else {
+        String::new()
+    }
 }
 
 fn strip_path_prefix(path: &str, prefix: &str) -> String {

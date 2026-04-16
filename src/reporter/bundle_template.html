@@ -124,7 +124,7 @@ root.each(d => {{
     d.current = {{ x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 }};
 }});
 
-// Score-based fill color
+// Score-based fill color (always green/yellow/red, never rainbow)
 function fillColor(d) {{
     // Walk up to find nearest score
     let node = d;
@@ -137,13 +137,8 @@ function fillColor(d) {{
         }}
         node = node.parent;
     }}
-    // Fallback: color by top-level ancestor
-    let top = d;
-    while (top.depth > 1) top = top.parent;
-    const color = d3.scaleOrdinal(d3.quantize(d3.interpolateRainbow, root.children ? root.children.length + 1 : 1));
-    const c = d3.color(color(top.data.name));
-    c.opacity = d.children ? 0.6 : 0.4;
-    return c + "";
+    // Fallback: assume healthy (green) when no score is available
+    return d.children ? "rgba(34,197,94,0.5)" : "rgba(34,197,94,0.3)";
 }}
 
 // Arc generator
