@@ -964,7 +964,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             }
         })
         .collect();
-    hotspots.sort_by(|a, b| b.fan_in.cmp(&a.fan_in));
+    hotspots.sort_by_key(|h| std::cmp::Reverse(h.fan_in));
 
     // Compute per-directory cohesion
     let mut dir_files: FxHashMap<String, Vec<&str>> = FxHashMap::default();
