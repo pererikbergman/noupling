@@ -23,6 +23,17 @@ pub struct DashboardData {
     pub sunburst_tree: serde_json::Value,
     pub sunburst_deps: Vec<DepEdge>,
     pub sunburst_violation_deps: Vec<DepEdge>,
+    pub top_actions: Vec<DashboardAction>,
+    pub projected_score: f64,
+}
+
+#[derive(Serialize)]
+pub struct DashboardAction {
+    pub title: String,
+    pub detail: String,
+    pub action: String,
+    pub cost: usize,
+    pub category: String,
 }
 
 #[derive(Serialize)]
@@ -340,6 +351,36 @@ fn build_dashboard_data(
     let dashboard_violations: usize = modules_table.iter().map(|m| m.violations).sum();
     let dashboard_xs: usize = modules_table.iter().map(|m| m.xs).sum();
 
+    // Top Actions — what to do
+    let top_actions_raw = crate::analyzer::compute_top_actions(result, 5);
+    let top_actions: Vec<DashboardAction> = top_actions_raw
+        .iter()
+        .map(|a| DashboardAction {
+            title: a.title.clone(),
+            detail: a.detail.clone(),
+            action: a.action.clone(),
+            cost: a.cost,
+            category: a.category.clone(),
+        })
+        .collect();
+
+    // Projected score if top 3 actions are completed.
+    // Approximation: for circular/layer/rule violations, removing them eliminates their severity.
+    let actionable_severity: f64 = top_actions_raw
+        .iter()
+        .take(3)
+        .filter(|a| a.category != "hotspot")
+        .map(|a| a.impact)
+        .sum();
+    let projected_score = if result.total_modules > 0 {
+        let projected_sum =
+            (100.0 - dashboard_score) * result.total_modules as f64 / 100.0 - actionable_severity;
+        (100.0 * (1.0 - projected_sum.max(0.0) / result.total_modules as f64))
+            .clamp(dashboard_score, 100.0)
+    } else {
+        dashboard_score
+    };
+
     DashboardData {
         score: dashboard_score,
         total_modules: result.total_modules,
@@ -364,6 +405,8 @@ fn build_dashboard_data(
         sunburst_tree,
         sunburst_deps,
         sunburst_violation_deps,
+        top_actions,
+        projected_score,
     }
 }
 

@@ -46,7 +46,28 @@ tr:hover {{ background: #f8fafc; }}
 .depth-arrow {{ color: #94a3b8; }}
 .tooltip {{ position: fixed; background: #1e293b; color: #e2e8f0; border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.7rem; pointer-events: none; opacity: 0; z-index: 100; }}
 footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem; border-top: 1px solid #e2e8f0; }}
-@media print {{ .header {{ background: #fff; }} .card {{ break-inside: avoid; }} }}
+.actions-hero {{ background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 1.5rem 1.75rem; margin-bottom: 2rem; }}
+.actions-hero h2 {{ font-size: 1.05rem; font-weight: 700; color: #0c4a6e; margin-bottom: 0.25rem; border: none; padding: 0; }}
+.actions-hero .projection {{ font-size: 0.85rem; color: #0369a1; margin-bottom: 1rem; }}
+.actions-hero .projection strong {{ color: #16a34a; font-weight: 700; }}
+.action-list {{ list-style: none; padding: 0; }}
+.action-item {{ background: #fff; border: 1px solid #bae6fd; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.75rem; }}
+.action-item .num {{ background: #0284c7; color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }}
+.action-item .body {{ flex: 1; }}
+.action-item .title {{ font-weight: 600; color: #1e293b; font-size: 0.9rem; margin-bottom: 0.15rem; }}
+.action-item .detail {{ font-size: 0.75rem; color: #64748b; margin-bottom: 0.2rem; word-break: break-word; }}
+.action-item .what {{ font-size: 0.75rem; color: #0369a1; }}
+.action-item .cost {{ font-size: 0.7rem; color: #16a34a; font-weight: 600; }}
+.action-cat {{ display: inline-block; padding: 0.05rem 0.35rem; border-radius: 3px; font-size: 0.6rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; margin-left: 0.4rem; }}
+.action-cat.circular {{ background: #fee2e2; color: #b91c1c; }}
+.action-cat.layer {{ background: #fef3c7; color: #92400e; }}
+.action-cat.rule {{ background: #ddd6fe; color: #5b21b6; }}
+.action-cat.hotspot {{ background: #e0e7ff; color: #3730a3; }}
+.action-cat.cross-module {{ background: #fbcfe8; color: #9d174d; }}
+details.details-collapsed {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }}
+details.details-collapsed > summary {{ font-weight: 600; cursor: pointer; color: #475569; font-size: 0.9rem; user-select: none; }}
+details.details-collapsed[open] > summary {{ margin-bottom: 1rem; }}
+@media print {{ .header {{ background: #fff; }} .card {{ break-inside: avoid; }} details.details-collapsed[open] {{ break-inside: avoid; }} }}
 @media (max-width: 768px) {{ .cards {{ grid-template-columns: repeat(2, 1fr); }} .charts-row {{ grid-template-columns: 1fr; }} }}
 </style>
 </head>
@@ -65,12 +86,27 @@ footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem;
 
 <div class="container">
 
-<!-- Section 1: Metric Cards -->
+<!-- Section 1: Top Actions (decision-first) -->
+<div class="actions-hero" id="actions-hero"></div>
+
+<!-- Section 2: At-a-glance metric cards -->
 <div class="cards" id="cards"></div>
 
-<!-- Section 2: Module Scorecard -->
-<section>
-    <h2>Module Scorecard</h2>
+<!-- Section 3: Architecture Map (always visible — primary visual) -->
+<div class="charts-row">
+    <div class="chart-box">
+        <h3>Architecture Map</h3>
+        <div class="sunburst-container" id="sunburst"></div>
+    </div>
+    <div class="chart-box">
+        <h3>Risk Matrix (Instability vs Blast Radius)</h3>
+        <div class="risk-container" id="risk-chart"></div>
+    </div>
+</div>
+
+<!-- Section 4: Detailed metrics (collapsed by default) -->
+<details class="details-collapsed">
+    <summary>Module Scorecard (sortable)</summary>
     <table id="module-table">
         <thead><tr>
             <th data-sort="name">Module</th>
@@ -84,36 +120,17 @@ footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem;
         </tr></thead>
         <tbody id="module-tbody"></tbody>
     </table>
-</section>
+</details>
 
-<!-- Charts Row -->
-<div class="charts-row">
-    <!-- Section 5: Risk Matrix -->
-    <div class="chart-box">
-        <h3>Risk Matrix (Instability vs Blast Radius)</h3>
-        <div class="risk-container" id="risk-chart"></div>
-    </div>
+<details class="details-collapsed">
+    <summary>Violation breakdown (by age, type, quick wins)</summary>
+    <div id="violation-charts" style="margin-top:0.75rem"></div>
+</details>
 
-    <!-- Section 6: Violations -->
-    <div class="chart-box">
-        <h3>Violations</h3>
-        <div id="violation-charts"></div>
-    </div>
-</div>
-
-<div class="charts-row">
-    <!-- Section 3: Sunburst -->
-    <div class="chart-box">
-        <h3>Architecture Map</h3>
-        <div class="sunburst-container" id="sunburst"></div>
-    </div>
-
-    <!-- Section 7: Depth + Quick Wins -->
-    <div class="chart-box">
-        <h3>Dependency Depth &amp; Quick Wins</h3>
-        <div id="depth-section"></div>
-    </div>
-</div>
+<details class="details-collapsed">
+    <summary>Dependency depth &amp; critical path</summary>
+    <div id="depth-section" style="margin-top:0.75rem"></div>
+</details>
 
 </div>
 
@@ -132,6 +149,34 @@ const cls = D.score >= 90 ? "score-green" : D.score >= 70 ? "score-yellow" : "sc
 scoreBadge.className = "score-badge " + cls;
 scoreBadge.textContent = D.score.toFixed(1) + "/100";
 document.getElementById("meta-info").textContent = D.total_modules + " modules · " + D.total_violations + " violations";
+
+// ── Top Actions hero (decision-first) ──
+(function() {{
+    const hero = document.getElementById("actions-hero");
+    if (!D.top_actions || D.top_actions.length === 0) {{
+        hero.innerHTML = `<h2>What to do this sprint</h2>
+            <div class="projection">No actionable violations detected — architecture is healthy. &#x1f389;</div>`;
+        return;
+    }}
+    const projDelta = D.projected_score - D.score;
+    const projText = projDelta > 0.1
+        ? `Fix the top 3 actions and your projected score is <strong>${{D.projected_score.toFixed(1)}}/100</strong> (+${{projDelta.toFixed(1)}})`
+        : `${{D.top_actions.length}} action${{D.top_actions.length === 1 ? "" : "s"}} identified, prioritized by ROI (impact / effort)`;
+
+    let html = `<h2>What to do this sprint</h2><div class="projection">${{projText}}</div><ul class="action-list">`;
+    D.top_actions.forEach((a, i) => {{
+        html += `<li class="action-item">
+            <div class="num">${{i + 1}}</div>
+            <div class="body">
+                <div class="title">${{a.title}}<span class="action-cat ${{a.category}}">${{a.category}}</span></div>
+                <div class="detail">${{a.detail}}</div>
+                <div class="what">&#x2192; ${{a.action}} <span class="cost">(cost: ${{a.cost}} import${{a.cost === 1 ? "" : "s"}})</span></div>
+            </div>
+        </li>`;
+    }});
+    html += '</ul>';
+    hero.innerHTML = html;
+}})();
 
 // ── Metric cards ──
 const cardsHtml = [
