@@ -63,11 +63,19 @@ nav .container-wide {
 }
 
 nav .logo {
+  display: inline-flex;
+  align-items: center;
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
   text-decoration: none;
   letter-spacing: -0.02em;
+}
+
+nav .logo img {
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
 nav .logo span { color: var(--accent); }
