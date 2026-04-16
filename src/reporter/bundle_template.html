@@ -301,6 +301,19 @@ function drawEdges() {{
 
 drawEdges();
 
+// ── Auto-zoom to first meaningful level (>= 2 children) ──
+(function() {{
+    let target = root;
+    while (target.children && target.children.length === 1) {{
+        target = target.children[0];
+    }}
+    if (target !== root) {{
+        // Trigger a click-equivalent zoom without animation transitions
+        // (just snap to that level on initial render)
+        clicked(null, target);
+    }}
+}})();
+
 // ── Zoom on click ─────────────────────────────────────
 
 function clicked(event, p) {{
