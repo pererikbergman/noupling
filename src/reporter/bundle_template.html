@@ -301,15 +301,26 @@ function drawEdges() {{
 
 drawEdges();
 
-// ── Auto-zoom to first meaningful level (>= 2 children) ──
+// ── Auto-zoom to first meaningful level ──
+// Drill down while either:
+//   (a) the node has only 1 child (trivial), OR
+//   (b) one child holds >= 90% of the total value (e.g. main vs tiny debug/test)
 (function() {{
     let target = root;
-    while (target.children && target.children.length === 1) {{
-        target = target.children[0];
+    while (target.children && target.children.length > 0) {{
+        if (target.children.length === 1) {{
+            target = target.children[0];
+            continue;
+        }}
+        const total = target.value || 1;
+        const dominant = target.children.reduce((max, c) => (c.value || 0) > (max.value || 0) ? c : max, target.children[0]);
+        if ((dominant.value || 0) / total >= 0.9) {{
+            target = dominant;
+            continue;
+        }}
+        break;
     }}
     if (target !== root) {{
-        // Trigger a click-equivalent zoom without animation transitions
-        // (just snap to that level on initial render)
         clicked(null, target);
     }}
 }})();
