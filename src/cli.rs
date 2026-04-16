@@ -161,7 +161,7 @@ pub enum Commands {
         #[arg(default_value = ".")]
         path: String,
 
-        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, or all.
+        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, pr, or all.
         ///
         /// json      - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
         /// xml       - Same structure as JSON but in XML format.
@@ -172,6 +172,7 @@ pub enum Commands {
         /// dot       - GraphViz DOT graph for custom rendering.
         /// bundle    - Zoomable sunburst with dependency edges (D3.js).
         /// dashboard - Interactive technical leader dashboard (D3.js).
+        /// pr        - Tight Markdown summary for posting as a PR comment.
         /// all       - Generate every format above into .noupling/ in one command.
         #[arg(long)]
         format: String,

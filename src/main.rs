@@ -727,6 +727,28 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
             reporter::generate_dashboard(&report_modules, &report_deps, &result, &file_path)?;
             println!("Report saved to {}", file_path.display());
         }
+        "pr" => {
+            // Compute deltas from previous snapshot if available
+            let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
+            let all = snap_repo.get_all()?;
+            let prev = all.iter().rfind(|s| s.id != snapshot.id).cloned();
+            let (prev_score, prev_count) = if let Some(prev_snap) = prev {
+                let prev_modules = module_repo.get_by_snapshot(&prev_snap.id)?;
+                let prev_deps = dep_repo.get_by_snapshot(&prev_snap.id)?;
+                let mut prev_result = analyzer::audit(&prev_modules, &prev_deps);
+                prev_result.filter_by_severity(project_settings.thresholds.minimum_severity);
+                prev_result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+                prev_result.filter_by_layers(&project_settings.layers);
+                (Some(prev_result.score), Some(prev_result.violations.len()))
+            } else {
+                (None, None)
+            };
+
+            let content = reporter::format_pr(&result, prev_score, prev_count, None, None);
+            let file_path = report_dir.join("pr.md");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
         "all" => {
             let formats = [
                 "json",
@@ -738,6 +760,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
                 "dot",
                 "bundle",
                 "dashboard",
+                "pr",
             ];
             let mut succeeded = 0;
             let mut failed = 0;
@@ -771,7 +794,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
         }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', or 'all'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', or 'all'.",
                 format
             );
         }
@@ -840,6 +863,13 @@ fn generate_single_format(
         "dashboard" => {
             let file_path = report_dir.join("dashboard.html");
             reporter::generate_dashboard(modules, deps, result, &file_path)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "pr" => {
+            // Without snapshot history context, generate a simple current-state PR report.
+            let content = reporter::format_pr(result, None, None, None, None);
+            let file_path = report_dir.join("pr.md");
+            std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
         _ => anyhow::bail!("unknown format"),
