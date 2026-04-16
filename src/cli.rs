@@ -161,13 +161,18 @@ pub enum Commands {
         #[arg(default_value = ".")]
         path: String,
 
-        /// Output format: json, xml, md, html, or sonar.
+        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, or all.
         ///
-        /// json  - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
-        /// xml   - Same structure as JSON but in XML format.
-        /// md    - Multi-file Markdown with navigable README.md per directory.
-        /// html  - Interactive static HTML with drill-down navigation and color-coded scores.
-        /// sonar - SonarCloud/SonarQube generic issue import format (sonar.externalIssuesReportPaths).
+        /// json      - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
+        /// xml       - Same structure as JSON but in XML format.
+        /// md        - Multi-file Markdown with navigable README.md per directory.
+        /// html      - Interactive static HTML with drill-down navigation and color-coded scores.
+        /// sonar     - SonarCloud/SonarQube generic issue import format.
+        /// mermaid   - Mermaid flowchart diagram of dependencies.
+        /// dot       - GraphViz DOT graph for custom rendering.
+        /// bundle    - Zoomable sunburst with dependency edges (D3.js).
+        /// dashboard - Interactive technical leader dashboard (D3.js).
+        /// all       - Generate every format above into .noupling/ in one command.
         #[arg(long)]
         format: String,
 
