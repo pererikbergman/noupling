@@ -112,8 +112,20 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
 
     // Mark every ancestor directory of a circular violation so the user can
     // visually trace which subtrees contain cycles, even when the score for
-    // that directory is otherwise green.
+    // that directory is otherwise green. Marks both the cycle dir endpoints
+    // AND the directories of the actual files involved in each hop, so users
+    // can drill down to find the offending file.
     let mut cycle_ancestors: HashSet<String> = HashSet::new();
+
+    fn mark_path(path: &str, set: &mut HashSet<String>) {
+        let parts: Vec<&str> = path.split('/').collect();
+        // Skip the file itself; mark each ancestor directory
+        let depth = parts.len().saturating_sub(1);
+        for end in 1..=depth {
+            set.insert(parts[..end].join("/"));
+        }
+    }
+
     for v in &result.violations {
         if !v.is_circular {
             continue;
@@ -125,6 +137,28 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
             for end in 1..=parts.len() {
                 cycle_ancestors.insert(parts[..end].join("/"));
             }
+        }
+        // Also mark every file that participates in the cycle hops
+        for (from_file, to_file, _) in &v.cycle_hop_files {
+            if !from_file.is_empty() {
+                mark_path(&strip_path_prefix(from_file, &common), &mut cycle_ancestors);
+            }
+            if !to_file.is_empty() {
+                mark_path(&strip_path_prefix(to_file, &common), &mut cycle_ancestors);
+            }
+        }
+        // And the actual from_module / to_module
+        if !v.from_module.is_empty() {
+            mark_path(
+                &strip_path_prefix(&v.from_module, &common),
+                &mut cycle_ancestors,
+            );
+        }
+        if !v.to_module.is_empty() {
+            mark_path(
+                &strip_path_prefix(&v.to_module, &common),
+                &mut cycle_ancestors,
+            );
         }
     }
     fn mark_cycles(node: &mut SunburstNode, path: &str, ancestors: &HashSet<String>) {
