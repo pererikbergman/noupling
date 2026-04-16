@@ -519,36 +519,121 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     }
 
     if !coupling_violations.is_empty() {
-        violations_html.push_str("<h2>Coupling Violations</h2>\n<table class=\"violations\">\n");
-        violations_html
-            .push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
-        for v in &coupling_violations {
-            let sev_clr = if v.severity >= data.critical_severity {
-                "#ef4444"
-            } else if v.severity >= 0.2 {
-                "#eab308"
-            } else {
-                "#6b7280"
-            };
-            let from_short = std::path::Path::new(&v.from_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.from_module);
-            let to_short = std::path::Path::new(&v.to_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.to_module);
-            violations_html.push_str(&format!(
-                "<tr>
-                    <td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td>
-                    <td title=\"{}\">{}</td>
-                    <td title=\"{}\">{}</td>
-                    <td>Coupling</td>
-                </tr>\n",
-                sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
-            ));
+        violations_html.push_str(&format!(
+            "<h2>Coupling Violations <small style=\"font-weight:400;color:#64748b\">({} total)</small></h2>\n",
+            coupling_violations.len()
+        ));
+
+        // Tier 1: Promoted (top 5 by severity, card layout)
+        let mut sorted = coupling_violations.clone();
+        sorted.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let promoted: Vec<&&ViolationInfo> = sorted.iter().take(5).collect();
+        let listed: Vec<&&ViolationInfo> = sorted.iter().skip(5).take(20).collect();
+        let hidden: Vec<&&ViolationInfo> = sorted.iter().skip(25).collect();
+
+        if !promoted.is_empty() {
+            violations_html.push_str("<div class=\"violations-promoted\">\n");
+            for v in &promoted {
+                let sev_clr = if v.severity >= data.critical_severity {
+                    "#ef4444"
+                } else if v.severity >= 0.2 {
+                    "#eab308"
+                } else {
+                    "#6b7280"
+                };
+                let from_short = std::path::Path::new(&v.from_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.from_module);
+                let to_short = std::path::Path::new(&v.to_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.to_module);
+                violations_html.push_str(&format!(
+                    "<div class=\"violation-card\">
+                        <div class=\"violation-sev\" style=\"color:{}\">{:.2}</div>
+                        <div class=\"violation-body\">
+                            <div class=\"violation-title\"><strong>{}</strong> &rarr; <strong>{}</strong></div>
+                            <div class=\"violation-detail\" title=\"{}\">{}</div>
+                            <div class=\"violation-detail\" title=\"{}\">{}</div>
+                        </div>
+                    </div>\n",
+                    sev_clr, v.severity, from_short, to_short,
+                    v.from_module, v.from_module,
+                    v.to_module, v.to_module,
+                ));
+            }
+            violations_html.push_str("</div>\n");
         }
-        violations_html.push_str("</table>\n");
+
+        // Tier 2: Listed (next 20 in a compact table)
+        if !listed.is_empty() {
+            violations_html.push_str(&format!(
+                "<details class=\"violations-section\" open><summary>Next {} violations</summary>\n",
+                listed.len()
+            ));
+            violations_html.push_str("<table class=\"violations\">\n");
+            violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+            for v in &listed {
+                let sev_clr = if v.severity >= data.critical_severity {
+                    "#ef4444"
+                } else if v.severity >= 0.2 {
+                    "#eab308"
+                } else {
+                    "#6b7280"
+                };
+                let from_short = std::path::Path::new(&v.from_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.from_module);
+                let to_short = std::path::Path::new(&v.to_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.to_module);
+                violations_html.push_str(&format!(
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                    sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
+                ));
+            }
+            violations_html.push_str("</table>\n</details>\n");
+        }
+
+        // Tier 3: Hidden behind disclosure
+        if !hidden.is_empty() {
+            violations_html.push_str(&format!(
+                "<details class=\"violations-section\"><summary>Show all {} remaining violations</summary>\n",
+                hidden.len()
+            ));
+            violations_html.push_str("<table class=\"violations\">\n");
+            violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+            for v in &hidden {
+                let sev_clr = if v.severity >= data.critical_severity {
+                    "#ef4444"
+                } else if v.severity >= 0.2 {
+                    "#eab308"
+                } else {
+                    "#6b7280"
+                };
+                let from_short = std::path::Path::new(&v.from_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.from_module);
+                let to_short = std::path::Path::new(&v.to_module)
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or(&v.to_module);
+                violations_html.push_str(&format!(
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                    sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
+                ));
+            }
+            violations_html.push_str("</table>\n</details>\n");
+        }
     }
 
     let is_root = dir_path == data.root_path;
@@ -603,6 +688,17 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
+.violations-promoted {{ margin-bottom: 1rem; }}
+.violation-card {{ display: flex; align-items: center; gap: 1rem; background: #fff; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }}
+.violation-sev {{ font-weight: 800; font-size: 1.05rem; min-width: 50px; text-align: right; }}
+.violation-body {{ flex: 1; font-size: 0.85rem; }}
+.violation-title {{ color: #1e293b; margin-bottom: 0.25rem; }}
+.violation-detail {{ color: #6b7280; font-size: 0.7rem; word-break: break-all; }}
+.violations-section {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 0.75rem; }}
+.violations-section > summary {{ list-style: revert; cursor: pointer; font-weight: 600; color: #475569; font-size: 0.9rem; padding: 0.25rem 0; user-select: none; }}
+.violations-section[open] > summary {{ margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }}
+.violations-section > summary::before {{ content: ''; }}
+.violations-section > summary::marker {{ display: revert; content: revert; }}
 </style>
 </head>
 <body>
