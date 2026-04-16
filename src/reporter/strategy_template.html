@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>noupling — Architecture Strategy Report</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif; background: #fff; color: #1e293b; }}
+.header {{ background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 1.5rem 2rem; }}
+.header h1 {{ font-size: 1.4rem; font-weight: 700; }}
+.header h1 span {{ color: #3b82f6; }}
+.header .subtitle {{ font-size: 0.85rem; color: #64748b; margin-top: 0.25rem; }}
+.container {{ max-width: 1200px; margin: 0 auto; padding: 2rem; }}
+.headline {{ background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 2rem; text-align: center; }}
+.headline h2 {{ font-size: 1.2rem; font-weight: 700; color: #0c4a6e; margin-bottom: 0.5rem; }}
+.headline .score {{ font-size: 2.5rem; font-weight: 800; color: #0284c7; }}
+section {{ margin-bottom: 2.5rem; }}
+section h2 {{ font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }}
+.chart-box {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; }}
+.metric-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }}
+.metric-card {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.25rem; text-align: center; }}
+.metric-card .label {{ font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }}
+.metric-card .value {{ font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }}
+.metric-card .detail {{ font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }}
+.green {{ color: #16a34a; }}
+.yellow {{ color: #ca8a04; }}
+.red {{ color: #dc2626; }}
+.blue {{ color: #0284c7; }}
+table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
+th, td {{ text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; }}
+th {{ background: #f8fafc; color: #64748b; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }}
+.heatmap-cell {{ display: inline-block; width: 18px; height: 18px; border-radius: 2px; margin-right: 1px; vertical-align: middle; }}
+.tooltip {{ position: fixed; background: #1e293b; color: #e2e8f0; border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.7rem; pointer-events: none; opacity: 0; z-index: 100; }}
+footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem; border-top: 1px solid #e2e8f0; }}
+@media print {{ .header {{ background: #fff; }} section {{ break-inside: avoid; }} }}
+@media (max-width: 768px) {{ .metric-grid {{ grid-template-columns: 1fr; }} }}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1><span>nou</span>pling — Architecture Strategy Report</h1>
+    <div class="subtitle">Multi-snapshot trends and trajectory</div>
+</div>
+
+<div class="container">
+
+<!-- Headline -->
+<div class="headline" id="headline"></div>
+
+<!-- Score trajectory -->
+<section>
+    <h2>Score Trajectory</h2>
+    <div class="chart-box">
+        <div id="trajectory-chart"></div>
+    </div>
+</section>
+
+<!-- Velocity -->
+<section>
+    <h2>Velocity</h2>
+    <div class="metric-grid" id="velocity-cards"></div>
+</section>
+
+<!-- Module trajectory matrix -->
+<section>
+    <h2>Module Trajectory Heatmap</h2>
+    <div class="chart-box">
+        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.75rem">Each row is a top-level module; each column is a snapshot. Cell color = score.</p>
+        <div id="heatmap"></div>
+    </div>
+</section>
+
+<!-- Risk concentration -->
+<section>
+    <h2>Risk Concentration</h2>
+    <div class="chart-box">
+        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.75rem">Top 5 modules by current blast radius. Direction shows trend vs previous snapshot.</p>
+        <table id="risk-table"></table>
+    </div>
+</section>
+
+</div>
+
+<footer>{version}</footer>
+<div id="tooltip" class="tooltip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const D = {json};
+const tooltip = document.getElementById("tooltip");
+
+// ── Headline ──
+(function() {{
+    const cls = D.current_score >= 90 ? "green" : D.current_score >= 70 ? "yellow" : "red";
+    document.getElementById("headline").innerHTML = `
+        <h2>${{D.headline}}</h2>
+        <div class="score ${{cls}}">${{D.current_score.toFixed(1)}}/100</div>
+        <div style="font-size:0.85rem;color:#0369a1;margin-top:0.5rem">Current architectural health score</div>`;
+}})();
+
+// ── Score trajectory chart ──
+(function() {{
+    if (D.snapshots.length === 0) return;
+    const w = 1100, h = 280, pad = {{ top: 20, right: 30, bottom: 40, left: 50 }};
+    const svg = d3.select("#trajectory-chart").append("svg")
+        .attr("width", "100%").attr("height", h).attr("viewBox", `0 0 ${{w}} ${{h}}`);
+
+    const x = d3.scalePoint().domain(D.snapshots.map(s => s.id)).range([pad.left, w - pad.right]).padding(0.5);
+    const y = d3.scaleLinear().domain([0, 100]).range([h - pad.bottom, pad.top]);
+
+    // Axes
+    svg.append("g").attr("transform", `translate(0,${{h - pad.bottom}})`).call(d3.axisBottom(x)).selectAll("text").style("font-size", "10px");
+    svg.append("g").attr("transform", `translate(${{pad.left}},0)`).call(d3.axisLeft(y).ticks(5)).selectAll("text").style("font-size", "10px");
+
+    // Grid lines
+    [70, 90].forEach(v => {{
+        svg.append("line").attr("x1", pad.left).attr("x2", w - pad.right).attr("y1", y(v)).attr("y2", y(v))
+            .attr("stroke", v === 90 ? "#16a34a" : "#ca8a04").attr("stroke-dasharray", "3,3").attr("stroke-opacity", 0.4);
+    }});
+
+    // Line
+    const line = d3.line().x(d => x(d.id)).y(d => y(d.score)).curve(d3.curveMonotoneX);
+    svg.append("path").datum(D.snapshots).attr("fill", "none").attr("stroke", "#0284c7").attr("stroke-width", 2).attr("d", line);
+
+    // Points
+    svg.selectAll("circle").data(D.snapshots).join("circle")
+        .attr("cx", d => x(d.id)).attr("cy", d => y(d.score)).attr("r", 4).attr("fill", "#0284c7")
+        .on("mouseover", (e, d) => {{
+            tooltip.innerHTML = `<strong>${{d.id}}</strong><br>${{d.timestamp}}<br>Score: ${{d.score.toFixed(1)}}<br>Violations: ${{d.violations}}`;
+            tooltip.style.opacity = 1;
+        }})
+        .on("mousemove", e => {{ tooltip.style.left = (e.clientX + 10) + "px"; tooltip.style.top = (e.clientY - 10) + "px"; }})
+        .on("mouseout", () => {{ tooltip.style.opacity = 0; }});
+
+    // Labels
+    svg.append("text").attr("x", w / 2).attr("y", h - 5).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Snapshot");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -h / 2).attr("y", 12).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Health Score");
+}})();
+
+// ── Velocity ──
+(function() {{
+    const v = D.velocity;
+    const netSign = v.net_improvement_rate > 0 ? "+" : "";
+    const netCls = v.net_improvement_rate > 0 ? "green" : v.net_improvement_rate < 0 ? "red" : "blue";
+    const html = `
+        <div class="metric-card">
+            <div class="label">Resolved per snapshot</div>
+            <div class="value green">${{v.violations_resolved_avg.toFixed(1)}}</div>
+            <div class="detail">average</div>
+        </div>
+        <div class="metric-card">
+            <div class="label">Introduced per snapshot</div>
+            <div class="value red">${{v.violations_introduced_avg.toFixed(1)}}</div>
+            <div class="detail">average</div>
+        </div>
+        <div class="metric-card">
+            <div class="label">Net improvement rate</div>
+            <div class="value ${{netCls}}">${{netSign}}${{v.net_improvement_rate.toFixed(1)}}</div>
+            <div class="detail">violations / snapshot</div>
+        </div>`;
+    document.getElementById("velocity-cards").innerHTML = html;
+}})();
+
+// ── Module trajectory heatmap ──
+(function() {{
+    if (D.modules_trajectory.length === 0 || D.snapshots.length === 0) {{
+        document.getElementById("heatmap").innerHTML = "<p style='color:#94a3b8'>No module trajectory data.</p>";
+        return;
+    }}
+
+    function colorFor(score) {{
+        if (isNaN(score)) return "#e5e7eb";
+        if (score >= 90) return "#16a34a";
+        if (score >= 70) return "#ca8a04";
+        return "#dc2626";
+    }}
+
+    let html = "<table><thead><tr><th>Module</th>";
+    D.snapshots.forEach(s => html += `<th style="text-align:center;font-size:0.6rem">${{s.id.substring(0, 6)}}</th>`);
+    html += "<th style='text-align:right'>Trend</th></tr></thead><tbody>";
+
+    const sorted = [...D.modules_trajectory].sort((a, b) => a.trend - b.trend);
+    sorted.forEach(m => {{
+        const trendStr = m.trend > 0.1 ? `<span class="green">&#x2191; +${{m.trend.toFixed(2)}}</span>` :
+                         m.trend < -0.1 ? `<span class="red">&#x2193; ${{m.trend.toFixed(2)}}</span>` :
+                         `<span style="color:#94a3b8">stable</span>`;
+        html += `<tr><td><strong>${{m.name}}</strong></td>`;
+        m.scores.forEach((s, i) => {{
+            const title = isNaN(s) ? "no data" : s.toFixed(1);
+            html += `<td style="text-align:center"><span class="heatmap-cell" style="background:${{colorFor(s)}}" title="${{title}}"></span></td>`;
+        }});
+        html += `<td style="text-align:right;font-size:0.8rem">${{trendStr}}</td></tr>`;
+    }});
+    html += "</tbody></table>";
+    document.getElementById("heatmap").innerHTML = html;
+}})();
+
+// ── Risk concentration ──
+(function() {{
+    if (D.risk_concentration.length === 0) {{
+        document.getElementById("risk-table").innerHTML = "<p style='color:#94a3b8'>No risk concentration data.</p>";
+        return;
+    }}
+
+    let html = "<thead><tr><th>Module</th><th>Current Blast Radius</th><th>Previous</th><th>Direction</th></tr></thead><tbody>";
+    D.risk_concentration.forEach(r => {{
+        const dirCls = r.direction === "rising" ? "red" : r.direction === "falling" ? "green" : r.direction === "new" ? "yellow" : "blue";
+        const arrow = r.direction === "rising" ? "&#x2191;" : r.direction === "falling" ? "&#x2193;" : r.direction === "new" ? "&#x2733;" : "=";
+        const prev = r.previous_blast_radius !== null && r.previous_blast_radius !== undefined ? r.previous_blast_radius : "—";
+        html += `<tr>
+            <td><strong>${{r.path}}</strong></td>
+            <td><span class="value" style="font-size:1rem;font-weight:700">${{r.current_blast_radius}}</span></td>
+            <td>${{prev}}</td>
+            <td><span class="${{dirCls}}">${{arrow}} ${{r.direction}}</span></td>
+        </tr>`;
+    }});
+    html += "</tbody>";
+    document.getElementById("risk-table").innerHTML = html;
+}})();
+</script>
+
+</body>
+</html>
