@@ -1283,6 +1283,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1315,6 +1316,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1344,6 +1346,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1367,6 +1370,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1392,6 +1396,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1417,6 +1422,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1450,6 +1456,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -1475,6 +1482,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 

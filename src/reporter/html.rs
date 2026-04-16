@@ -15,6 +15,7 @@ struct DirNode {
     children_dirs: Vec<String>,
     files: Vec<String>,
     violations_here: Vec<ViolationInfo>,
+    coupling_metrics_here: Vec<ViolationInfo>,
     has_deep_violations: bool,
     score: f64,
     module_count: usize,
@@ -114,6 +115,7 @@ fn build_report_data(
                         children_dirs: Vec::new(),
                         files: Vec::new(),
                         violations_here: Vec::new(),
+                        coupling_metrics_here: Vec::new(),
                         has_deep_violations: false,
                         score: 100.0,
                         module_count: 0,
@@ -138,6 +140,7 @@ fn build_report_data(
                 children_dirs: Vec::new(),
                 files: Vec::new(),
                 violations_here: Vec::new(),
+                coupling_metrics_here: Vec::new(),
                 has_deep_violations: false,
                 score: 100.0,
                 module_count: 0,
@@ -240,6 +243,25 @@ fn build_report_data(
 
         if let Some(dir) = dirs.get_mut(&parent) {
             dir.violations_here.push(info);
+        }
+    }
+
+    // Distribute coupling metrics (informational, not violations) to directories
+    for cm in &result.coupling_metrics {
+        let parent = find_common_parent(&cm.dir_a, &cm.dir_b);
+        let info = ViolationInfo {
+            from_module: cm.from_module.clone(),
+            to_module: cm.to_module.clone(),
+            severity: cm.severity,
+            is_circular: false,
+            circular_direction: None,
+            cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+        };
+        if let Some(dir) = dirs.get_mut(&parent) {
+            dir.coupling_metrics_here.push(info);
         }
     }
 
@@ -605,6 +627,39 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         }
     }
 
+    // Coupling Metrics — informational sibling coupling pairs (not violations)
+    if !dir.coupling_metrics_here.is_empty() {
+        violations_html.push_str(&format!(
+            "<h2>Coupling Metrics <small style=\"font-weight:400;color:#64748b\">({} sibling coupling pair{})</small></h2>\n",
+            dir.coupling_metrics_here.len(),
+            if dir.coupling_metrics_here.len() == 1 { "" } else { "s" }
+        ));
+        violations_html.push_str("<p class=\"section-hint\">Sibling directories that import each other. Informational &mdash; not flagged as violations in actionable mode. Use to gauge coupling density.</p>\n");
+        violations_html.push_str("<table class=\"violations\">\n");
+        violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+        let mut sorted_metrics = dir.coupling_metrics_here.clone();
+        sorted_metrics.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for v in &sorted_metrics {
+            let from_short = std::path::Path::new(&v.from_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.from_module);
+            let to_short = std::path::Path::new(&v.to_module)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&v.to_module);
+            violations_html.push_str(&format!(
+                "<tr><td><span class=\"severity\" style=\"color:#94a3b8\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                v.severity, v.from_module, from_short, v.to_module, to_short,
+            ));
+        }
+        violations_html.push_str("</table>\n");
+    }
+
     let is_root = dir_path == data.root_path;
     let title = if is_root {
         "noupling Report".to_string()
@@ -877,6 +932,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -904,6 +960,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -937,6 +994,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -986,6 +1044,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
