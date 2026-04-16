@@ -17,7 +17,7 @@
       <li><a href="docs.html">Docs</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.4.1</span></li>
+      <li><span class="badge">v0.5.0</span></li>
     </ul>
   </div>
 </nav>
@@ -29,6 +29,43 @@
     <p class="lead">
       Not a commit log. A narrative of architectural decisions&mdash;what broke, what was built, and why each change exists.
     </p>
+
+    <!-- ── v0.5.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.5.0 &mdash; The Tech Lead Release</h2>
+      <div class="date">April 2026</div>
+
+      <h3><span class="tag tag-feat">feat</span> Interactive Technical Leader Dashboard (<a href="https://github.com/pererikbergman/noupling/issues/132">#132</a>)</h3>
+      <p><strong>The friction:</strong> Engineers got rich, drillable HTML reports. CTOs and tech leads got... numbers in a terminal. The existing reports answered "where are the violations?" but not "is the architecture improving?", "which module is the riskiest to change?", or "what should we refactor first for the biggest impact?"</p>
+      <p><strong>The implementation:</strong> A self-contained HTML dashboard combining all v0.5.0 metrics: score badge, sortable scorecard table, risk matrix scatter plot (instability vs blast radius), zoomable sunburst with health-score colors and dependency edges, violation breakdowns by age and type, quick-win refactoring targets, and the dependency depth critical path.</p>
+      <p><strong>The ripple effect:</strong> noupling becomes presentable to executive audiences. The dashboard is the artifact you put in a quarterly review slide deck. Generate it, screenshot it, send it.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Module independence score (<a href="https://github.com/pererikbergman/noupling/issues/126">#126</a>)</h3>
+      <p>Per-module ratio of internal to total dependencies. Answers "Can team X own this module independently?" A module with 95% internal deps is ready to extract; one with 40% is deeply entangled.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Blast radius metric (<a href="https://github.com/pererikbergman/noupling/issues/127">#127</a>)</h3>
+      <p>For each module, the count of other modules transitively affected by changes. BFS on the reverse dependency graph. Top 10 highest blast radius shown in audit. Critical for change risk assessment.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Instability metric &mdash; Martin's I (<a href="https://github.com/pererikbergman/noupling/issues/128">#128</a>)</h3>
+      <p>Classic <code>I = fan_out / (fan_in + fan_out)</code>. Includes Zone of Pain detection: stable modules (I &lt; 0.3) with high fan-in are foundational but hard to change.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Coupling trend per area (<a href="https://github.com/pererikbergman/noupling/issues/129">#129</a>)</h3>
+      <p>The <code>--by-module</code> flag on the trend command shows per-directory health scores across snapshots, with +/- indicators. "The payment module went from 82 to 67 over the last 6 sprints" &mdash; now visible.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Dependency depth and critical path (<a href="https://github.com/pererikbergman/noupling/issues/130">#130</a>)</h3>
+      <p>The longest transitive dependency chain in the project, computed via topological sort. Deep chains mean changes ripple through many layers.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Violation age tracking (<a href="https://github.com/pererikbergman/noupling/issues/131">#131</a>)</h3>
+      <p>Compare current violations against historical snapshots. Classify as new (regressions), recent (2&ndash;4 snapshots), or chronic (5+). Helps prioritize urgent fixes vs accepted debt.</p>
+
+      <h3><span class="tag tag-feat">feat</span> <code>--format all</code> (<a href="https://github.com/pererikbergman/noupling/issues/140">#140</a>)</h3>
+      <p>Generate every report format in a single command: <code>noupling report . --format all</code>. Useful for CI pipelines that publish multiple artifacts.</p>
+
+      <h3>Also in this release:</h3>
+      <ul>
+        <li><span class="tag tag-docs">docs</span> SVG logo replaces text wordmark on the docs site (<a href="https://github.com/pererikbergman/noupling/issues/144">#144</a>)</li>
+      </ul>
+    </article>
 
     <!-- ── v0.4.1 ─────────────────────────────────────── -->
     <article class="release">

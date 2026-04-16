@@ -17,7 +17,7 @@
       <li><a href="docs.html" class="active">Docs</a></li>
       <li><a href="changelog.html">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.4.1</span></li>
+      <li><span class="badge">v0.5.0</span></li>
     </ul>
   </div>
 </nav>
@@ -53,6 +53,14 @@
       <a href="#diff-mode">Diff Mode</a>
       <a href="#ci-integration">CI Integration</a>
       <a href="#report-formats">Report Formats</a>
+
+      <h4>Tech Lead Metrics</h4>
+      <a href="#independence">Module Independence</a>
+      <a href="#blast-radius">Blast Radius</a>
+      <a href="#instability">Instability (Martin's I)</a>
+      <a href="#dependency-depth">Dependency Depth</a>
+      <a href="#violation-age">Violation Age</a>
+      <a href="#dashboard">Dashboard</a>
 
       <h4>Concepts</h4>
       <a href="#coupling">Coupling Violations</a>
@@ -140,7 +148,7 @@ noupling audit . --fail-below 80</code></pre>
       <h2 id="cmd-report">report</h2>
       <p>Generate a report file from the latest snapshot.</p>
 <pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME]</code></pre>
-      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>. See <a href="#report-formats">Report Formats</a>.</p>
+      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>, <code>dashboard</code>, <code>all</code>. See <a href="#report-formats">Report Formats</a>.</p>
 
 
       <h2 id="cmd-trend">trend</h2>
@@ -304,8 +312,64 @@ noupling audit .</code></pre>
           <tr><td><code>mermaid</code></td><td><code>.noupling/report.mermaid</code></td><td>Embed in Markdown, quick overview</td></tr>
           <tr><td><code>dot</code></td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
           <tr><td><code>bundle</code></td><td><code>.noupling/bundle.html</code></td><td>Zoomable sunburst with dependency edges</td></tr>
+          <tr><td><code>dashboard</code></td><td><code>.noupling/dashboard.html</code></td><td>Executive dashboard with all metrics, scorecard, risk matrix</td></tr>
+          <tr><td><code>all</code></td><td><em>all of the above</em></td><td>One command to generate every report format</td></tr>
         </tbody>
       </table>
+
+
+      <!-- Tech Lead Metrics -->
+      <h2 id="independence">Module Independence</h2>
+      <p>For each top-level directory, the ratio of internal dependencies to total dependencies.</p>
+<pre><code>independence = internal_deps / (internal_deps + external_deps)</code></pre>
+      <p>A module with independence <strong>0.95</strong> can be extracted into its own repo. One with <strong>0.40</strong> is deeply entangled. Modules below 70% are flagged in audit output.</p>
+      <div class="callout"><strong>Pro-Tip:</strong> Use this to answer "Can team X own this module independently?" High independence = ready to extract. Low independence = needs decoupling first.</div>
+
+
+      <h2 id="blast-radius">Blast Radius</h2>
+      <p>For each module, the count of other modules transitively affected if it changes. Computed via BFS on the reverse dependency graph.</p>
+      <p>If A imports B and B imports C, then C's blast radius is 2 (changing C affects both B and A). The top 10 highest blast radius modules are shown in audit output.</p>
+      <p>Use this before approving refactoring plans: low blast radius = safe to change, high = ripples through the codebase.</p>
+
+
+      <h2 id="instability">Instability (Martin's I)</h2>
+      <p>Robert C. Martin's metric:</p>
+<pre><code>I = fan_out / (fan_in + fan_out)</code></pre>
+      <ul>
+        <li><strong>I = 0.0</strong>: Maximally stable. Many depend on it; it depends on nothing. Should be abstract.</li>
+        <li><strong>I = 1.0</strong>: Maximally unstable. Depends on many; nothing depends on it. Should be concrete.</li>
+      </ul>
+      <p>The <strong>Zone of Pain</strong>: stable (I &lt; 0.3) modules with high fan-in (&ge; 5) are foundational but hard to change with wide impact. These are flagged separately.</p>
+
+
+      <h2 id="dependency-depth">Dependency Depth</h2>
+      <p>The longest transitive dependency chain in the project, computed via topological sort on the dependency DAG.</p>
+      <p>Deep chains mean changes at the bottom ripple through many layers. Shallow chains mean the architecture is flat and manageable. The audit output shows the maximum depth and the critical path (the actual chain of files).</p>
+
+
+      <h2 id="violation-age">Violation Age</h2>
+      <p>Violations are classified by how long they have existed across snapshots:</p>
+      <ul>
+        <li><strong>New</strong>: first appearance in the latest snapshot &mdash; urgent regressions</li>
+        <li><strong>Recent</strong>: 2&ndash;4 snapshots &mdash; recent debt</li>
+        <li><strong>Chronic</strong>: 5+ snapshots &mdash; accepted long-term debt</li>
+      </ul>
+      <p>This helps prioritize: new regressions need immediate attention; chronic debt gets planned work.</p>
+
+
+      <h2 id="dashboard">Technical Leader Dashboard</h2>
+      <p>An executive single-page HTML report combining all metrics:</p>
+<pre><code class="language-bash">noupling report . --format dashboard</code></pre>
+      <ul>
+        <li><strong>Score badge</strong> with project-level health</li>
+        <li><strong>Metric cards</strong>: Health Score, Total XS, Lowest Independence, Highest Blast Radius</li>
+        <li><strong>Sortable scorecard table</strong>: per-module score, files, violations, circular, XS, independence, instability</li>
+        <li><strong>Risk matrix</strong>: Instability vs Blast Radius scatter plot, color-coded</li>
+        <li><strong>Architecture map</strong>: zoomable sunburst with dependency edges (gray) and violations (red)</li>
+        <li><strong>Violation charts</strong>: by age, by type, plus quick-win refactoring targets</li>
+        <li><strong>Dependency depth</strong> with critical path</li>
+      </ul>
+      <p>Built for presenting to CTOs and tech leads. Self-contained HTML, dark or light theme, print-friendly.</p>
 
 
       <!-- Concepts -->

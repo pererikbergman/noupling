@@ -29,13 +29,16 @@ Every violation gets a **severity score** based on depth: problems at the root o
 - **14 languages**: C#, Dart, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **8 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst
+- **9 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard (or `all` to generate every format)
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
 - **Sunburst visualization**: Zoomable D3.js dependency graph with animated drill-down
+- **Technical Leader Dashboard**: Single-page executive view with all metrics, sortable scorecard, risk matrix
 - **Monorepo support**: Independent analysis per module with cross-module dependency validation
 - **Architectural layers**: Define dependency direction, suppress legitimate downward coupling
 - **XS metric**: Quantify refactoring cost per violation, find the weakest link in cycles
 - **Inline suppression**: `// noupling:ignore` to suppress known acceptable coupling
+- **Advanced metrics**: Module independence, blast radius, instability (Martin's I), dependency depth, violation age
+- **Per-module trends**: `--by-module` flag to track score evolution per directory across snapshots
 - **PR/CI mode**: `--diff-base main` to only flag new violations
 - **Configurable**: Thresholds, layers, dependency rules, glob ignore patterns
 
@@ -113,14 +116,16 @@ noupling audit /path/to/project --fail-below 80  # Exit code 1 if score < 80
 ### Generate reports
 
 ```bash
-noupling report /path/to/project --format json    # Comprehensive JSON
-noupling report /path/to/project --format xml     # Comprehensive XML
-noupling report /path/to/project --format md      # Multi-file navigable Markdown
-noupling report /path/to/project --format html    # Interactive HTML with drill-down
-noupling report /path/to/project --format sonar   # SonarCloud generic issue import
-noupling report /path/to/project --format mermaid # Mermaid flowchart diagram
-noupling report /path/to/project --format dot     # GraphViz DOT graph
-noupling report /path/to/project --format bundle  # Zoomable sunburst with dependency edges
+noupling report /path/to/project --format json      # Comprehensive JSON
+noupling report /path/to/project --format xml       # Comprehensive XML
+noupling report /path/to/project --format md        # Multi-file navigable Markdown
+noupling report /path/to/project --format html      # Interactive HTML with drill-down
+noupling report /path/to/project --format sonar     # SonarCloud generic issue import
+noupling report /path/to/project --format mermaid   # Mermaid flowchart diagram
+noupling report /path/to/project --format dot       # GraphViz DOT graph
+noupling report /path/to/project --format bundle    # Zoomable sunburst with dependency edges
+noupling report /path/to/project --format dashboard # Interactive Technical Leader Dashboard
+noupling report /path/to/project --format all       # Generate every format above in one command
 ```
 
 ### Diff mode (PR/CI gate)
