@@ -642,6 +642,27 @@ pub fn format_text(result: &AuditResult) -> String {
         ));
     }
 
+    // Top Actions — what to do
+    let top_actions = crate::analyzer::compute_top_actions(result, 5);
+    if !top_actions.is_empty() {
+        output.push_str("\nTop Actions:\n");
+        for (i, action) in top_actions.iter().enumerate() {
+            output.push_str(&format!(
+                "  {}. {} [{}]\n",
+                i + 1,
+                action.title,
+                action.category
+            ));
+            output.push_str(&format!("     {}\n", action.detail));
+            output.push_str(&format!(
+                "     \u{2192} {} (cost: {} import{})\n",
+                action.action,
+                action.cost,
+                if action.cost == 1 { "" } else { "s" }
+            ));
+        }
+    }
+
     if !result.violations.is_empty() {
         output.push('\n');
         for v in &result.violations {
