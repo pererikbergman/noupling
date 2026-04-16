@@ -89,6 +89,12 @@ pub struct Thresholds {
     /// Directories with cohesion below this are flagged as low cohesion.
     #[serde(default = "default_min_cohesion")]
     pub min_cohesion: f64,
+    /// Coupling detection mode: "actionable" (default) or "strict".
+    /// - actionable: only flag circular deps, layer/rule/cross-module violations.
+    ///   Sibling coupling is tracked as a metric but not a violation.
+    /// - strict: every sibling dependency is a coupling violation (legacy behavior).
+    #[serde(default = "default_coupling_mode")]
+    pub coupling_mode: String,
 }
 
 fn default_thresholds() -> Thresholds {
@@ -99,7 +105,12 @@ fn default_thresholds() -> Thresholds {
         minimum_severity: default_minimum_severity(),
         hotspot_fan_in: default_hotspot_fan_in(),
         min_cohesion: default_min_cohesion(),
+        coupling_mode: default_coupling_mode(),
     }
+}
+
+fn default_coupling_mode() -> String {
+    "actionable".to_string()
 }
 
 fn default_score_green() -> f64 {
