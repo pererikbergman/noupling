@@ -259,6 +259,7 @@ mod tests {
             max_depth: 0,
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
             suppressed_count: 0,
         };
 
@@ -289,6 +290,7 @@ mod tests {
             max_depth: 0,
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
             suppressed_count: 0,
         };
 
@@ -316,6 +318,7 @@ mod tests {
             max_depth: 0,
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
             suppressed_count: 0,
         };
 

@@ -85,6 +85,8 @@ pub struct AuditResult {
     pub critical_path: Vec<String>,
     /// Violation age summary: new, recent, chronic counts.
     pub violation_age: ViolationAgeSummary,
+    /// Sibling coupling pairs tracked as metrics (not violations) in actionable mode.
+    pub coupling_metrics_count: usize,
     /// Number of imports suppressed by `noupling:ignore` comments.
     pub suppressed_count: usize,
 }
@@ -242,6 +244,32 @@ impl AuditResult {
         self.violations
             .retain(|v| v.is_circular || v.severity >= minimum_severity);
         self.recalculate_score();
+    }
+
+    /// In "actionable" coupling mode, sibling coupling violations are not
+    /// counted as violations — only circular dependencies remain in the
+    /// `violations` list. Layer/rule/cross-module violations are tracked
+    /// separately and unaffected.
+    ///
+    /// Sibling coupling is still measured (cohesion, hotspots, weights) but
+    /// no longer treated as a violation that drags down the score.
+    pub fn apply_coupling_mode(&mut self, mode: &str) {
+        if mode == "actionable" {
+            self.coupling_metrics_count = self.violations.iter().filter(|v| !v.is_circular).count();
+            self.violations.retain(|v| v.is_circular);
+            self.total_xs = self
+                .violations
+                .iter()
+                .map(|v| {
+                    if v.is_circular {
+                        v.break_cost
+                    } else {
+                        v.weight
+                    }
+                })
+                .sum();
+            self.recalculate_score();
+        }
     }
 
     pub fn recalculate_score(&mut self) {
@@ -615,6 +643,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             max_depth: 0,
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
             suppressed_count: 0,
         };
     }
@@ -1097,6 +1126,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         max_depth,
         critical_path,
         violation_age: ViolationAgeSummary::default(),
+        coupling_metrics_count: 0,
         suppressed_count: 0,
     }
 }

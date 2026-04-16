@@ -162,6 +162,7 @@ fn run_trend(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
 
         let mut result = analyzer::audit(&modules, &dependencies);
         result.filter_by_severity(project_settings.thresholds.minimum_severity);
+        result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
         result.filter_by_layers(&project_settings.layers);
 
         let delta = match prev_score {
@@ -224,6 +225,7 @@ fn run_trend_by_module(
 
         let mut result = analyzer::audit(&modules, &dependencies);
         result.filter_by_severity(settings.thresholds.minimum_severity);
+        result.apply_coupling_mode(&settings.thresholds.coupling_mode);
         result.filter_by_layers(&settings.layers);
 
         let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
@@ -432,6 +434,7 @@ fn run_baseline(action: &str, path: &str) -> anyhow::Result<()> {
             let project_settings = settings::Settings::load(Path::new(path))?;
             let mut result = analyzer::audit(&modules, &dependencies);
             result.filter_by_severity(project_settings.thresholds.minimum_severity);
+            result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
             result.filter_by_layers(&project_settings.layers);
 
             baseline::save_baseline(Path::new(path), &result)?;
@@ -522,6 +525,7 @@ fn run_audit(
     // Single-project mode (existing behavior)
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
     result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &modules,
@@ -636,6 +640,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
 
     let mut result = analyzer::audit(&report_modules, &report_deps);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
+    result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
     result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &report_modules,
