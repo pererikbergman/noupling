@@ -12,6 +12,8 @@ struct SunburstNode {
     score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<usize>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    has_cycle_in_subtree: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     children: Vec<SunburstNode>,
 }
@@ -106,7 +108,46 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
         }
     }
 
-    let tree = apply_scores(tree, &dir_violation_severity, &dir_module_count);
+    let mut tree = apply_scores(tree, &dir_violation_severity, &dir_module_count);
+
+    // Mark every ancestor directory of a circular violation so the user can
+    // visually trace which subtrees contain cycles, even when the score for
+    // that directory is otherwise green.
+    let mut cycle_ancestors: HashSet<String> = HashSet::new();
+    for v in &result.violations {
+        if !v.is_circular {
+            continue;
+        }
+        let a = strip_path_prefix(&v.dir_a, &common);
+        let b = strip_path_prefix(&v.dir_b, &common);
+        for path in [a.as_str(), b.as_str()] {
+            let parts: Vec<&str> = path.split('/').collect();
+            for end in 1..=parts.len() {
+                cycle_ancestors.insert(parts[..end].join("/"));
+            }
+        }
+    }
+    fn mark_cycles(node: &mut SunburstNode, path: &str, ancestors: &HashSet<String>) {
+        let full_path = if path.is_empty() {
+            node.name.clone()
+        } else if node.name == "root" {
+            String::new()
+        } else {
+            format!("{}/{}", path, node.name)
+        };
+        if ancestors.contains(&full_path) {
+            node.has_cycle_in_subtree = true;
+        }
+        let child_path = if node.name == "root" {
+            String::new()
+        } else {
+            full_path
+        };
+        for child in &mut node.children {
+            mark_cycles(child, &child_path, ancestors);
+        }
+    }
+    mark_cycles(&mut tree, "", &cycle_ancestors);
 
     // Build cross-directory dependency edges (file-level, stripped paths)
     let mut deps: Vec<DepEdge> = Vec::new();
@@ -168,6 +209,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
     let mut root = SunburstNode {
         name: "root".to_string(),
         score: None,
+        has_cycle_in_subtree: false,
         value: None,
         children: Vec::new(),
     };
@@ -204,6 +246,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
                 current.children.push(SunburstNode {
                     name: part.to_string(),
                     score: None,
+                    has_cycle_in_subtree: false,
                     value: None,
                     children: Vec::new(),
                 });
@@ -225,6 +268,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
             parent.children.push(SunburstNode {
                 name: file.clone(),
                 score: None,
+                has_cycle_in_subtree: false,
                 value: Some(1),
                 children: Vec::new(),
             });

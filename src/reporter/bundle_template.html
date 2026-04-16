@@ -126,6 +126,19 @@ root.each(d => {{
 
 // Score-based fill color (always green/yellow/red, never rainbow)
 function fillColor(d) {{
+    // If this node or any descendant contains a circular dependency,
+    // force at least yellow so the user can visually trace cycles.
+    if (d.data.has_cycle_in_subtree) {{
+        // Use score to choose between yellow and red (downgrade green to yellow)
+        let node = d;
+        while (node) {{
+            if (node.data.score != null && node.data.score < 70) {{
+                return d.children ? "rgba(239,68,68,0.45)" : "rgba(239,68,68,0.25)";
+            }}
+            node = node.parent;
+        }}
+        return d.children ? "rgba(234,179,8,0.5)" : "rgba(234,179,8,0.3)";
+    }}
     // Walk up to find nearest score
     let node = d;
     while (node) {{
