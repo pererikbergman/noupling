@@ -416,19 +416,38 @@ fn short_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
-/// Render a file path as `parent: file.ext` for display.
-fn module_label(path: &str) -> String {
+/// Render a file path as `relative/path: file.ext` for display.
+/// `current_dir` is the directory of the page we're rendering — paths are
+/// shown relative to it so users can see where each file lives.
+fn module_label(path: &str, current_dir: &str) -> String {
     let p = std::path::Path::new(path);
     let file = p.file_name().and_then(|f| f.to_str()).unwrap_or(path);
     let parent = p
         .parent()
-        .and_then(|d| d.file_name())
-        .and_then(|f| f.to_str())
-        .unwrap_or("");
-    if parent.is_empty() {
+        .map(|d| d.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Strip the current_dir prefix so the displayed path is relative
+    let relative = if !current_dir.is_empty() {
+        let prefix = format!("{}/", current_dir);
+        if let Some(stripped) = parent.strip_prefix(&prefix) {
+            stripped.to_string()
+        } else if parent == current_dir {
+            String::new()
+        } else {
+            parent.clone()
+        }
+    } else {
+        parent.clone()
+    };
+
+    if relative.is_empty() {
         file.to_string()
     } else {
-        format!("<span class=\"module-tag\">{}</span> {}", parent, file)
+        format!(
+            "<span class=\"module-tag\" title=\"{}\">{}</span> {}",
+            parent, relative, file
+        )
     }
 }
 
@@ -585,8 +604,8 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 } else {
                     "#6b7280"
                 };
-                let from_label = module_label(&v.from_module);
-                let to_label = module_label(&v.to_module);
+                let from_label = module_label(&v.from_module, dir_path);
+                let to_label = module_label(&v.to_module, dir_path);
                 violations_html.push_str(&format!(
                     "<div class=\"violation-card\">
                         <div class=\"violation-sev\" style=\"color:{}\">{:.2}</div>
@@ -625,8 +644,8 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 } else {
                     "#6b7280"
                 };
-                let from_label = module_label(&v.from_module);
-                let to_label = module_label(&v.to_module);
+                let from_label = module_label(&v.from_module, dir_path);
+                let to_label = module_label(&v.to_module, dir_path);
                 violations_html.push_str(&format!(
                     "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
                     sev_clr, v.severity, v.from_module, from_label, v.to_module, to_label,
@@ -653,8 +672,8 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         for v in &sorted_metrics {
-            let from_label = module_label(&v.from_module);
-            let to_label = module_label(&v.to_module);
+            let from_label = module_label(&v.from_module, dir_path);
+            let to_label = module_label(&v.to_module, dir_path);
             violations_html.push_str(&format!(
                 "<tr><td><span class=\"severity\" style=\"color:#94a3b8\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
                 v.severity, v.from_module, from_label, v.to_module, to_label,
