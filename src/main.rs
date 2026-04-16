@@ -722,13 +722,122 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
             reporter::generate_dashboard(&report_modules, &report_deps, &result, &file_path)?;
             println!("Report saved to {}", file_path.display());
         }
+        "all" => {
+            let formats = [
+                "json",
+                "xml",
+                "md",
+                "html",
+                "sonar",
+                "mermaid",
+                "dot",
+                "bundle",
+                "dashboard",
+            ];
+            let mut succeeded = 0;
+            let mut failed = 0;
+            for f in formats {
+                let r = generate_single_format(
+                    f,
+                    &report_dir,
+                    &report_modules,
+                    &report_deps,
+                    &result,
+                    &snapshot.id,
+                    &project_settings,
+                );
+                match r {
+                    Ok(()) => succeeded += 1,
+                    Err(e) => {
+                        eprintln!("Warning: failed to generate '{}' report: {}", f, e);
+                        failed += 1;
+                    }
+                }
+            }
+            println!(
+                "\nGenerated {} report(s){}",
+                succeeded,
+                if failed > 0 {
+                    format!(" ({} failed)", failed)
+                } else {
+                    String::new()
+                }
+            );
+        }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', or 'dashboard'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', or 'all'.",
                 format
             );
         }
     }
 
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn generate_single_format(
+    format: &str,
+    report_dir: &Path,
+    modules: &[core::Module],
+    deps: &[core::Dependency],
+    result: &analyzer::AuditResult,
+    snapshot_id: &str,
+    settings: &settings::Settings,
+) -> anyhow::Result<()> {
+    match format {
+        "json" => {
+            let report = reporter::JsonReport::from_audit(modules, result, snapshot_id);
+            let content = report.to_json()?;
+            let file_path = report_dir.join("report.json");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "md" => {
+            let md_dir = report_dir.join("report-md");
+            reporter::generate_markdown_report(modules, result, snapshot_id, &md_dir)?;
+            println!("Report saved to {}/README.md", md_dir.display());
+        }
+        "xml" => {
+            let content = reporter::format_xml(modules, result, snapshot_id);
+            let file_path = report_dir.join("report.xml");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "sonar" => {
+            let content = reporter::format_sonar(result);
+            let file_path = report_dir.join("noupling-sonar.json");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "html" => {
+            let html_dir = report_dir.join("report");
+            reporter::generate_html_report(modules, result, snapshot_id, &html_dir, settings)?;
+            println!("Report saved to {}/index.html", html_dir.display());
+        }
+        "mermaid" => {
+            let content = reporter::format_mermaid(modules, result);
+            let file_path = report_dir.join("report.mermaid");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "dot" => {
+            let content = reporter::format_dot(modules, result);
+            let file_path = report_dir.join("report.dot");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "bundle" => {
+            let file_path = report_dir.join("bundle.html");
+            reporter::generate_bundle_report(modules, deps, result, &file_path)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "dashboard" => {
+            let file_path = report_dir.join("dashboard.html");
+            reporter::generate_dashboard(modules, deps, result, &file_path)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        _ => anyhow::bail!("unknown format"),
+    }
     Ok(())
 }
