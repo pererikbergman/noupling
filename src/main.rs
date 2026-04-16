@@ -749,6 +749,12 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
+        "briefing" => {
+            let content = reporter::format_briefing(&result);
+            let file_path = report_dir.join("briefing.md");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
         "all" => {
             let formats = [
                 "json",
@@ -761,6 +767,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
                 "bundle",
                 "dashboard",
                 "pr",
+                "briefing",
             ];
             let mut succeeded = 0;
             let mut failed = 0;
@@ -794,7 +801,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
         }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', or 'all'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', or 'all'.",
                 format
             );
         }
@@ -869,6 +876,12 @@ fn generate_single_format(
             // Without snapshot history context, generate a simple current-state PR report.
             let content = reporter::format_pr(result, None, None, None, None);
             let file_path = report_dir.join("pr.md");
+            std::fs::write(&file_path, &content)?;
+            println!("Report saved to {}", file_path.display());
+        }
+        "briefing" => {
+            let content = reporter::format_briefing(result);
+            let file_path = report_dir.join("briefing.md");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
