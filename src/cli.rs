@@ -161,7 +161,7 @@ pub enum Commands {
         #[arg(default_value = ".")]
         path: String,
 
-        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, pr, briefing, or all.
+        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, pr, briefing, strategy, or all.
         ///
         /// json      - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
         /// xml       - Same structure as JSON but in XML format.
@@ -174,6 +174,7 @@ pub enum Commands {
         /// dashboard - Interactive technical leader dashboard (D3.js).
         /// pr        - Tight Markdown summary for posting as a PR comment.
         /// briefing  - Sprint planning Markdown report with top 10 ROI-ranked refactorings.
+        /// strategy  - Multi-snapshot HTML trend report for executive review (use --last N).
         /// all       - Generate every format above into .noupling/ in one command.
         #[arg(long)]
         format: String,
@@ -182,6 +183,10 @@ pub enum Commands {
         /// Module names are defined in .noupling/settings.json under "modules".
         #[arg(long, value_name = "NAME")]
         module: Option<String>,
+
+        /// For trend-based reports (strategy): include the last N snapshots.
+        #[arg(long, default_value = "12")]
+        last: usize,
     },
 }
 

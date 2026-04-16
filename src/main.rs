@@ -60,7 +60,8 @@ fn main() {
             path,
             format,
             module,
-        } => run_report(&path, &format, module.as_deref()),
+            last,
+        } => run_report(&path, &format, module.as_deref(), last),
     };
 
     if let Err(e) = result {
@@ -594,7 +595,12 @@ fn run_audit(
     Ok(())
 }
 
-fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::Result<()> {
+fn run_report(
+    path: &str,
+    format: &str,
+    module_filter: Option<&str>,
+    last: usize,
+) -> anyhow::Result<()> {
     let db = find_db(path)?;
     let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
 
@@ -755,6 +761,19 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
+        "strategy" => {
+            let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
+            let file_path = report_dir.join("strategy.html");
+            reporter::generate_strategy_report(
+                &snap_repo,
+                &module_repo,
+                &dep_repo,
+                &project_settings,
+                last,
+                &file_path,
+            )?;
+            println!("Report saved to {}", file_path.display());
+        }
         "all" => {
             let formats = [
                 "json",
@@ -789,6 +808,26 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
                     }
                 }
             }
+            // Strategy needs snapshot history — handle separately
+            let snap_repo = storage::repository::SnapshotRepository::new(&db.conn);
+            let strategy_path = report_dir.join("strategy.html");
+            match reporter::generate_strategy_report(
+                &snap_repo,
+                &module_repo,
+                &dep_repo,
+                &project_settings,
+                last,
+                &strategy_path,
+            ) {
+                Ok(()) => {
+                    succeeded += 1;
+                    println!("Report saved to {}", strategy_path.display());
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to generate 'strategy' report: {}", e);
+                    failed += 1;
+                }
+            }
             println!(
                 "\nGenerated {} report(s){}",
                 succeeded,
@@ -801,7 +840,7 @@ fn run_report(path: &str, format: &str, module_filter: Option<&str>) -> anyhow::
         }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', or 'all'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', 'strategy', or 'all'.",
                 format
             );
         }

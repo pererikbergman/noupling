@@ -3,6 +3,7 @@ mod dashboard;
 mod graph;
 mod html;
 mod md;
+mod strategy;
 
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -15,6 +16,7 @@ pub use dashboard::generate_dashboard;
 pub use graph::{format_dot, format_mermaid};
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;
+pub use strategy::generate_strategy_report;
 
 /// The version string used across all report outputs.
 pub const VERSION: &str = concat!("noupling v", env!("CARGO_PKG_VERSION"));
