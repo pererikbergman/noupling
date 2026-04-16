@@ -1,4 +1,5 @@
 mod bundle;
+mod dashboard;
 mod graph;
 mod html;
 mod md;
@@ -10,6 +11,7 @@ use crate::analyzer::{AuditResult, CouplingViolation};
 use crate::core::Module;
 
 pub use bundle::generate_bundle_report;
+pub use dashboard::generate_dashboard;
 pub use graph::{format_dot, format_mermaid};
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;
@@ -26,7 +28,9 @@ pub struct JsonReport {
     pub score: f64,
     pub total_modules: usize,
     pub total_xs: usize,
+    pub max_depth: usize,
     pub suppressed_count: usize,
+    pub violation_age: JsonViolationAge,
     pub critical_violations: usize,
     pub total_circular: usize,
     pub total_coupling: usize,
@@ -34,6 +38,13 @@ pub struct JsonReport {
     pub coupling_violations: Vec<JsonCouplingViolation>,
     pub hotspots: Vec<JsonHotspot>,
     pub directory_tree: Vec<JsonDirectory>,
+}
+
+#[derive(Serialize)]
+pub struct JsonViolationAge {
+    pub new_count: usize,
+    pub recent_count: usize,
+    pub chronic_count: usize,
 }
 
 #[derive(Serialize)]
@@ -194,7 +205,13 @@ impl JsonReport {
             score: result.score,
             total_modules: result.total_modules,
             total_xs: result.total_xs,
+            max_depth: result.max_depth,
             suppressed_count: result.suppressed_count,
+            violation_age: JsonViolationAge {
+                new_count: result.violation_age.new_count,
+                recent_count: result.violation_age.recent_count,
+                chronic_count: result.violation_age.chronic_count,
+            },
             critical_violations,
             total_circular: circular.len(),
             total_coupling: coupling.len(),
@@ -388,9 +405,11 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     xml.push_str(&format!(
-        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" totalXs=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
+        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" totalXs=\"{}\" maxDepth=\"{}\" suppressedCount=\"{}\" violationAgeNew=\"{}\" violationAgeRecent=\"{}\" violationAgeChronic=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
         xml_escape(VERSION), xml_escape(&report.snapshot_id), report.score, report.total_modules,
-        report.total_xs, report.critical_violations, report.total_circular, report.total_coupling,
+        report.total_xs, report.max_depth, report.suppressed_count,
+        report.violation_age.new_count, report.violation_age.recent_count, report.violation_age.chronic_count,
+        report.critical_violations, report.total_circular, report.total_coupling,
     ));
 
     // Circular dependencies

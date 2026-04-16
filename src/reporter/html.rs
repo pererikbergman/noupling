@@ -38,12 +38,10 @@ struct ReportData {
     dirs: BTreeMap<String, DirNode>,
     root_path: String,
     snapshot_id: String,
-    #[allow(dead_code)]
     total_score: f64,
-    #[allow(dead_code)]
     total_modules: usize,
-    #[allow(dead_code)]
     total_violations: usize,
+    total_xs: usize,
     score_green: f64,
     score_yellow: f64,
     critical_severity: f64,
@@ -304,6 +302,7 @@ fn build_report_data(
         total_score: result.score,
         total_modules: result.total_modules,
         total_violations: result.violations.len(),
+        total_xs: result.total_xs,
         score_green: settings.thresholds.score_green,
         score_yellow: settings.thresholds.score_yellow,
         critical_severity: settings.thresholds.critical_severity,
@@ -413,6 +412,22 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
 
     let breadcrumbs = build_breadcrumbs(dir_path, &data.root_path);
     let score_clr = score_color(dir.score, data.score_green, data.score_yellow);
+
+    let is_root = dir_path == data.root_path;
+    let project_banner = if is_root {
+        let banner_clr = score_color(data.total_score, data.score_green, data.score_yellow);
+        format!(
+            "<div class=\"summary\" style=\"background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem\">
+                <div class=\"summary-card\"><div class=\"label\">Project Score</div><div class=\"value\" style=\"color:{}\">{:.1}</div></div>
+                <div class=\"summary-card\"><div class=\"label\">Total Modules</div><div class=\"value\">{}</div></div>
+                <div class=\"summary-card\"><div class=\"label\">Total Violations</div><div class=\"value\">{}</div></div>
+                <div class=\"summary-card\"><div class=\"label\">Total XS</div><div class=\"value\">{}</div></div>
+            </div>",
+            banner_clr, data.total_score, data.total_modules, data.total_violations, data.total_xs
+        )
+    } else {
+        String::new()
+    };
 
     let mut children_rows = String::new();
     for child_path in &dir.children_dirs {
@@ -595,6 +610,8 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 <h1>{title}</h1>
 <p class="snapshot">Snapshot: {snapshot_id}</p>
 
+{project_banner}
+
 <div class="summary">
     <div class="summary-card">
         <div class="label">Health Score</div>
@@ -624,6 +641,7 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
         title = title,
         breadcrumbs = breadcrumbs,
         snapshot_id = data.snapshot_id,
+        project_banner = project_banner,
         score_clr = score_clr,
         score = dir.score,
         modules = dir.module_count,
