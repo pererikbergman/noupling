@@ -2,6 +2,26 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The architectural direction of a dependency between two modules.
+///
+/// Used to assign risk weights in the dependency risk framework:
+/// downward (2) < sibling (4) < upward (6) < circular (10).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DependencyDirection {
+    /// Parent directory imports from child directory. Low risk.
+    #[serde(rename = "downward")]
+    Downward,
+    /// Same-level directories import each other. Moderate risk.
+    #[serde(rename = "sibling")]
+    Sibling,
+    /// Child directory imports from parent directory. High risk.
+    #[serde(rename = "upward")]
+    Upward,
+    /// Mutual or transitive cycle between directories. Lethal.
+    #[serde(rename = "circular")]
+    Circular,
+}
+
 /// Whether a discovered module is a file or directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModuleType {
@@ -64,6 +84,23 @@ pub struct Snapshot {
 #[cfg(test)]
 mod tests {
     use serde_json;
+
+    #[test]
+    fn dependency_direction_serde_roundtrip() {
+        use super::DependencyDirection;
+        let variants = [
+            (DependencyDirection::Downward, "\"downward\""),
+            (DependencyDirection::Sibling, "\"sibling\""),
+            (DependencyDirection::Upward, "\"upward\""),
+            (DependencyDirection::Circular, "\"circular\""),
+        ];
+        for (variant, expected_json) in &variants {
+            let json = serde_json::to_string(variant).unwrap();
+            assert_eq!(&json, expected_json);
+            let deserialized: DependencyDirection = serde_json::from_str(&json).unwrap();
+            assert_eq!(&deserialized, variant);
+        }
+    }
 
     #[test]
     fn module_type_serializes_to_string() {

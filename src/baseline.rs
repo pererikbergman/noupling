@@ -114,6 +114,7 @@ fn chrono_now() -> String {
 mod tests {
     use super::*;
     use crate::analyzer::ViolationAgeSummary;
+    use crate::core::DependencyDirection;
 
     fn make_coupling(from: &str, to: &str) -> CouplingViolation {
         CouplingViolation {
@@ -125,6 +126,7 @@ mod tests {
             weight: 1,
             depth: 0,
             severity: 0.5,
+            direction: DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
