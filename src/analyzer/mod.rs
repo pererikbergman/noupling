@@ -70,6 +70,8 @@ pub struct AuditResult {
     pub violations: Vec<CouplingViolation>,
     /// Overall health score (0-100). Higher is better.
     pub score: f64,
+    /// Total Risk Index: sum of all violation RRIs. Lower is better.
+    pub tri: f64,
     /// Total number of source modules analyzed.
     pub total_modules: usize,
     /// Per-module fan-in/fan-out metrics, sorted by fan_in descending.
@@ -336,6 +338,23 @@ impl AuditResult {
             };
             v.rri = direction_weight * v.weight.max(1) as f64;
         }
+
+        // Compute TRI (Total Risk Index) and derive health score.
+        // TRI = sum of all violation RRIs.
+        // Score = 100 * (1 - TRI / (total_modules * max_weight)), clamped to 0-100.
+        // max_weight is the highest configured weight (typically circular=10),
+        // so a project where every module averages 1 worst-case violation scores 0.
+        self.tri = self.violations.iter().map(|v| v.rri).sum();
+        let max_weight = weights
+            .downward
+            .max(weights.sibling)
+            .max(weights.upward)
+            .max(weights.circular);
+        self.score = if self.total_modules > 0 && max_weight > 0.0 {
+            (100.0 * (1.0 - self.tri / (self.total_modules as f64 * max_weight))).clamp(0.0, 100.0)
+        } else {
+            100.0
+        };
     }
 
     pub fn recalculate_score(&mut self) {
@@ -816,6 +835,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         return AuditResult {
             violations: Vec::new(),
             score: 100.0,
+            tri: 0.0,
             total_modules: 0,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1306,6 +1326,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     AuditResult {
         violations,
         score,
+        tri: 0.0,
         total_modules,
         hotspots,
         rule_violations: Vec::new(),
@@ -2053,6 +2074,33 @@ mod tests {
         assert!(
             circular[0].rri >= 10.0,
             "Circular RRI should be at least 10"
+        );
+    }
+
+    #[test]
+    fn tri_computed_from_rri_sum() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![make_dep("a", "b", 1), make_dep("a", "b", 2)];
+        let mut result = audit(&modules, &deps);
+        let weights = crate::settings::RiskWeights {
+            downward: 2.0,
+            sibling: 4.0,
+            upward: 6.0,
+            circular: 10.0,
+        };
+        result.apply_risk_weights(&weights);
+
+        // Sibling violation with density 2: RRI = 4 × 2 = 8
+        // TRI = sum of all RRIs = 8
+        assert_eq!(result.tri, 8.0);
+        // Score = 100 * (1 - 8 / (2 * 10)) = 100 * (1 - 0.4) = 60
+        assert!(
+            (result.score - 60.0).abs() < 0.1,
+            "Score should be ~60, got {}",
+            result.score
         );
     }
 

@@ -28,6 +28,7 @@ pub struct JsonReport {
     pub generator: String,
     pub snapshot_id: String,
     pub score: f64,
+    pub tri: f64,
     pub total_modules: usize,
     pub total_xs: usize,
     pub max_depth: usize,
@@ -209,6 +210,7 @@ impl JsonReport {
             generator: VERSION.to_string(),
             snapshot_id: snapshot_id.to_string(),
             score: result.score,
+            tri: result.tri,
             total_modules: result.total_modules,
             total_xs: result.total_xs,
             max_depth: result.max_depth,
@@ -1278,6 +1280,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![make_violation("a.rs", "b.rs", 1.0, 0)],
             score: 50.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1311,6 +1314,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 5,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1341,6 +1345,7 @@ mod tests {
                 make_violation("e.rs", "f.rs", 0.25, 2),
             ],
             score: 42.0,
+            tri: 0.0,
             total_modules: 6,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1365,6 +1370,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![make_violation("scanner/mod.rs", "storage/mod.rs", 0.5, 1)],
             score: 75.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1391,6 +1397,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1417,6 +1424,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 5,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1451,6 +1459,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![v],
             score: 50.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1477,6 +1486,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 3,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),

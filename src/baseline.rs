@@ -149,6 +149,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
             score: 50.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -172,6 +173,7 @@ mod tests {
         let mut same_result = AuditResult {
             violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
             score: 50.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -200,6 +202,7 @@ mod tests {
         let baseline_result = AuditResult {
             violations: vec![make_coupling("a.rs", "b.rs")],
             score: 75.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -223,6 +226,7 @@ mod tests {
                 make_coupling("x.rs", "y.rs"), // new
             ],
             score: 50.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -252,6 +256,7 @@ mod tests {
         let baseline_result = AuditResult {
             violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
             score: 50.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -272,6 +277,7 @@ mod tests {
         let mut current = AuditResult {
             violations: vec![make_coupling("a.rs", "b.rs")],
             score: 75.0,
+            tri: 0.0,
             total_modules: 4,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
