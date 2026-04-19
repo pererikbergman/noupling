@@ -11,22 +11,22 @@ scan -> store -> analyze -> report
 ## Data Flow
 
 ```
-1. SCAN          2. STORE           3. ANALYZE         4. REPORT
-+-----------+    +-----------+     +------------+     +-----------+
-| scanner/  | -> | storage/  | --> | analyzer/  | --> | reporter/ |
-|           |    |           |     |            |     |           |
-| discover  |    | SQLite DB |     | D_acc      |     | JSON      |
-| parse     |    | snapshots |     | BFS audit  |     | XML       |
-| resolve   |    | modules   |     | cycles     |     | Markdown  |
-|           |    | deps      |     | score      |     | HTML      |
-+-----------+    +-----------+     +------------+     | Sonar     |
-                                                      +-----------+
+1. SCAN          2. STORE           3. ANALYZE           4. REPORT
++-----------+    +-----------+     +--------------+     +-----------+
+| scanner/  | -> | storage/  | --> | analyzer/    | --> | reporter/ |
+|           |    |           |     |              |     |           |
+| discover  |    | SQLite DB |     | D_acc        |     | JSON      |
+| parse     |    | snapshots |     | BFS audit    |     | XML       |
+| resolve   |    | modules   |     | risk weights |     | Markdown  |
+|           |    | deps      |     | cycles       |     | HTML      |
++-----------+    +-----------+     | score        |     | Sonar     |
+                                   +--------------+     +-----------+
 ```
 
 ## Module Responsibilities
 
 ### `src/core/`
-Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `Snapshot`. These are the data structures that flow between stages.
+Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `Snapshot`, `DependencyDirection`. The `DependencyDirection` enum classifies each dependency as Downward, Sibling, Upward, or Circular, which determines its risk weight during analysis. These are the data structures that flow between stages.
 
 ### `src/scanner/`
 **Stage 1: Scan.** Discovers source files, parses them with Tree-sitter, and resolves import paths.
@@ -47,12 +47,15 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 
 - **D_acc (Accumulated Dependencies):** For each directory, computes the union of all external dependencies from its subtree. Internal dependencies (within the same directory) are excluded.
 - **BFS Coupling Detection:** Walks the directory tree top-down. At each level, checks sibling pairs: if D_acc(A) references a module inside B, that's a coupling violation.
-- **Circular Dependency Detection:** At each BFS level, builds a graph between siblings using D_acc and finds all elementary cycles via DFS.
-- **Severity:** Coupling = `1/(depth+1)`. Circular = `modules/(depth+1)/10`.
-- **Health Score:** `100 * (1 - sum_severity / total_modules)`.
+- **Dependency Direction Classification:** Each coupling violation is classified by `DependencyDirection` (Downward, Sibling, Upward, or Circular), which determines the risk weight applied during scoring.
+- **Circular Dependency Detection:** At each BFS level, builds a graph between siblings using D_acc and finds all strongly connected components via Tarjan's SCC algorithm (replaced DFS-based cycle detection).
+- **Severity (RRI):** Risk-Relative Impact. `RRI = direction_weight * density`, where `direction_weight` comes from the `DependencyDirection` classification and `density` captures coupling intensity.
+- **Health Score:** `100 * (1 - TRI / (total_modules * max_weight))`, where `TRI` (Total Risk Index) is the sum of all RRIs across the project.
+- **Gravity Wells:** Modules whose aggregate RRI exceeds 2x the median RRI. These are the modules that disproportionately concentrate coupling risk.
+- **Red Flags:** Specific anti-patterns detected during analysis. *Fused Sibling* identifies high-density sibling pairs that are tightly co-dependent. *Trapped Child* identifies modules with upward dependencies on their parent or ancestors.
 
 ### `src/reporter/`
-**Stage 4: Report.** Generates output in 6 formats.
+**Stage 4: Report.** Generates output in 6 formats. All formats now include risk-weighted metrics: RRI per violation, TRI for the project, direction badges (Downward/Sibling/Upward/Circular), Gravity Wells, and Red Flags.
 
 - `mod.rs` - JSON report (comprehensive with directory tree), XML, SonarCloud, and text format.
 - `html.rs` - Multi-file static HTML with Kover-style drill-down navigation.
@@ -62,7 +65,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 Clap argument parsing. Commands: `init`, `scan`, `audit`, `report`.
 
 ### `src/settings.rs`
-Loads `.noupling/settings.json` with thresholds, ignore patterns, and source extensions. Falls back to defaults if missing.
+Loads `.noupling/settings.json` with thresholds, ignore patterns, source extensions, and `risk_weights` configuration (per-direction weight overrides for Downward, Sibling, Upward, and Circular). Falls back to defaults if missing.
 
 ### `src/diff.rs`
 Git integration for PR/CI mode. Shells out to `git diff --name-only <base>...HEAD` to get changed files.
@@ -76,3 +79,5 @@ Git integration for PR/CI mode. Shells out to `git diff --name-only <base>...HEA
 3. **Circular detection at sibling level.** Cycles are detected per BFS level using D_acc, not on the raw file dependency graph. This shows cycles at the directory level where they're actionable.
 
 4. **Settings auto-created.** If `.noupling/settings.json` doesn't exist, it's created with defaults on any command. This avoids a mandatory init step.
+
+5. **Risk-weighted scoring over depth-based severity.** The original severity formula (`1/(depth+1)`) treated all couplings equally regardless of their architectural impact. The risk-weighted approach (RRI = direction_weight x density) assigns higher weights to more harmful dependency directions (e.g., Circular > Upward > Sibling > Downward), producing scores that better reflect actual architectural risk.

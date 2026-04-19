@@ -30,6 +30,36 @@
       Not a commit log. A narrative of architectural decisions&mdash;what broke, what was built, and why each change exists.
     </p>
 
+    <!-- ── v0.6.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.6.0 &mdash; The Risk Framework Release</h2>
+      <div class="date">April 2026</div>
+
+      <h3><span class="tag tag-feat">feat</span> Software Dependency Risk Framework (<a href="https://github.com/pererikbergman/noupling/issues/167">#167</a>)</h3>
+      <p><strong>The friction:</strong> All coupling violations were scored by depth alone. A sibling dependency at depth 2 scored the same whether it was a harmless utility import or a dangerous architectural shortcut. There was no way to distinguish the risk level of different dependency types.</p>
+      <p><strong>The implementation:</strong> Every dependency is now classified by direction: Downward (&darr; weight 2), Sibling (&harr; weight 4), Upward (&uarr; weight 6), Circular (&#8635; weight 10). The Relationship Risk Index (RRI) combines direction weight with density (import count). The Total Risk Index (TRI) sums all RRIs to derive the health score. Weights are configurable in <code>settings.json</code>.</p>
+      <p><strong>The ripple effect:</strong> Teams can now see <em>why</em> a dependency is risky, not just <em>that</em> it exists. The same import count between two modules produces RRI 8 for a sibling pair vs RRI 20 for an upward dependency. Refactoring priorities become self-evident.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Gravity Well detection (<a href="https://github.com/pererikbergman/noupling/issues/171">#171</a>)</h3>
+      <p>Modules with aggregate RRI exceeding 2&times; the project median are flagged as &ldquo;Gravity Wells&rdquo;&mdash;God Objects that pull the system into their orbit. Includes per-direction RRI breakdown to show which dependency types contribute most.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Architectural Red Flags (<a href="https://github.com/pererikbergman/noupling/issues/172">#172</a>)</h3>
+      <p>Two anti-pattern detectors: <strong>Fused Sibling</strong> (sibling pair with density &gt; 2&times; median&mdash;should be merged or extracted) and <strong>Trapped Child</strong> (module with upward dependencies&mdash;cannot be reused independently).</p>
+
+      <h3><span class="tag tag-feat">feat</span> Per-level cycle visualization in bundle sunburst</h3>
+      <p>Cycle participants at the current zoom level turn red. The weakest hop (fewest imports) is highlighted with a &ldquo;break this side&rdquo; tooltip. Hovering a cycle edge dims everything else.</p>
+
+      <h3>Also in this release:</h3>
+      <ul>
+        <li><span class="tag tag-feat">feat</span> Default coupling mode changed to &ldquo;strict&rdquo;&mdash;sibling coupling now affects the score</li>
+        <li><span class="tag tag-feat">feat</span> Metrics Guide in HTML and Markdown reports</li>
+        <li><span class="tag tag-feat">feat</span> Direction badges (&darr;&harr;&uarr;&#8635;) and RRI values in all report formats</li>
+        <li><span class="tag tag-feat">feat</span> RRI-based Sonar severity mapping</li>
+        <li><span class="tag tag-feat">feat</span> Dashed red edges for circular deps in Mermaid/DOT</li>
+        <li><span class="tag tag-feat">feat</span> N-cycle detection (3+ node cycles)</li>
+      </ul>
+    </article>
+
     <!-- ── v0.5.0 ─────────────────────────────────────── -->
     <article class="release">
       <h2>v0.5.0 &mdash; The Tech Lead Release</h2>

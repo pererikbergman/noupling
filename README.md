@@ -17,19 +17,19 @@
 
 Most linters check code style. **noupling checks architecture.**
 
-It scans your project, builds a dependency graph from actual import statements, and quantifies how coupled your modules are. It finds:
+It scans your project, builds a dependency graph from actual import statements, and quantifies how coupled your modules are using risk-weighted scoring (RRI/TRI). It finds:
 
 - **Coupling violations** - sibling modules that depend on each other, breaking architectural boundaries
 - **Circular dependencies** - dependency chains that form loops (A -> B -> C -> A), preventing independent development and testing
 
-Every violation gets a **severity score** based on depth: problems at the root of your project hit harder than deep in a leaf package. The result is a single **health score (0-100)** you can track over time and gate in CI.
+Every violation gets a **risk score (RRI)** based on dependency direction and density: upward and circular dependencies carry higher risk weights than downward ones. The result is a single **health score (0-100)** you can track over time and gate in CI.
 
 ### Key Features
 
 - **14 languages**: C#, Dart, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **9 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard (or `all` to generate every format)
+- **12 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy (or `all` to generate every format)
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
 - **Sunburst visualization**: Zoomable D3.js dependency graph with animated drill-down
 - **Technical Leader Dashboard**: Single-page executive view with all metrics, sortable scorecard, risk matrix
@@ -40,6 +40,10 @@ Every violation gets a **severity score** based on depth: problems at the root o
 - **Advanced metrics**: Module independence, blast radius, instability (Martin's I), dependency depth, violation age
 - **Per-module trends**: `--by-module` flag to track score evolution per directory across snapshots
 - **PR/CI mode**: `--diff-base main` to only flag new violations
+- **Risk-weighted scoring (RRI/TRI)**: Quantify coupling risk by dependency direction and density
+- **Gravity Well detection**: Identify modules that attract excessive inbound dependencies
+- **Red Flags (Fused Sibling, Trapped Child)**: Detect structural anti-patterns in module relationships
+- **Configurable risk weights per dependency direction**: Tune scoring to match your architecture's priorities
 - **Configurable**: Thresholds, layers, dependency rules, glob ignore patterns
 
 <p align="center">
@@ -207,7 +211,14 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
     "go", "hs", "js", "jsx", "kts", "tsx", "zig",
     "dart", "php", "rb"
   ],
-  "allow_inline_suppression": true
+  "allow_inline_suppression": true,
+  "risk_weights": {
+    "downward": 2,
+    "sibling": 4,
+    "upward": 6,
+    "circular": 10
+  },
+  "coupling_mode": "strict"
 }
 ```
 
@@ -220,6 +231,8 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
 | `source_extensions` | File types to scan | 17 extensions |
 | `allow_inline_suppression` | Enable `noupling:ignore` comments | true |
+| `risk_weights` | Risk weights per dependency direction (downward, sibling, upward, circular) | 2, 4, 6, 10 |
+| `coupling_mode` | Coupling analysis mode (`strict` or `relaxed`) | `strict` |
 
 ### Architectural Layers
 
@@ -285,11 +298,17 @@ Works with `//`, `#`, and `--` comment styles. Disable with `"allow_inline_suppr
    - **D_acc**: For each directory, compute the union of all external dependencies from its subtree
    - **BFS**: Walk the tree top-down, checking sibling pairs for coupling
    - **Cycles**: Find circular dependencies among siblings at each level
-4. **Score**: `Health = 100 * (1 - sum_severity / total_modules)`
+4. **Score**: Each dependency is classified by direction and assigned a risk weight:
+   - **Downward** (weight 2) - following the intended layer direction
+   - **Sibling** (weight 4) - coupling between peer modules
+   - **Upward** (weight 6) - violating the layer direction
+   - **Circular** (weight 10) - part of a dependency cycle
 
-Coupling severity: `1 / (depth + 1)` - root-level coupling is severe, deep coupling is mild.
+   **RRI** (Relationship Risk Index) = `direction_weight × density` (number of imports)
 
-Circular severity: `modules / (depth + 1) / 10` - always significant, amplified near the root.
+   **TRI** (Total Risk Index) = sum of all RRIs
+
+   **Health Score** = `100 × (1 - TRI / (total_modules × max_weight))`
 
 See [docs/architecture.md](docs/architecture.md) for the full technical details.
 

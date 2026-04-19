@@ -42,6 +42,8 @@
 
       <h4>Configuration</h4>
       <a href="#thresholds">Thresholds</a>
+      <a href="#risk-weights">Risk Weights</a>
+      <a href="#coupling-mode">Coupling Mode</a>
       <a href="#ignore-patterns">Ignore Patterns</a>
       <a href="#layers">Architectural Layers</a>
       <a href="#dependency-rules">Dependency Rules</a>
@@ -53,6 +55,12 @@
       <a href="#diff-mode">Diff Mode</a>
       <a href="#ci-integration">CI Integration</a>
       <a href="#report-formats">Report Formats</a>
+
+      <h4>Risk Framework</h4>
+      <a href="#rri">RRI (Risk Index)</a>
+      <a href="#tri">TRI (Total Risk)</a>
+      <a href="#gravity-wells">Gravity Wells</a>
+      <a href="#red-flags">Red Flags</a>
 
       <h4>Tech Lead Metrics</h4>
       <a href="#independence">Module Independence</a>
@@ -106,8 +114,10 @@ noupling audit . --fail-below 80</code></pre>
 
 
       <h2 id="health-score">Health Score</h2>
-      <p>The health score is a single number (0&ndash;100) that quantifies your architecture's coupling:</p>
-<pre><code>Score = 100 &times; (1 - sum_of_severities / total_modules)</code></pre>
+      <p>The health score is a single number (0&ndash;100) that quantifies your architecture's coupling risk:</p>
+<pre><code>Score = 100 &times; (1 - TRI / (total_modules &times; max_weight))</code></pre>
+
+      <p><strong>TRI</strong> (Total Risk Index) is the sum of all violation RRIs. Each violation's <strong>RRI</strong> (Relationship Risk Index) is computed as <code>direction_weight &times; density</code>, where <code>direction_weight</code> reflects the severity of the dependency direction and <code>density</code> captures how many imports exist between the pair. See <a href="#rri">RRI</a> and <a href="#tri">TRI</a> for details.</p>
 
       <table>
         <thead><tr><th>Range</th><th>Status</th><th>Action</th></tr></thead>
@@ -185,6 +195,49 @@ noupling hook uninstall [PATH]</code></pre>
   }
 }</code></pre>
       <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> flags violations as critical in reports.</p>
+
+
+      <h2 id="risk-weights">Risk Weights</h2>
+      <p>Risk weights control how heavily each dependency direction contributes to the <a href="#rri">RRI</a> score. Configure in <code>.noupling/settings.json</code>:</p>
+<pre><code class="language-json">{
+  "risk_weights": {
+    "downward": 2,
+    "sibling": 4,
+    "upward": 6,
+    "circular": 10
+  }
+}</code></pre>
+      <table>
+        <thead><tr><th>Direction</th><th>Weight</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>Downward</td><td>2</td><td>Dependency follows the declared layer order. Low risk, but still tracked.</td></tr>
+          <tr><td>Sibling</td><td>4</td><td>Dependency between modules at the same level. Creates horizontal coupling.</td></tr>
+          <tr><td>Upward</td><td>6</td><td>Dependency flows against the layer order. Inverts the architecture.</td></tr>
+          <tr><td>Circular</td><td>10</td><td>Part of a dependency cycle. Highest risk; prevents independent deployment.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Adjust weights to match your team's priorities. If upward dependencies are your biggest pain point, increase the upward weight to surface them more aggressively in the health score.
+      </div>
+
+
+      <h2 id="coupling-mode">Coupling Mode</h2>
+      <p>The <code>coupling_mode</code> setting controls which dependencies are treated as violations:</p>
+<pre><code class="language-json">{
+  "coupling_mode": "strict"
+}</code></pre>
+      <table>
+        <thead><tr><th>Mode</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td><code>strict</code> (default)</td><td>All sibling coupling is a violation. Every cross-module dependency at the same level is flagged.</td></tr>
+          <tr><td><code>actionable</code></td><td>Only circular dependencies are violations. Sibling coupling is tracked but not penalized, reducing noise in projects where lateral dependencies are acceptable.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout-warn callout">
+        <strong>Guardrail:</strong> Start with <code>strict</code> mode on greenfield projects. Switch to <code>actionable</code> for legacy codebases where fixing all sibling coupling at once is impractical&mdash;focus on breaking cycles first.
+      </div>
 
 
       <h2 id="ignore-patterns">Ignore Patterns</h2>
@@ -318,6 +371,48 @@ noupling audit .</code></pre>
       </table>
 
 
+      <!-- Risk Framework -->
+      <h2 id="rri">RRI (Relationship Risk Index)</h2>
+      <p>Each violation is assigned an RRI score that reflects both the severity of the dependency direction and the density of imports between the pair:</p>
+<pre><code>RRI = direction_weight &times; density</code></pre>
+      <p><code>direction_weight</code> comes from the <a href="#risk-weights">risk weights</a> configuration (e.g., 4 for sibling, 10 for circular). <code>density</code> is the number of import statements between the two modules.</p>
+      <p>Higher RRI means higher architectural risk. A single circular dependency with 3 imports scores <code>10 &times; 3 = 30</code>, while a sibling coupling with 1 import scores only <code>4 &times; 1 = 4</code>.</p>
+
+
+      <h2 id="tri">TRI (Total Risk Index)</h2>
+      <p>The project-level risk metric, computed as the sum of all violation RRIs:</p>
+<pre><code>TRI = &sum; RRI<sub>i</sub>  (for all violations i)</code></pre>
+      <p>Lower is better. TRI feeds directly into the <a href="#health-score">health score</a> formula. Track TRI over time with <code>noupling trend</code> to ensure architectural risk is decreasing.</p>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> TRI is additive, so you can compare modules directly: a module contributing 80% of the TRI is the obvious place to start refactoring.
+      </div>
+
+
+      <h2 id="gravity-wells">Gravity Wells</h2>
+      <p>A <strong>gravity well</strong> is a module whose total RRI exceeds 2&times; the median RRI across all modules. These are "God Objects" that pull the system into their orbit&mdash;everything depends on them, or they depend on everything.</p>
+      <p>Gravity wells are flagged in the audit output and highlighted in the dashboard. They represent the highest-leverage refactoring targets: reducing a gravity well's coupling has outsized impact on the overall health score.</p>
+
+      <div class="callout-warn callout">
+        <strong>Guardrail:</strong> A module can be a gravity well even with individually low-severity violations if it has many of them. Watch for modules that accumulate dozens of small couplings.
+      </div>
+
+
+      <h2 id="red-flags">Red Flags</h2>
+      <p>Red flags are specific anti-patterns detected by the risk framework:</p>
+      <table>
+        <thead><tr><th>Red Flag</th><th>Detection</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Fused Sibling</strong></td><td>Sibling coupling density &gt; 2&times; median density</td><td>Two modules so tightly coupled they are effectively one. Consider merging them or extracting a shared abstraction.</td></tr>
+          <tr><td><strong>Trapped Child</strong></td><td>Module has upward dependencies (child depends on parent layer)</td><td>Inverts the dependency hierarchy. The "child" cannot be tested, deployed, or understood without its parent.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Pro-Tip:</strong> Red flags are intentionally opinionated. If a flagged pattern is correct for your architecture, suppress it with <a href="#inline-suppression">inline suppression</a> or adjust your <a href="#layers">layer definitions</a>.
+      </div>
+
+
       <!-- Tech Lead Metrics -->
       <h2 id="independence">Module Independence</h2>
       <p>For each top-level directory, the ratio of internal dependencies to total dependencies.</p>
@@ -374,9 +469,9 @@ noupling audit .</code></pre>
 
       <!-- Concepts -->
       <h2 id="coupling">Coupling Violations</h2>
-      <p>A coupling violation occurs when sibling directories depend on each other. Severity is depth-weighted:</p>
-<pre><code>severity = weight / (depth + 1)</code></pre>
-      <p>Root-level coupling (depth 0) is most severe. Multiple imports between the same pair are aggregated by weight.</p>
+      <p>A coupling violation occurs when sibling directories depend on each other. Each violation is scored using the <a href="#rri">RRI</a> (Relationship Risk Index), which replaces the earlier depth-based severity model:</p>
+<pre><code>RRI = direction_weight &times; density</code></pre>
+      <p>The <code>direction_weight</code> reflects the dependency direction (see <a href="#risk-weights">Risk Weights</a>) and <code>density</code> counts the import statements between the pair. Multiple imports between the same pair increase the RRI proportionally.</p>
 
       <div class="callout">
         <strong>Pro-Tip:</strong> Not all coupling is bad. Use <a href="#layers">Layers</a> to declare intended dependency directions so legitimate downward dependencies aren't flagged.
@@ -384,8 +479,8 @@ noupling audit .</code></pre>
 
 
       <h2 id="circular">Circular Dependencies</h2>
-      <p>A cycle exists when imports form a loop: A &rarr; B &rarr; C &rarr; A. Detected via DFS on sibling adjacency graphs built from D_acc (accumulated external dependencies).</p>
-<pre><code>severity = total_modules / (depth + 1) / 10</code></pre>
+      <p>A cycle exists when imports form a loop: A &rarr; B &rarr; C &rarr; A. Cycles are detected using <strong>Tarjan's SCC</strong> (Strongly Connected Components) algorithm to find all components, followed by <strong>mutual pair enumeration</strong> to surface the individual circular relationships within each SCC.</p>
+      <p>Each circular dependency receives the highest <a href="#risk-weights">risk weight</a> (default: 10) and its RRI scales with the density of imports in the cycle.</p>
       <p>Cycles are grouped by <strong>order</strong>: 2 (mutual), 3 (triangular), N. Each includes the weakest link and break cost via the <a href="#xs-metric">XS metric</a>.</p>
 
 

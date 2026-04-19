@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-19
+
+### Added
+
+- **Software Dependency Risk Framework** (#167): Risk-weighted scoring replaces depth-based severity
+  - `DependencyDirection` classification: Downward (weight 2), Sibling (weight 4), Upward (weight 6), Circular (weight 10)
+  - RRI (Relationship Risk Index): direction_weight × density per violation
+  - TRI (Total Risk Index): sum of all violation RRIs, derives health score
+  - Configurable `risk_weights` in settings.json
+- **Gravity Well detection** (#171): Identifies "God Object" modules with disproportionately high aggregate RRI
+- **Architectural Red Flags** (#172): Fused Sibling (high-density sibling pairs) and Trapped Child (upward dependency) detection
+- **Per-level cycle visualization** in bundle sunburst: cycle participants turn red, weakest hop highlighted with "break this side" tooltip
+- **N-cycle detection**: 3+ node cycles (A→B→C→A) now detected via DFS fallback when no mutual pairs exist in SCC
+- **Metrics Guide**: Expandable guide in HTML report and section in MD reports explaining all metrics
+- Direction badges (↓↔↑↻) and RRI values shown in all report formats
+- TRI metric in HTML project banner, bundle subtitle, PR summary, and briefing header
+- Gravity Wells and Red Flags sections in CLI, JSON, XML, MD, and HTML reports
+- RRI-based Sonar severity mapping (INFO/MINOR/MAJOR/CRITICAL/BLOCKER)
+- Dashed red edges for circular deps in Mermaid and DOT graphs
+
+### Changed
+
+- Default `coupling_mode` changed from "actionable" to "strict" — sibling coupling now affects the score by default
+- Health score formula: `100 × (1 - TRI / (total_modules × max_weight))` replaces old `100 × (1 - sum_severity / total_modules)`
+- `coupling_mode` can now be set at top level of settings.json (not just inside thresholds)
+
 ## [0.3.0] - 2026-04-15
 
 ### Added
