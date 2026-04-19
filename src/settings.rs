@@ -32,10 +32,55 @@ pub struct Settings {
     /// Monorepo modules. Each gets independent analysis. If empty, whole project is one module.
     #[serde(default)]
     pub modules: Vec<ModuleConfig>,
+    /// Severity weights per dependency direction for RRI calculation.
+    #[serde(default = "default_risk_weights")]
+    pub risk_weights: RiskWeights,
 }
 
 fn default_allow_inline_suppression() -> bool {
     true
+}
+
+/// Severity weights per dependency direction for RRI (Relationship Risk Index).
+///
+/// RRI = weight × density. Higher weight = more architectural risk.
+/// See: Software Dependency Risk Framework (#167).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskWeights {
+    /// Parent imports child. Essential for layering, low risk.
+    #[serde(default = "default_weight_downward")]
+    pub downward: f64,
+    /// Same-level directories import each other. Moderate risk.
+    #[serde(default = "default_weight_sibling")]
+    pub sibling: f64,
+    /// Child imports parent. Violates architectural flow, high risk.
+    #[serde(default = "default_weight_upward")]
+    pub upward: f64,
+    /// Circular dependency between directories. Lethal.
+    #[serde(default = "default_weight_circular")]
+    pub circular: f64,
+}
+
+fn default_risk_weights() -> RiskWeights {
+    RiskWeights {
+        downward: default_weight_downward(),
+        sibling: default_weight_sibling(),
+        upward: default_weight_upward(),
+        circular: default_weight_circular(),
+    }
+}
+
+fn default_weight_downward() -> f64 {
+    2.0
+}
+fn default_weight_sibling() -> f64 {
+    4.0
+}
+fn default_weight_upward() -> f64 {
+    6.0
+}
+fn default_weight_circular() -> f64 {
+    10.0
 }
 
 /// A module within a monorepo. Each module is analyzed independently.
@@ -184,6 +229,7 @@ impl Default for Settings {
             layers: Vec::new(),
             allow_inline_suppression: default_allow_inline_suppression(),
             modules: Vec::new(),
+            risk_weights: default_risk_weights(),
         }
     }
 }
@@ -325,5 +371,51 @@ mod tests {
         assert!(ignore_set.is_match("src/test/MyTest.kt"));
         assert!(ignore_set.is_match("vendor/lib/util.go"));
         assert!(!ignore_set.is_match("src/main/App.kt"));
+    }
+
+    #[test]
+    fn risk_weights_default_values() {
+        let settings = Settings::default();
+        assert_eq!(settings.risk_weights.downward, 2.0);
+        assert_eq!(settings.risk_weights.sibling, 4.0);
+        assert_eq!(settings.risk_weights.upward, 6.0);
+        assert_eq!(settings.risk_weights.circular, 10.0);
+    }
+
+    #[test]
+    fn risk_weights_configurable() {
+        let dir = tempfile::tempdir().unwrap();
+        let noupling_dir = dir.path().join(".noupling");
+        std::fs::create_dir_all(&noupling_dir).unwrap();
+        std::fs::write(
+            noupling_dir.join("settings.json"),
+            r#"{"risk_weights": {"circular": 15.0, "sibling": 3.0}}"#,
+        )
+        .unwrap();
+
+        let settings = Settings::load(dir.path()).unwrap();
+        assert_eq!(settings.risk_weights.circular, 15.0);
+        assert_eq!(settings.risk_weights.sibling, 3.0);
+        // Unset fields use defaults
+        assert_eq!(settings.risk_weights.downward, 2.0);
+        assert_eq!(settings.risk_weights.upward, 6.0);
+    }
+
+    #[test]
+    fn old_settings_without_risk_weights_get_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let noupling_dir = dir.path().join(".noupling");
+        std::fs::create_dir_all(&noupling_dir).unwrap();
+        std::fs::write(
+            noupling_dir.join("settings.json"),
+            r#"{"thresholds": {"score_green": 90.0}}"#,
+        )
+        .unwrap();
+
+        let settings = Settings::load(dir.path()).unwrap();
+        assert_eq!(settings.risk_weights.downward, 2.0);
+        assert_eq!(settings.risk_weights.sibling, 4.0);
+        assert_eq!(settings.risk_weights.upward, 6.0);
+        assert_eq!(settings.risk_weights.circular, 10.0);
     }
 }
