@@ -78,6 +78,7 @@ pub struct JsonHopFile {
 pub struct JsonCouplingViolation {
     pub severity: f64,
     pub weight: usize,
+    pub rri: f64,
     pub direction: String,
     pub from_module: String,
     pub to_module: String,
@@ -179,6 +180,7 @@ impl JsonReport {
             .map(|v| JsonCouplingViolation {
                 severity: v.severity,
                 weight: v.weight,
+                rri: v.rri,
                 direction: format!("{:?}", v.direction).to_lowercase(),
                 from_module: v.from_module.clone(),
                 to_module: v.to_module.clone(),
@@ -1257,6 +1259,7 @@ mod tests {
             depth,
             severity,
             direction: crate::core::DependencyDirection::Sibling,
+            rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

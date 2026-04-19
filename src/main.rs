@@ -164,6 +164,7 @@ fn run_trend(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
         let mut result = analyzer::audit(&modules, &dependencies);
         result.filter_by_severity(project_settings.thresholds.minimum_severity);
         result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+        result.apply_risk_weights(&project_settings.risk_weights);
         result.filter_by_layers(&project_settings.layers);
 
         let delta = match prev_score {
@@ -227,6 +228,7 @@ fn run_trend_by_module(
         let mut result = analyzer::audit(&modules, &dependencies);
         result.filter_by_severity(settings.thresholds.minimum_severity);
         result.apply_coupling_mode(&settings.thresholds.coupling_mode);
+        result.apply_risk_weights(&settings.risk_weights);
         result.filter_by_layers(&settings.layers);
 
         let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
@@ -436,6 +438,7 @@ fn run_baseline(action: &str, path: &str) -> anyhow::Result<()> {
             let mut result = analyzer::audit(&modules, &dependencies);
             result.filter_by_severity(project_settings.thresholds.minimum_severity);
             result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+            result.apply_risk_weights(&project_settings.risk_weights);
             result.filter_by_layers(&project_settings.layers);
 
             baseline::save_baseline(Path::new(path), &result)?;
@@ -527,6 +530,7 @@ fn run_audit(
     let mut result = analyzer::audit(&modules, &dependencies);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
     result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+    result.apply_risk_weights(&project_settings.risk_weights);
     result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &modules,
@@ -647,6 +651,7 @@ fn run_report(
     let mut result = analyzer::audit(&report_modules, &report_deps);
     result.filter_by_severity(project_settings.thresholds.minimum_severity);
     result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+    result.apply_risk_weights(&project_settings.risk_weights);
     result.filter_by_layers(&project_settings.layers);
     result.rule_violations = analyzer::check_dependency_rules(
         &report_modules,
@@ -744,6 +749,7 @@ fn run_report(
                 let mut prev_result = analyzer::audit(&prev_modules, &prev_deps);
                 prev_result.filter_by_severity(project_settings.thresholds.minimum_severity);
                 prev_result.apply_coupling_mode(&project_settings.thresholds.coupling_mode);
+                prev_result.apply_risk_weights(&project_settings.risk_weights);
                 prev_result.filter_by_layers(&project_settings.layers);
                 (Some(prev_result.score), Some(prev_result.violations.len()))
             } else {
