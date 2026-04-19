@@ -651,8 +651,7 @@ fn detect_sibling_cycles(
                     let first = cycle_nodes[0];
                     hop_files_list
                         .push(edge_files.get(&(last, first)).cloned().unwrap_or_default());
-                    hop_counts
-                        .push(edge_import_count.get(&(last, first)).copied().unwrap_or(1));
+                    hop_counts.push(edge_import_count.get(&(last, first)).copied().unwrap_or(1));
 
                     cycles.push(DetectedCycle {
                         dir_path,
@@ -696,8 +695,8 @@ fn find_cycle_in_scc(
             let path: Vec<usize> = stack.iter().map(|(n, _)| *n).collect();
             return Some(path);
         }
-        if !visited.contains_key(&next) {
-            visited.insert(next, node);
+        if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(next) {
+            e.insert(node);
             stack.push((next, 0));
         }
     }
