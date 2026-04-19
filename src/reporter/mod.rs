@@ -466,8 +466,8 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     xml.push_str(&format!(
-        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" totalModules=\"{}\" totalXs=\"{}\" maxDepth=\"{}\" suppressedCount=\"{}\" violationAgeNew=\"{}\" violationAgeRecent=\"{}\" violationAgeChronic=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
-        xml_escape(VERSION), xml_escape(&report.snapshot_id), report.score, report.total_modules,
+        "<noupling-report generator=\"{}\" snapshot=\"{}\" score=\"{:.2}\" tri=\"{:.1}\" totalModules=\"{}\" totalXs=\"{}\" maxDepth=\"{}\" suppressedCount=\"{}\" violationAgeNew=\"{}\" violationAgeRecent=\"{}\" violationAgeChronic=\"{}\" criticalViolations=\"{}\" totalCircular=\"{}\" totalCoupling=\"{}\">\n",
+        xml_escape(VERSION), xml_escape(&report.snapshot_id), report.score, report.tri, report.total_modules,
         report.total_xs, report.max_depth, report.suppressed_count,
         report.violation_age.new_count, report.violation_age.recent_count, report.violation_age.chronic_count,
         report.critical_violations, report.total_circular, report.total_coupling,
@@ -530,8 +530,8 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         xml.push_str("  <coupling-violations>\n");
         for v in &report.coupling_violations {
             xml.push_str(&format!(
-                "    <violation severity=\"{:.2}\" depth=\"{}\" fromModule=\"{}\" toModule=\"{}\" dirA=\"{}\" dirB=\"{}\"/>\n",
-                v.severity, v.depth, xml_escape(&v.from_module), xml_escape(&v.to_module),
+                "    <violation severity=\"{:.2}\" rri=\"{:.1}\" direction=\"{}\" depth=\"{}\" fromModule=\"{}\" toModule=\"{}\" dirA=\"{}\" dirB=\"{}\"/>\n",
+                v.severity, v.rri, xml_escape(&v.direction), v.depth, xml_escape(&v.from_module), xml_escape(&v.to_module),
                 xml_escape(&v.dir_a), xml_escape(&v.dir_b),
             ));
         }
@@ -555,6 +555,32 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         xml.push_str("    </directory>\n");
     }
     xml.push_str("  </directory-tree>\n");
+
+    // Gravity wells
+    if !report.gravity_wells.is_empty() {
+        xml.push_str("  <gravity-wells>\n");
+        for g in &report.gravity_wells {
+            xml.push_str(&format!(
+                "    <well module=\"{}\" totalRri=\"{:.1}\" relationships=\"{}\" directions=\"{}\"/>\n",
+                xml_escape(&g.module_path), g.total_rri, g.relationship_count, g.direction_count,
+            ));
+        }
+        xml.push_str("  </gravity-wells>\n");
+    }
+
+    // Red flags
+    if !report.red_flags.is_empty() {
+        xml.push_str("  <red-flags>\n");
+        for f in &report.red_flags {
+            xml.push_str(&format!(
+                "    <flag type=\"{}\" rri=\"{:.1}\">{}</flag>\n",
+                xml_escape(&f.flag_type),
+                f.rri,
+                xml_escape(&f.recommendation),
+            ));
+        }
+        xml.push_str("  </red-flags>\n");
+    }
 
     xml.push_str("</noupling-report>\n");
     xml
@@ -634,12 +660,22 @@ pub fn format_sonar(result: &AuditResult) -> String {
             }
             issues.push(issue);
         } else {
-            let (sonar_severity, effort) = if v.severity >= 0.5 {
-                ("CRITICAL", 20)
-            } else if v.severity >= 0.2 {
-                ("MAJOR", 10)
+            // Map RRI to Sonar severity (fall back to old severity if RRI is 0)
+            let risk = if v.rri > 0.0 {
+                v.rri
             } else {
-                ("MINOR", 5)
+                v.severity * 10.0
+            };
+            let (sonar_severity, effort) = if risk >= 160.0 {
+                ("BLOCKER", 60)
+            } else if risk >= 80.0 {
+                ("CRITICAL", 30)
+            } else if risk >= 40.0 {
+                ("MAJOR", 20)
+            } else if risk >= 10.0 {
+                ("MINOR", 10)
+            } else {
+                ("INFO", 5)
             };
 
             let dir_a_short = std::path::Path::new(&v.dir_a)
@@ -682,6 +718,9 @@ pub fn format_text(result: &AuditResult) -> String {
     let mut output = String::new();
 
     output.push_str(&format!("Health Score: {:.1}/100\n", result.score));
+    if result.tri > 0.0 {
+        output.push_str(&format!("Total Risk Index (TRI): {:.1}\n", result.tri));
+    }
     output.push_str(&format!("Total Modules: {}\n", result.total_modules));
     output.push_str(&format!("Violations: {}\n", result.violations.len()));
     if result.total_xs > 0 {
@@ -727,7 +766,18 @@ pub fn format_text(result: &AuditResult) -> String {
     if !result.violations.is_empty() {
         output.push('\n');
         for v in &result.violations {
-            let label = if v.is_circular {
+            let dir_label = match v.direction {
+                crate::core::DependencyDirection::Downward => "\u{2193}",
+                crate::core::DependencyDirection::Sibling => "\u{2194}",
+                crate::core::DependencyDirection::Upward => "\u{2191}",
+                crate::core::DependencyDirection::Circular => "\u{21bb}",
+            };
+            let rri_label = if v.rri > 0.0 {
+                format!(" RRI:{:.0}", v.rri)
+            } else {
+                String::new()
+            };
+            let weight_label = if v.is_circular {
                 " CIRCULAR".to_string()
             } else if v.weight > 1 {
                 format!(" x{}", v.weight)
@@ -735,8 +785,8 @@ pub fn format_text(result: &AuditResult) -> String {
                 String::new()
             };
             output.push_str(&format!(
-                "  [{:.2}]{} {} -> {} (depth {})\n",
-                v.severity, label, v.from_module, v.to_module, v.depth
+                "  [{:.2}]{}{} {} {} -> {} (depth {})\n",
+                v.severity, weight_label, rri_label, dir_label, v.from_module, v.to_module, v.depth
             ));
             output.push_str(&format!("         {} <> {}\n", v.dir_a, v.dir_b));
             if let Some(ref wl) = v.weakest_link {
@@ -894,6 +944,32 @@ pub fn format_text(result: &AuditResult) -> String {
         ));
     }
 
+    // Gravity Wells
+    if !result.gravity_wells.is_empty() {
+        output.push_str(&format!(
+            "\nGravity Wells ({}):\n",
+            result.gravity_wells.len()
+        ));
+        for g in result.gravity_wells.iter().take(10) {
+            output.push_str(&format!(
+                "  [RRI:{:.0}] {} ({} relationships)\n",
+                g.total_rri, g.module_path, g.relationship_count
+            ));
+        }
+    }
+
+    // Red Flags
+    if !result.red_flags.is_empty() {
+        output.push_str(&format!("\nRed Flags ({}):\n", result.red_flags.len()));
+        for f in result.red_flags.iter().take(10) {
+            let flag_icon = match f.flag_type {
+                crate::analyzer::RedFlagType::FusedSibling => "\u{26a0}",
+                crate::analyzer::RedFlagType::TrappedChild => "\u{26d4}",
+            };
+            output.push_str(&format!("  {} {}\n", flag_icon, f.recommendation));
+        }
+    }
+
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
@@ -965,6 +1041,9 @@ pub fn format_pr(
             })
             .unwrap_or_default()
     ));
+    if result.tri > 0.0 {
+        out.push_str(&format!("| Total Risk Index | {:.1} |\n", result.tri));
+    }
     out.push_str(&format!("| Total XS | {} imports |\n", result.total_xs));
     if let Some(n) = new_violations {
         out.push_str(&format!("| New violations | {} |\n", n));
@@ -992,6 +1071,17 @@ pub fn format_pr(
         }
     } else {
         out.push_str("### Action items\n\nNo violations to fix \u{1f389}\n\n");
+    }
+
+    if !result.red_flags.is_empty() {
+        out.push_str(&format!("### Red Flags ({})\n\n", result.red_flags.len()));
+        for f in result.red_flags.iter().take(5) {
+            out.push_str(&format!(
+                "- **{:?}** (RRI: {:.0}) {}\n",
+                f.flag_type, f.rri, f.recommendation
+            ));
+        }
+        out.push('\n');
     }
 
     out.push_str(&format!("---\n_{}_\n", VERSION));
@@ -1037,6 +1127,9 @@ pub fn format_briefing(result: &AuditResult) -> String {
     let delta = projected_score - result.score;
 
     out.push_str(&format!("**Current score:** {:.1}/100  \n", result.score));
+    if result.tri > 0.0 {
+        out.push_str(&format!("**Total Risk Index:** {:.1}  \n", result.tri));
+    }
     if delta > 0.1 {
         out.push_str(&format!(
             "**If you fix the top 3 below, projected score:** {:.1} (+{:.1})\n\n",
@@ -1185,6 +1278,9 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     md.push_str("| Metric | Value |\n");
     md.push_str("| :--- | :--- |\n");
     md.push_str(&format!("| Health Score | {:.1}/100 |\n", report.score));
+    if report.tri > 0.0 {
+        md.push_str(&format!("| Total Risk Index (TRI) | {:.1} |\n", report.tri));
+    }
     md.push_str(&format!("| Total Modules | {} |\n", report.total_modules));
     md.push_str(&format!(
         "| Critical Violations | {} |\n",
@@ -1253,8 +1349,8 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     // Coupling violations
     if !report.coupling_violations.is_empty() {
         md.push_str("## Coupling Violations\n\n");
-        md.push_str("| Severity | From | To | Dir A | Dir B | Depth |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        md.push_str("| Severity | RRI | Direction | From | To | Dir A | Dir B | Depth |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         for v in &report.coupling_violations {
             let from_short = std::path::Path::new(&v.from_module)
                 .file_name()
@@ -1273,8 +1369,15 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
                 .and_then(|f| f.to_str())
                 .unwrap_or(&v.dir_b);
             md.push_str(&format!(
-                "| {:.2} | `{}` | `{}` | {} | {} | {} |\n",
-                v.severity, from_short, to_short, dir_a_short, dir_b_short, v.depth
+                "| {:.2} | {:.0} | {} | `{}` | `{}` | {} | {} | {} |\n",
+                v.severity,
+                v.rri,
+                v.direction,
+                from_short,
+                to_short,
+                dir_a_short,
+                dir_b_short,
+                v.depth
             ));
         }
         md.push('\n');
@@ -1295,6 +1398,33 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
             dir.violations_count,
             dir.circular_count,
         ));
+    }
+
+    // Gravity wells
+    if !report.gravity_wells.is_empty() {
+        md.push_str("\n## Gravity Wells\n\n");
+        md.push_str("Modules with disproportionately high aggregate risk.\n\n");
+        md.push_str("| Module | Total RRI | Relationships | Directions |\n");
+        md.push_str("| :--- | :--- | :--- | :--- |\n");
+        for g in &report.gravity_wells {
+            md.push_str(&format!(
+                "| `{}` | {:.0} | {} | {} |\n",
+                g.module_path, g.total_rri, g.relationship_count, g.direction_count,
+            ));
+        }
+        md.push('\n');
+    }
+
+    // Red flags
+    if !report.red_flags.is_empty() {
+        md.push_str("\n## Red Flags\n\n");
+        for f in &report.red_flags {
+            md.push_str(&format!(
+                "- **{}** (RRI: {:.0}) {}\n",
+                f.flag_type, f.rri, f.recommendation,
+            ));
+        }
+        md.push('\n');
     }
 
     md

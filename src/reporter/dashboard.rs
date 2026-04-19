@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 #[derive(Serialize)]
 pub struct DashboardData {
     pub score: f64,
+    pub tri: f64,
     pub total_modules: usize,
     pub total_violations: usize,
     pub total_xs: usize,
@@ -383,6 +384,7 @@ fn build_dashboard_data(
 
     DashboardData {
         score: dashboard_score,
+        tri: result.tri,
         total_modules: result.total_modules,
         total_violations: dashboard_violations,
         total_xs: dashboard_xs,
