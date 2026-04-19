@@ -34,7 +34,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 - `discovery.rs` - Recursive file walker. Filters by `source_extensions` and `ignore_patterns` from settings. Produces `Module` structs with relative paths.
 - `parser.rs` - Tree-sitter parsers for 11 languages. Each `parse_<lang>_imports()` function extracts import statements with line numbers.
 - `resolver.rs` - Maps parsed imports to actual file paths in the project. Language-specific resolution (Rust `crate::`, Kotlin dot-separated, TypeScript relative, etc.).
-- `mod.rs` - Orchestrates: discover files, parse imports in parallel (Rayon), resolve to dependencies.
+- `mod.rs` - Orchestrates: discover files, parse imports in parallel (Rayon), resolve to dependencies. Unresolved imports are counted as external (third-party) dependencies per module.
 
 ### `src/storage/`
 **Stage 2: Store.** SQLite persistence in `.noupling/history.db`.
@@ -65,7 +65,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 Clap argument parsing. Commands: `init`, `scan`, `audit`, `report`.
 
 ### `src/settings.rs`
-Loads `.noupling/settings.json` with thresholds, ignore patterns, source extensions, and `risk_weights` configuration (per-direction weight overrides for Downward, Sibling, Upward, and Circular). Falls back to defaults if missing.
+Loads `.noupling/settings.json` with thresholds, ignore patterns, source extensions, and `risk_weights` configuration (per-direction weight overrides for Downward, Sibling, Upward, External, Transitive, and Circular). Layers support per-layer threshold fields: `allow_sibling`, `max_sibling_density`, and `reduced_sibling_weight`. Falls back to defaults if missing.
 
 ### `src/diff.rs`
 Git integration for PR/CI mode. Shells out to `git diff --name-only <base>...HEAD` to get changed files.

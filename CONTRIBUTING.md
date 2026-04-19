@@ -67,7 +67,7 @@ src/
 ├── diff.rs          - Git diff integration for PR/CI mode
 ├── baseline.rs      - Baseline file management for incremental adoption
 ├── core/            - Shared domain types (Module, Dependency, Snapshot)
-├── scanner/         - File discovery, Tree-sitter parsing, import resolution
+├── scanner/         - File discovery, Tree-sitter parsing, import resolution, external import counting
 ├── storage/         - SQLite persistence and repository patterns
 ├── analyzer/        - D_acc aggregation, BFS coupling audit, cycle detection, DependencyDirection classification, RRI/TRI computation, Gravity Well detection, Red Flag detection
 └── reporter/        - JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Bundle, Dashboard, PR, Briefing, Strategy report generation

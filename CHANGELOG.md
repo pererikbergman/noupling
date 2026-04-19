@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable `risk_weights` in settings.json
 - **Gravity Well detection** (#171): Identifies "God Object" modules with disproportionately high aggregate RRI
 - **Architectural Red Flags** (#172): Fused Sibling (high-density sibling pairs) and Trapped Child (upward dependency) detection
+- **External dependency tracking**: Scanner counts unresolved imports as third-party dependencies, surfaced in audit and reports
+- **Transitive dependency direction** (weight 9) added to `DependencyDirection` for indirect dependencies through intermediate modules
+- **Layer-specific thresholds**: `allow_sibling`, `max_sibling_density`, `reduced_sibling_weight` per layer in settings.json
 - **Per-level cycle visualization** in bundle sunburst: cycle participants turn red, weakest hop highlighted with "break this side" tooltip
 - **N-cycle detection**: 3+ node cycles (A→B→C→A) now detected via DFS fallback when no mutual pairs exist in SCC
 - **Metrics Guide**: Expandable guide in HTML report and section in MD reports explaining all metrics

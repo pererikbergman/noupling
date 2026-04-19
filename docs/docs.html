@@ -204,6 +204,8 @@ noupling hook uninstall [PATH]</code></pre>
     "downward": 2,
     "sibling": 4,
     "upward": 6,
+    "external": 8,
+    "transitive": 9,
     "circular": 10
   }
 }</code></pre>
@@ -213,6 +215,8 @@ noupling hook uninstall [PATH]</code></pre>
           <tr><td>Downward</td><td>2</td><td>Dependency follows the declared layer order. Low risk, but still tracked.</td></tr>
           <tr><td>Sibling</td><td>4</td><td>Dependency between modules at the same level. Creates horizontal coupling.</td></tr>
           <tr><td>Upward</td><td>6</td><td>Dependency flows against the layer order. Inverts the architecture.</td></tr>
+          <tr><td>External</td><td>8</td><td>Dependency on a third-party (unresolved) import. High risk due to external coupling.</td></tr>
+          <tr><td>Transitive</td><td>9</td><td>Indirect dependency through intermediate modules. Near-circular risk level.</td></tr>
           <tr><td>Circular</td><td>10</td><td>Part of a dependency cycle. Highest risk; prevents independent deployment.</td></tr>
         </tbody>
       </table>
@@ -263,6 +267,30 @@ noupling hook uninstall [PATH]</code></pre>
         <li><code>presentation &rarr; domain</code>: allowed (downward)</li>
         <li><code>data &rarr; presentation</code>: <strong>violation</strong> (upward)</li>
       </ul>
+
+      <h3>Layer-specific thresholds</h3>
+      <p>Each layer can override sibling coupling behavior with per-layer threshold fields:</p>
+<pre><code class="language-json">{
+  "layers": [
+    {
+      "name": "presentation",
+      "pattern": "**/ui/**",
+      "allow_sibling": false,
+      "max_sibling_density": 3,
+      "reduced_sibling_weight": 2
+    },
+    { "name": "domain", "pattern": "**/domain/**" },
+    { "name": "data", "pattern": "**/data/**" }
+  ]
+}</code></pre>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>allow_sibling</code></td><td>bool</td><td>If <code>false</code>, sibling coupling within this layer is always flagged. Default: <code>true</code>.</td></tr>
+          <tr><td><code>max_sibling_density</code></td><td>integer</td><td>Maximum import count between siblings before the violation is escalated. Exceeding this density triggers a higher severity.</td></tr>
+          <tr><td><code>reduced_sibling_weight</code></td><td>integer</td><td>Override the sibling risk weight for dependencies within this layer. Use a lower value to de-prioritize expected lateral coupling.</td></tr>
+        </tbody>
+      </table>
 
       <div class="callout-warn callout">
         <strong>Guardrail:</strong> Layers suppress coupling violations but don't eliminate dependencies. If you find yourself adding many layers to make violations disappear, the real problem is your module boundaries.
