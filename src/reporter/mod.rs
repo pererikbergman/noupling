@@ -40,7 +40,25 @@ pub struct JsonReport {
     pub circular_dependencies: BTreeMap<String, Vec<JsonCircularViolation>>,
     pub coupling_violations: Vec<JsonCouplingViolation>,
     pub hotspots: Vec<JsonHotspot>,
+    pub gravity_wells: Vec<JsonGravityWell>,
     pub directory_tree: Vec<JsonDirectory>,
+}
+
+#[derive(Serialize)]
+pub struct JsonGravityWell {
+    pub module_path: String,
+    pub total_rri: f64,
+    pub relationship_count: usize,
+    pub direction_count: usize,
+    pub direction_breakdown: JsonDirectionBreakdown,
+}
+
+#[derive(Serialize)]
+pub struct JsonDirectionBreakdown {
+    pub downward: f64,
+    pub sibling: f64,
+    pub upward: f64,
+    pub circular: f64,
 }
 
 #[derive(Serialize)]
@@ -226,6 +244,22 @@ impl JsonReport {
             circular_dependencies: circular_by_order,
             coupling_violations,
             hotspots,
+            gravity_wells: result
+                .gravity_wells
+                .iter()
+                .map(|g| JsonGravityWell {
+                    module_path: g.module_path.clone(),
+                    total_rri: g.total_rri,
+                    relationship_count: g.relationship_count,
+                    direction_count: g.direction_count,
+                    direction_breakdown: JsonDirectionBreakdown {
+                        downward: g.downward_rri,
+                        sibling: g.sibling_rri,
+                        upward: g.upward_rri,
+                        circular: g.circular_rri,
+                    },
+                })
+                .collect(),
             directory_tree,
         }
     }
@@ -1294,6 +1328,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -1328,6 +1363,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -1359,6 +1395,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -1384,6 +1421,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1411,6 +1449,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1438,6 +1477,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -1473,6 +1513,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1500,6 +1541,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");
