@@ -127,6 +127,7 @@ mod tests {
             depth: 0,
             severity: 0.5,
             direction: DependencyDirection::Sibling,
+            rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

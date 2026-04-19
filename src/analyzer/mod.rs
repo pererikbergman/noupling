@@ -29,6 +29,9 @@ pub struct CouplingViolation {
     pub severity: f64,
     /// Architectural direction of this dependency (sibling, circular, etc.).
     pub direction: DependencyDirection,
+    /// Relationship Risk Index = direction_weight × density.
+    /// Computed by `apply_risk_weights()`. Zero until weights are applied.
+    pub rri: f64,
     /// Whether this is a circular dependency (vs. a coupling violation).
     pub is_circular: bool,
     /// For circular deps: the full cycle path as directory paths.
@@ -299,6 +302,39 @@ impl AuditResult {
                 })
                 .sum();
             self.recalculate_score();
+        }
+    }
+
+    /// Compute Relationship Risk Index (RRI) for each violation using
+    /// the configured direction weights. RRI = direction_weight × density.
+    ///
+    /// For coupling violations, density = weight (import count between the pair).
+    /// For circular violations, density = sum of all hop import counts.
+    pub fn apply_risk_weights(&mut self, weights: &crate::settings::RiskWeights) {
+        for v in &mut self.violations {
+            let direction_weight = match v.direction {
+                DependencyDirection::Downward => weights.downward,
+                DependencyDirection::Sibling => weights.sibling,
+                DependencyDirection::Upward => weights.upward,
+                DependencyDirection::Circular => weights.circular,
+            };
+            let density = if v.is_circular {
+                let total: usize = v.cycle_hop_counts.iter().sum();
+                total.max(1) as f64
+            } else {
+                v.weight.max(1) as f64
+            };
+            v.rri = direction_weight * density;
+        }
+        // Also compute RRI for coupling_metrics (informational, not violations)
+        for v in &mut self.coupling_metrics {
+            let direction_weight = match v.direction {
+                DependencyDirection::Downward => weights.downward,
+                DependencyDirection::Sibling => weights.sibling,
+                DependencyDirection::Upward => weights.upward,
+                DependencyDirection::Circular => weights.circular,
+            };
+            v.rri = direction_weight * v.weight.max(1) as f64;
         }
     }
 
@@ -872,6 +908,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 weight: 0,
                 severity: modules.len() as f64 / (depth as f64 + 1.0) / 10.0,
                 direction: DependencyDirection::Circular,
+                rri: 0.0,
                 is_circular: true,
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
@@ -919,6 +956,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     direction: DependencyDirection::Sibling,
+                                                    rri: 0.0,
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
@@ -964,6 +1002,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
                                                     direction: DependencyDirection::Sibling,
+                                                    rri: 0.0,
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
@@ -1956,6 +1995,68 @@ mod tests {
     }
 
     #[test]
+    fn apply_risk_weights_computes_rri() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        // 3 imports from alpha to beta → weight=3 after dedup
+        let deps = vec![
+            make_dep("a", "b", 1),
+            make_dep("a", "b", 2),
+            make_dep("a", "b", 3),
+        ];
+        let mut result = audit(&modules, &deps);
+        let weights = crate::settings::RiskWeights {
+            downward: 2.0,
+            sibling: 4.0,
+            upward: 6.0,
+            circular: 10.0,
+        };
+        result.apply_risk_weights(&weights);
+
+        let siblings: Vec<&CouplingViolation> = result
+            .violations
+            .iter()
+            .filter(|v| !v.is_circular)
+            .collect();
+        assert!(!siblings.is_empty());
+        // RRI = sibling_weight(4) × density(3) = 12
+        assert_eq!(siblings[0].rri, 12.0);
+    }
+
+    #[test]
+    fn apply_risk_weights_circular_uses_hop_counts() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![
+            make_dep("a", "b", 1),
+            make_dep("a", "b", 2),
+            make_dep("b", "a", 5),
+        ];
+        let mut result = audit(&modules, &deps);
+        let weights = crate::settings::RiskWeights {
+            downward: 2.0,
+            sibling: 4.0,
+            upward: 6.0,
+            circular: 10.0,
+        };
+        result.apply_risk_weights(&weights);
+
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
+        assert!(!circular.is_empty());
+        // Total hop imports: alpha→beta has some + beta→alpha has some
+        // RRI = circular_weight(10) × total_density
+        assert!(
+            circular[0].rri >= 10.0,
+            "Circular RRI should be at least 10"
+        );
+    }
+
+    #[test]
     fn empty_project_scores_100() {
         let result = audit(&[], &[]);
         assert!((result.score - 100.0).abs() < f64::EPSILON);
@@ -2435,6 +2536,7 @@ mod tests {
             weight: 1,
             severity: 0.5,
             direction: DependencyDirection::Sibling,
+            rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
@@ -2462,6 +2564,7 @@ mod tests {
             weight: 1,
             severity: 0.5,
             direction: DependencyDirection::Sibling,
+            rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

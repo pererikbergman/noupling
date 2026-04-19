@@ -1046,6 +1046,7 @@ mod tests {
                 depth: 1,
                 severity: 0.5,
                 direction: crate::core::DependencyDirection::Sibling,
+                rri: 0.0,
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),
