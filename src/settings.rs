@@ -121,6 +121,23 @@ pub struct Layer {
     pub name: String,
     /// Glob pattern matching module paths in this layer.
     pub pattern: String,
+    /// If true, sibling dependencies within this layer are allowed (reduced weight).
+    /// Useful for application/use-case layers where cross-cutting concerns are expected.
+    #[serde(default)]
+    pub allow_sibling: bool,
+    /// Maximum sibling density before flagging a layer-specific warning.
+    /// 0 means "entities must be pure" (domain layer).
+    /// Default: no limit (None).
+    #[serde(default)]
+    pub max_sibling_density: Option<usize>,
+    /// Reduced weight for sanctioned sibling connections within this layer.
+    /// Only applied when `allow_sibling` is true. Default: 2.5.
+    #[serde(default = "default_reduced_sibling_weight")]
+    pub reduced_sibling_weight: f64,
+}
+
+fn default_reduced_sibling_weight() -> f64 {
+    2.5
 }
 
 /// A custom rule that allows or forbids dependencies matching glob patterns.
