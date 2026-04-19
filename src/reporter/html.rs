@@ -42,6 +42,7 @@ struct ReportData {
     total_score: f64,
     total_modules: usize,
     total_violations: usize,
+    total_tri: f64,
     total_xs: usize,
     score_green: f64,
     score_yellow: f64,
@@ -324,6 +325,7 @@ fn build_report_data(
         total_score: result.score,
         total_modules: result.total_modules,
         total_violations: result.violations.len(),
+        total_tri: result.tri,
         total_xs: result.total_xs,
         score_green: settings.thresholds.score_green,
         score_yellow: settings.thresholds.score_yellow,
@@ -478,10 +480,11 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 <div class=\"summary-card\" title=\"Overall project health, computed from all violations across the entire codebase. This is the canonical score reported by audit and used in CI gates.\"><div class=\"label\">Project Score <span class=\"info-icon\">&#9432;</span></div><div class=\"value\" style=\"color:{}\">{:.1}</div></div>
                 <div class=\"summary-card\"><div class=\"label\">Total Modules</div><div class=\"value\">{}</div></div>
                 <div class=\"summary-card\"><div class=\"label\">Total Violations</div><div class=\"value\">{}</div></div>
+                <div class=\"summary-card\" title=\"Total Risk Index: sum of all violation RRIs (Relationship Risk Index). Lower is better.\"><div class=\"label\">TRI <span class=\"info-icon\">&#9432;</span></div><div class=\"value\">{:.0}</div></div>
                 <div class=\"summary-card\" title=\"Total Excess: imports that need to be removed across all violations to reach a clean state.\"><div class=\"label\">Total XS <span class=\"info-icon\">&#9432;</span></div><div class=\"value\">{}</div></div>
             </div>
             <p class=\"score-hint\">The <strong>Project Score</strong> above is the overall codebase health. The <strong>Health Score</strong> in the cards below reflects only this directory &mdash; a directory can be 100/100 while the project score is lower because violations live in subdirectories.</p>",
-            banner_clr, data.total_score, data.total_modules, data.total_violations, data.total_xs
+            banner_clr, data.total_score, data.total_modules, data.total_violations, data.total_tri, data.total_xs
         )
     } else {
         String::new()

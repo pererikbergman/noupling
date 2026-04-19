@@ -7,10 +7,15 @@ use crate::core::Module;
 use crate::reporter::VERSION;
 
 /// Build a directory-level dependency graph from modules and violations.
+struct EdgeInfo {
+    count: usize,
+    is_circular: bool,
+}
+
 fn build_dir_graph(
     modules: &[Module],
     result: &AuditResult,
-) -> (BTreeSet<String>, BTreeMap<(String, String), usize>) {
+) -> (BTreeSet<String>, BTreeMap<(String, String), EdgeInfo>) {
     // Collect all directories
     let mut dirs: BTreeSet<String> = BTreeSet::new();
     for module in modules {
@@ -23,19 +28,29 @@ fn build_dir_graph(
     }
 
     // Build edges from violations (both coupling and circular)
-    let mut edges: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut edges: BTreeMap<(String, String), EdgeInfo> = BTreeMap::new();
     for v in &result.violations {
         if v.is_circular {
-            // Add edges for each hop in the cycle
             for i in 0..v.cycle_path.len().saturating_sub(1) {
                 let from = short_name(&v.cycle_path[i]);
                 let to = short_name(&v.cycle_path[i + 1]);
-                *edges.entry((from, to)).or_insert(0) += 1;
+                let entry = edges.entry((from, to)).or_insert(EdgeInfo {
+                    count: 0,
+                    is_circular: false,
+                });
+                entry.count += 1;
+                entry.is_circular = true;
             }
         } else {
             let from = short_name(&v.dir_a);
             let to = short_name(&v.dir_b);
-            *edges.entry((from, to)).or_insert(0) += 1;
+            edges
+                .entry((from, to))
+                .or_insert(EdgeInfo {
+                    count: 0,
+                    is_circular: false,
+                })
+                .count += 1;
         }
     }
 
@@ -104,16 +119,26 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
     out.push('\n');
 
     // Define edges
-    for ((from, to), count) in &edges {
-        if *count > 1 {
+    for ((from, to), info) in &edges {
+        let label = if info.count > 1 {
+            format!("|{}|", info.count)
+        } else {
+            String::new()
+        };
+        if info.is_circular {
             out.push_str(&format!(
-                "    {} -->|{}| {}\n",
+                "    {} -.->{} {}\n",
                 sanitize(from),
-                count,
+                label,
                 sanitize(to)
             ));
         } else {
-            out.push_str(&format!("    {} --> {}\n", sanitize(from), sanitize(to)));
+            out.push_str(&format!(
+                "    {} -->{} {}\n",
+                sanitize(from),
+                label,
+                sanitize(to)
+            ));
         }
     }
     out.push('\n');
@@ -168,16 +193,24 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push('\n');
 
     // Edges
-    for ((from, to), count) in &edges {
-        if *count > 1 {
+    for ((from, to), info) in &edges {
+        let mut attrs = Vec::new();
+        if info.count > 1 {
+            attrs.push(format!("label=\"{}\"", info.count));
+        }
+        if info.is_circular {
+            attrs.push("style=dashed".to_string());
+            attrs.push("color=\"#ef4444\"".to_string());
+        }
+        if attrs.is_empty() {
+            out.push_str(&format!("    {} -> {};\n", sanitize(from), sanitize(to)));
+        } else {
             out.push_str(&format!(
-                "    {} -> {} [label=\"{}\"];\n",
+                "    {} -> {} [{}];\n",
                 sanitize(from),
                 sanitize(to),
-                count
+                attrs.join(", ")
             ));
-        } else {
-            out.push_str(&format!("    {} -> {};\n", sanitize(from), sanitize(to)));
         }
     }
 
