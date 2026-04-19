@@ -61,6 +61,12 @@ pub struct RiskWeights {
     /// Child imports parent. Violates architectural flow, high risk.
     #[serde(default = "default_weight_upward")]
     pub upward: f64,
+    /// Third-party import not in project source tree. Critical supply chain risk.
+    #[serde(default = "default_weight_external")]
+    pub external: f64,
+    /// Indirect dependency through another module. Hidden iceberg.
+    #[serde(default = "default_weight_transitive")]
+    pub transitive: f64,
     /// Circular dependency between directories. Lethal.
     #[serde(default = "default_weight_circular")]
     pub circular: f64,
@@ -71,6 +77,8 @@ fn default_risk_weights() -> RiskWeights {
         downward: default_weight_downward(),
         sibling: default_weight_sibling(),
         upward: default_weight_upward(),
+        external: default_weight_external(),
+        transitive: default_weight_transitive(),
         circular: default_weight_circular(),
     }
 }
@@ -83,6 +91,12 @@ fn default_weight_sibling() -> f64 {
 }
 fn default_weight_upward() -> f64 {
     6.0
+}
+fn default_weight_external() -> f64 {
+    8.0
+}
+fn default_weight_transitive() -> f64 {
+    9.0
 }
 fn default_weight_circular() -> f64 {
     10.0
@@ -393,6 +407,8 @@ mod tests {
         assert_eq!(settings.risk_weights.downward, 2.0);
         assert_eq!(settings.risk_weights.sibling, 4.0);
         assert_eq!(settings.risk_weights.upward, 6.0);
+        assert_eq!(settings.risk_weights.external, 8.0);
+        assert_eq!(settings.risk_weights.transitive, 9.0);
         assert_eq!(settings.risk_weights.circular, 10.0);
     }
 
@@ -430,6 +446,8 @@ mod tests {
         assert_eq!(settings.risk_weights.downward, 2.0);
         assert_eq!(settings.risk_weights.sibling, 4.0);
         assert_eq!(settings.risk_weights.upward, 6.0);
+        assert_eq!(settings.risk_weights.external, 8.0);
+        assert_eq!(settings.risk_weights.transitive, 9.0);
         assert_eq!(settings.risk_weights.circular, 10.0);
     }
 }

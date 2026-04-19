@@ -103,6 +103,19 @@ pub struct AuditResult {
     pub gravity_wells: Vec<GravityWell>,
     /// Architectural red flags detected from the dependency analysis.
     pub red_flags: Vec<RedFlag>,
+    /// Per-module count of external (third-party) imports.
+    pub external_deps: Vec<ExternalDepMetric>,
+    /// Total external import count across all modules.
+    pub total_external_imports: usize,
+}
+
+/// External dependency count for a single module.
+#[derive(Debug, Clone)]
+pub struct ExternalDepMetric {
+    /// Module file path.
+    pub module_path: String,
+    /// Number of external (unresolved) imports.
+    pub count: usize,
 }
 
 /// An architectural anti-pattern detected from the dependency analysis.
@@ -364,6 +377,8 @@ impl AuditResult {
                 DependencyDirection::Downward => weights.downward,
                 DependencyDirection::Sibling => weights.sibling,
                 DependencyDirection::Upward => weights.upward,
+                DependencyDirection::External => weights.external,
+                DependencyDirection::Transitive => weights.transitive,
                 DependencyDirection::Circular => weights.circular,
             };
             let density = if v.is_circular {
@@ -380,6 +395,8 @@ impl AuditResult {
                 DependencyDirection::Downward => weights.downward,
                 DependencyDirection::Sibling => weights.sibling,
                 DependencyDirection::Upward => weights.upward,
+                DependencyDirection::External => weights.external,
+                DependencyDirection::Transitive => weights.transitive,
                 DependencyDirection::Circular => weights.circular,
             };
             v.rri = direction_weight * v.weight.max(1) as f64;
@@ -395,6 +412,8 @@ impl AuditResult {
             .downward
             .max(weights.sibling)
             .max(weights.upward)
+            .max(weights.external)
+            .max(weights.transitive)
             .max(weights.circular);
         self.score = if self.total_modules > 0 && max_weight > 0.0 {
             (100.0 * (1.0 - self.tri / (self.total_modules as f64 * max_weight))).clamp(0.0, 100.0)
@@ -458,6 +477,9 @@ fn compute_gravity_wells(
                 DependencyDirection::Downward => entry.downward += v.rri,
                 DependencyDirection::Sibling => entry.sibling += v.rri,
                 DependencyDirection::Upward => entry.upward += v.rri,
+                DependencyDirection::External | DependencyDirection::Transitive => {
+                    entry.sibling += v.rri
+                }
                 DependencyDirection::Circular => entry.circular += v.rri,
             }
         }
@@ -1043,6 +1065,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
     }
 
@@ -1536,6 +1560,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         suppressed_count: 0,
         gravity_wells: Vec::new(),
         red_flags: Vec::new(),
+        external_deps: Vec::new(),
+        total_external_imports: 0,
     }
 }
 
@@ -2230,6 +2256,8 @@ mod tests {
             downward: 2.0,
             sibling: 4.0,
             upward: 6.0,
+            external: 8.0,
+            transitive: 9.0,
             circular: 10.0,
         };
         result.apply_risk_weights(&weights);
@@ -2258,6 +2286,8 @@ mod tests {
             downward: 2.0,
             sibling: 4.0,
             upward: 6.0,
+            external: 8.0,
+            transitive: 9.0,
             circular: 10.0,
         };
         result.apply_risk_weights(&weights);
@@ -2288,6 +2318,8 @@ mod tests {
             downward: 2.0,
             sibling: 4.0,
             upward: 6.0,
+            external: 8.0,
+            transitive: 9.0,
             circular: 10.0,
         };
         result.apply_risk_weights(&weights);
@@ -2315,6 +2347,8 @@ mod tests {
             downward: 2.0,
             sibling: 4.0,
             upward: 6.0,
+            external: 8.0,
+            transitive: 9.0,
             circular: 10.0,
         };
         result.apply_risk_weights(&weights);

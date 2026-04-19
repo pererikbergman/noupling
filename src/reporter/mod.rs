@@ -33,6 +33,7 @@ pub struct JsonReport {
     pub total_xs: usize,
     pub max_depth: usize,
     pub suppressed_count: usize,
+    pub total_external_imports: usize,
     pub violation_age: JsonViolationAge,
     pub critical_violations: usize,
     pub total_circular: usize,
@@ -242,6 +243,7 @@ impl JsonReport {
             total_xs: result.total_xs,
             max_depth: result.max_depth,
             suppressed_count: result.suppressed_count,
+            total_external_imports: result.total_external_imports,
             violation_age: JsonViolationAge {
                 new_count: result.violation_age.new_count,
                 recent_count: result.violation_age.recent_count,
@@ -742,6 +744,19 @@ pub fn format_text(result: &AuditResult) -> String {
         ));
     }
 
+    if result.total_external_imports > 0 {
+        output.push_str(&format!(
+            "External Imports: {} across {} modules\n",
+            result.total_external_imports,
+            result.external_deps.len()
+        ));
+        let mut sorted_ext = result.external_deps.clone();
+        sorted_ext.sort_by_key(|e| std::cmp::Reverse(e.count));
+        for e in sorted_ext.iter().take(5) {
+            output.push_str(&format!("  [{} imports] {}\n", e.count, e.module_path));
+        }
+    }
+
     // Top Actions — what to do
     let top_actions = crate::analyzer::compute_top_actions(result, 5);
     if !top_actions.is_empty() {
@@ -770,6 +785,8 @@ pub fn format_text(result: &AuditResult) -> String {
                 crate::core::DependencyDirection::Downward => "\u{2193}",
                 crate::core::DependencyDirection::Sibling => "\u{2194}",
                 crate::core::DependencyDirection::Upward => "\u{2191}",
+                crate::core::DependencyDirection::External => "\u{2197}",
+                crate::core::DependencyDirection::Transitive => "\u{21dd}",
                 crate::core::DependencyDirection::Circular => "\u{21bb}",
             };
             let rri_label = if v.rri > 0.0 {
@@ -1501,6 +1518,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -1537,6 +1556,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -1570,6 +1591,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -1597,6 +1620,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let text = format_text(&result);
@@ -1626,6 +1651,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let text = format_text(&result);
@@ -1655,6 +1682,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -1692,6 +1721,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1721,6 +1752,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

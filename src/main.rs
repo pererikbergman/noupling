@@ -108,6 +108,26 @@ fn load_suppressed_count(path: &str) -> usize {
         .unwrap_or(0) as usize
 }
 
+fn load_external_deps(path: &str) -> Vec<analyzer::ExternalDepMetric> {
+    let ext_path = Path::new(path).join(".noupling").join("external.json");
+    let content = match std::fs::read_to_string(&ext_path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let data: Vec<serde_json::Value> = match serde_json::from_str(&content) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    data.iter()
+        .filter_map(|v| {
+            Some(analyzer::ExternalDepMetric {
+                module_path: v["module"].as_str()?.to_string(),
+                count: v["count"].as_u64()? as usize,
+            })
+        })
+        .collect()
+}
+
 fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
     match action {
         "install" => hook::install(Path::new(path)),
@@ -401,6 +421,25 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
         let _ = std::fs::remove_file(&suppressed_path);
     }
 
+    // Store external import counts for audit/report
+    let external_path = project_path.join(".noupling").join("external.json");
+    if !result.external_imports.is_empty() {
+        let total: usize = result.external_imports.iter().map(|e| e.count).sum();
+        println!(
+            "{} external (third-party) imports detected across {} modules",
+            total,
+            result.external_imports.len()
+        );
+        let data: Vec<serde_json::Value> = result
+            .external_imports
+            .iter()
+            .map(|e| serde_json::json!({"module": e.module_path, "count": e.count}))
+            .collect();
+        std::fs::write(&external_path, serde_json::to_string(&data)?)?;
+    } else {
+        let _ = std::fs::remove_file(&external_path);
+    }
+
     // Store diff metadata alongside the snapshot
     if let Some(ref files) = changed_files {
         let diff_meta = serde_json::json!({
@@ -542,6 +581,9 @@ fn run_audit(
 
     // Load suppressed count from scan
     result.suppressed_count = load_suppressed_count(path);
+    let ext_deps = load_external_deps(path);
+    result.total_external_imports = ext_deps.iter().map(|e| e.count).sum();
+    result.external_deps = ext_deps;
 
     // Compute violation age from snapshot history
     let all_snapshots = snap_repo.get_all()?;
@@ -663,6 +705,9 @@ fn run_report(
 
     // Load suppressed count from scan
     result.suppressed_count = load_suppressed_count(path);
+    let ext_deps = load_external_deps(path);
+    result.total_external_imports = ext_deps.iter().map(|e| e.count).sum();
+    result.external_deps = ext_deps;
 
     // Apply diff filter if a diff scan was performed
     if let Some(changed_files) = load_diff_meta(path) {

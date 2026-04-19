@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// The architectural direction of a dependency between two modules.
 ///
 /// Used to assign risk weights in the dependency risk framework:
-/// downward (2) < sibling (4) < upward (6) < circular (10).
+/// downward (2) < sibling (4) < upward (6) < external (8) < transitive (9) < circular (10).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DependencyDirection {
     /// Parent directory imports from child directory. Low risk.
@@ -17,6 +17,12 @@ pub enum DependencyDirection {
     /// Child directory imports from parent directory. High risk.
     #[serde(rename = "upward")]
     Upward,
+    /// Import of a third-party package not in the project source tree. Critical.
+    #[serde(rename = "external")]
+    External,
+    /// Indirect dependency through another module (A depends on C only via B). Extreme.
+    #[serde(rename = "transitive")]
+    Transitive,
     /// Mutual or transitive cycle between directories. Lethal.
     #[serde(rename = "circular")]
     Circular,
@@ -92,6 +98,8 @@ mod tests {
             (DependencyDirection::Downward, "\"downward\""),
             (DependencyDirection::Sibling, "\"sibling\""),
             (DependencyDirection::Upward, "\"upward\""),
+            (DependencyDirection::External, "\"external\""),
+            (DependencyDirection::Transitive, "\"transitive\""),
             (DependencyDirection::Circular, "\"circular\""),
         ];
         for (variant, expected_json) in &variants {
