@@ -22,9 +22,9 @@ Flat module structure in `src/`:
 | `core/` | Shared domain types: Module, ModuleType, Dependency, Snapshot |
 | `scanner/` | File discovery, Tree-sitter parsing (11 languages), import resolution |
 | `storage/` | SQLite persistence (snapshots, modules, dependencies) |
-| `analyzer/` | D_acc aggregation, BFS coupling audit, cycle detection |
-| `reporter/` | JSON, XML, Markdown, HTML, SonarCloud report generation |
-| `settings.rs` | Settings from .noupling/settings.json |
+| `analyzer/` | D_acc aggregation, BFS coupling audit, cycle detection, DependencyDirection classification, RRI/TRI computation, Gravity Well detection, Red Flag detection |
+| `reporter/` | JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Bundle, Dashboard, PR, Briefing, Strategy report generation |
+| `settings.rs` | Settings from .noupling/settings.json (includes risk_weights configuration) |
 | `diff.rs` | Git diff integration for PR/CI mode |
 
 ## Project Management

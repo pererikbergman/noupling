@@ -1295,9 +1295,27 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
         report.total_coupling
     ));
 
+    // Metrics guide
+    md.push_str("\n## Metrics Guide\n\n");
+    md.push_str("| Metric | Description |\n");
+    md.push_str("| :--- | :--- |\n");
+    md.push_str("| **Health Score** | Overall codebase health (0-100). Formula: `100 × (1 - TRI / (modules × max_weight))` |\n");
+    md.push_str("| **TRI** | Total Risk Index — sum of all violation RRIs. Lower is better |\n");
+    md.push_str("| **RRI** | Relationship Risk Index — risk for one violation. `direction_weight × number_of_imports` |\n");
+    md.push_str("| **Severity** | Legacy metric based on depth. Being replaced by RRI |\n");
+    md.push_str("| **Total XS** | Total imports to remove to fix all violations |\n\n");
+    md.push_str("**Direction types and weights:**\n\n");
+    md.push_str("| Symbol | Direction | Weight | Meaning |\n");
+    md.push_str("| :--- | :--- | :--- | :--- |\n");
+    md.push_str("| ↓ | Downward | 2 | Parent imports child — normal architectural flow |\n");
+    md.push_str("| ↔ | Sibling | 4 | Same-level directories import each other — missing shared abstraction |\n");
+    md.push_str("| ↑ | Upward | 6 | Child imports parent — destroys module reusability |\n");
+    md.push_str("| ↻ | Circular | 10 | Mutual or transitive cycle — breaks builds, makes testing impossible |\n");
+
     // Circular dependencies grouped by order
     if !report.circular_dependencies.is_empty() {
-        md.push_str("\n## Circular Dependencies\n");
+        md.push_str("\n## Circular Dependencies\n\n");
+        md.push_str("Modules that depend on each other in a loop. These have the highest risk weight (10) because they break build isolation and make unit testing impossible.\n");
         for (label, cycles) in &report.circular_dependencies {
             md.push_str(&format!("\n### {} ({} found)\n\n", label, cycles.len()));
             for (idx, cycle) in cycles.iter().enumerate() {
@@ -1349,6 +1367,7 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     // Coupling violations
     if !report.coupling_violations.is_empty() {
         md.push_str("## Coupling Violations\n\n");
+        md.push_str("Sibling directories that import each other. Each violation's **RRI** (Relationship Risk Index) = direction weight × number of imports. **Direction** shows the dependency type (↓ downward, ↔ sibling, ↑ upward, ↻ circular).\n\n");
         md.push_str("| Severity | RRI | Direction | From | To | Dir A | Dir B | Depth |\n");
         md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
         for v in &report.coupling_violations {
@@ -1403,7 +1422,7 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     // Gravity wells
     if !report.gravity_wells.is_empty() {
         md.push_str("\n## Gravity Wells\n\n");
-        md.push_str("Modules with disproportionately high aggregate risk.\n\n");
+        md.push_str("Modules with disproportionately high aggregate risk (total RRI > 2× median). These \"God Objects\" pull the system into their orbit — changing them affects many other modules. Consider breaking them into smaller, focused units.\n\n");
         md.push_str("| Module | Total RRI | Relationships | Directions |\n");
         md.push_str("| :--- | :--- | :--- | :--- |\n");
         for g in &report.gravity_wells {
@@ -1418,6 +1437,9 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
     // Red flags
     if !report.red_flags.is_empty() {
         md.push_str("\n## Red Flags\n\n");
+        md.push_str("Architectural anti-patterns that signal structural problems:\n");
+        md.push_str("- **FusedSibling**: Two modules with unusually high coupling density — consider merging or extracting a shared layer\n");
+        md.push_str("- **TrappedChild**: A module that imports from its parent — cannot be reused independently\n\n");
         for f in &report.red_flags {
             md.push_str(&format!(
                 "- **{}** (RRI: {:.0}) {}\n",
