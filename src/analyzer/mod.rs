@@ -607,9 +607,101 @@ fn detect_sibling_cycles(
                 }
             }
         }
+
+        // If no mutual pairs were found in this SCC (e.g. A→B→C→A with no
+        // reverse edges), find a directed cycle through the SCC so the user
+        // still sees the violation.
+        if reported.is_empty()
+            || scc.iter().all(|n| {
+                !scc.iter().any(|m| {
+                    n != m && {
+                        let key = if n < m { (*n, *m) } else { (*m, *n) };
+                        reported.contains(&key)
+                    }
+                })
+            })
+        {
+            // Check if we already reported anything for this SCC
+            let scc_covered: bool = scc.iter().any(|n| {
+                scc.iter().any(|m| {
+                    if n >= m {
+                        return false;
+                    }
+                    reported.contains(&(*n, *m))
+                })
+            });
+            if !scc_covered {
+                // DFS from first node to find a cycle within the SCC
+                if let Some(cycle_nodes) = find_cycle_in_scc(&scc_set, &adj, scc[0]) {
+                    let mut dir_path: Vec<String> = cycle_nodes
+                        .iter()
+                        .map(|&idx| siblings[idx].clone())
+                        .collect();
+                    dir_path.push(siblings[cycle_nodes[0]].clone()); // close the loop
+
+                    let mut hop_files_list = Vec::new();
+                    let mut hop_counts = Vec::new();
+                    for w in cycle_nodes.windows(2) {
+                        hop_files_list
+                            .push(edge_files.get(&(w[0], w[1])).cloned().unwrap_or_default());
+                        hop_counts.push(edge_import_count.get(&(w[0], w[1])).copied().unwrap_or(1));
+                    }
+                    // Closing edge
+                    let last = *cycle_nodes.last().unwrap();
+                    let first = cycle_nodes[0];
+                    hop_files_list
+                        .push(edge_files.get(&(last, first)).cloned().unwrap_or_default());
+                    hop_counts
+                        .push(edge_import_count.get(&(last, first)).copied().unwrap_or(1));
+
+                    cycles.push(DetectedCycle {
+                        dir_path,
+                        hop_files: hop_files_list,
+                        hop_import_counts: hop_counts,
+                    });
+                }
+            }
+        }
     }
 
     cycles
+}
+
+/// Find a simple directed cycle within an SCC starting from `start`.
+/// Returns the cycle as a list of node indices (without the closing duplicate).
+fn find_cycle_in_scc(
+    scc_set: &FxHashSet<usize>,
+    adj: &FxHashMap<usize, Vec<usize>>,
+    start: usize,
+) -> Option<Vec<usize>> {
+    let mut visited: FxHashMap<usize, usize> = FxHashMap::default(); // node -> parent
+    let mut stack = vec![(start, 0usize)]; // (node, neighbor_index)
+    visited.insert(start, usize::MAX);
+
+    while let Some((node, ni)) = stack.last_mut() {
+        let node = *node;
+        let neighbors = adj.get(&node);
+        let len = neighbors.map(|n| n.len()).unwrap_or(0);
+        if *ni >= len {
+            stack.pop();
+            continue;
+        }
+        let next = neighbors.unwrap()[*ni];
+        *ni += 1;
+        if !scc_set.contains(&next) {
+            continue;
+        }
+        if next == start {
+            // Found cycle back to start — extract path
+            let path: Vec<usize> = stack.iter().map(|(n, _)| *n).collect();
+            return Some(path);
+        }
+        if !visited.contains_key(&next) {
+            visited.insert(next, node);
+            stack.push((next, 0));
+        }
+    }
+    None
 }
 
 /// Tarjan's strongly connected components algorithm (iterative).
