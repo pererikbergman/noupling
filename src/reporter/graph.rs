@@ -251,6 +251,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![make_violation("src/scanner", "src/core")],
             score: 75.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -283,6 +284,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![make_violation("src/scanner", "src/core")],
             score: 75.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -312,6 +314,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 1,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),

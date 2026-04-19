@@ -944,6 +944,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -972,6 +973,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 95.5,
+            tri: 0.0,
             total_modules: 1,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1006,6 +1008,7 @@ mod tests {
         let result = AuditResult {
             violations: vec![],
             score: 100.0,
+            tri: 0.0,
             total_modules: 3,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
@@ -1058,6 +1061,7 @@ mod tests {
                 weight: 0,
             }],
             score: 75.0,
+            tri: 0.0,
             total_modules: 2,
             hotspots: Vec::new(),
             rule_violations: Vec::new(),
