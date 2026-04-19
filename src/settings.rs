@@ -35,6 +35,11 @@ pub struct Settings {
     /// Severity weights per dependency direction for RRI calculation.
     #[serde(default = "default_risk_weights")]
     pub risk_weights: RiskWeights,
+    /// Coupling detection mode (top-level alias, overrides thresholds.coupling_mode).
+    /// "strict" (default): all sibling coupling is a violation.
+    /// "actionable": only circular deps are violations, siblings are informational.
+    #[serde(default)]
+    pub coupling_mode: Option<String>,
 }
 
 fn default_allow_inline_suppression() -> bool {
@@ -230,11 +235,20 @@ impl Default for Settings {
             allow_inline_suppression: default_allow_inline_suppression(),
             modules: Vec::new(),
             risk_weights: default_risk_weights(),
+            coupling_mode: None,
         }
     }
 }
 
 impl Settings {
+    /// Resolve the effective coupling mode. Top-level `coupling_mode`
+    /// takes priority over `thresholds.coupling_mode`.
+    pub fn effective_coupling_mode(&self) -> &str {
+        self.coupling_mode
+            .as_deref()
+            .unwrap_or(&self.thresholds.coupling_mode)
+    }
+
     /// Load settings from `.noupling/settings.json` under the given project path.
     /// Falls back to defaults if the file doesn't exist.
     pub fn load(project_path: &Path) -> Result<Self> {
