@@ -155,7 +155,7 @@ fn default_thresholds() -> Thresholds {
 }
 
 fn default_coupling_mode() -> String {
-    "actionable".to_string()
+    "strict".to_string()
 }
 
 fn default_score_green() -> f64 {
