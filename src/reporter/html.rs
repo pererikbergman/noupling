@@ -959,6 +959,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -989,6 +990,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1025,6 +1027,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1079,6 +1082,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();

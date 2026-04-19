@@ -41,7 +41,16 @@ pub struct JsonReport {
     pub coupling_violations: Vec<JsonCouplingViolation>,
     pub hotspots: Vec<JsonHotspot>,
     pub gravity_wells: Vec<JsonGravityWell>,
+    pub red_flags: Vec<JsonRedFlag>,
     pub directory_tree: Vec<JsonDirectory>,
+}
+
+#[derive(Serialize)]
+pub struct JsonRedFlag {
+    pub flag_type: String,
+    pub modules: Vec<String>,
+    pub rri: f64,
+    pub recommendation: String,
 }
 
 #[derive(Serialize)]
@@ -258,6 +267,16 @@ impl JsonReport {
                         upward: g.upward_rri,
                         circular: g.circular_rri,
                     },
+                })
+                .collect(),
+            red_flags: result
+                .red_flags
+                .iter()
+                .map(|f| JsonRedFlag {
+                    flag_type: format!("{:?}", f.flag_type),
+                    modules: f.modules.clone(),
+                    rri: f.rri,
+                    recommendation: f.recommendation.clone(),
                 })
                 .collect(),
             directory_tree,
@@ -1329,6 +1348,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -1364,6 +1384,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -1396,6 +1417,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -1422,6 +1444,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1450,6 +1473,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1478,6 +1502,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -1514,6 +1539,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1542,6 +1568,7 @@ mod tests {
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
             gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");
