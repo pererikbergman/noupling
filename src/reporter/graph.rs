@@ -265,6 +265,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);
@@ -298,6 +299,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let dot = format_dot(&modules, &result);
@@ -328,6 +330,7 @@ mod tests {
             coupling_metrics_count: 0,
             coupling_metrics: Vec::new(),
             suppressed_count: 0,
+            gravity_wells: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);
