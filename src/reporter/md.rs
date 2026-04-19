@@ -115,6 +115,9 @@ fn render_dir_page(
     md.push_str("| :--- | :--- |\n");
     if is_root {
         md.push_str(&format!("| Health Score | {:.1}/100 |\n", report.score));
+        if report.tri > 0.0 {
+            md.push_str(&format!("| Total Risk Index (TRI) | {:.1} |\n", report.tri));
+        }
     }
     md.push_str(&format!("| Modules | {} |\n", dir.module_count));
     md.push_str(&format!("| Violations | {} |\n", violations));
@@ -135,6 +138,19 @@ fn render_dir_page(
         md.push_str(&format!("| Suppressed | {} |\n", report.suppressed_count));
     }
     md.push('\n');
+
+    if is_root {
+        md.push_str("### Metrics Guide\n\n");
+        md.push_str("| Metric | Description |\n");
+        md.push_str("| :--- | :--- |\n");
+        md.push_str("| **Health Score** | Overall codebase health (0-100). `100 × (1 - TRI / (modules × max_weight))` |\n");
+        md.push_str(
+            "| **TRI** | Total Risk Index — sum of all violation RRIs. Lower is better |\n",
+        );
+        md.push_str("| **RRI** | Relationship Risk Index — per-violation risk. `direction_weight × imports` |\n");
+        md.push_str("| **Severity** | Legacy metric based on depth. Being replaced by RRI |\n\n");
+        md.push_str("**Direction types:** ↓ Downward (weight 2) · ↔ Sibling (weight 4) · ↑ Upward (weight 6) · ↻ Circular (weight 10)\n\n");
+    }
 
     // Contents: child directories
     if !dir.children.is_empty() || !dir.files.is_empty() {
@@ -179,7 +195,8 @@ fn render_dir_page(
                 by_order.entry(v.cycle_order).or_default().push(v);
             }
 
-            md.push_str("## Circular Dependencies\n");
+            md.push_str("## Circular Dependencies\n\n");
+            md.push_str("Modules that depend on each other in a loop (weight 10). Break the weakest link to resolve.\n");
             for (order, cycles) in &by_order {
                 let label = match order {
                     2 => "Mutual Dependencies (Order 2)".to_string(),
@@ -258,8 +275,9 @@ fn render_dir_page(
         // Coupling violations
         if !coupling.is_empty() {
             md.push_str("## Coupling Violations\n\n");
-            md.push_str("| Severity | From | To |\n");
-            md.push_str("| :--- | :--- | :--- |\n");
+            md.push_str("Sibling directories importing each other. **RRI** = direction weight × number of imports.\n\n");
+            md.push_str("| Severity | RRI | Dir | From | To |\n");
+            md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
             for v in &coupling {
                 let from_short = std::path::Path::new(&v.from_module)
                     .file_name()
@@ -269,9 +287,15 @@ fn render_dir_page(
                     .file_name()
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
+                let dir_symbol = match v.direction {
+                    crate::core::DependencyDirection::Downward => "↓",
+                    crate::core::DependencyDirection::Sibling => "↔",
+                    crate::core::DependencyDirection::Upward => "↑",
+                    crate::core::DependencyDirection::Circular => "↻",
+                };
                 md.push_str(&format!(
-                    "| {:.2} | `{}` | `{}` |\n",
-                    v.severity, from_short, to_short
+                    "| {:.2} | {:.0} | {} | `{}` | `{}` |\n",
+                    v.severity, v.rri, dir_symbol, from_short, to_short
                 ));
             }
             md.push('\n');
