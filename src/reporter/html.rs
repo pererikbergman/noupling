@@ -510,7 +510,24 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 <div class=\"summary-card\" title=\"Total Risk Index: sum of all violation RRIs (Relationship Risk Index). Lower is better.\"><div class=\"label\">TRI <span class=\"info-icon\">&#9432;</span></div><div class=\"value\">{:.0}</div></div>
                 <div class=\"summary-card\" title=\"Total Excess: imports that need to be removed across all violations to reach a clean state.\"><div class=\"label\">Total XS <span class=\"info-icon\">&#9432;</span></div><div class=\"value\">{}</div></div>
             </div>
-            <p class=\"score-hint\">The <strong>Project Score</strong> above is the overall codebase health. The <strong>Health Score</strong> in the cards below reflects only this directory &mdash; a directory can be 100/100 while the project score is lower because violations live in subdirectories.</p>",
+            <p class=\"score-hint\">The <strong>Project Score</strong> above is the overall codebase health. The <strong>Health Score</strong> in the cards below reflects only this directory &mdash; a directory can be 100/100 while the project score is lower because violations live in subdirectories.</p>
+            <details class=\"metrics-guide\" style=\"margin-top:0.75rem;font-size:0.75rem;color:#475569\">
+                <summary style=\"cursor:pointer;font-weight:600;color:#334155\">Metrics Guide</summary>
+                <div style=\"margin-top:0.5rem;line-height:1.6\">
+                    <p><strong>Project Score</strong> (0&ndash;100) &mdash; overall codebase health derived from the Total Risk Index. Higher is better. Formula: <code>100 &times; (1 &minus; TRI / (modules &times; max_weight))</code></p>
+                    <p><strong>TRI</strong> (Total Risk Index) &mdash; sum of all violation RRIs. Lower is better. A TRI of 0 means no violations.</p>
+                    <p><strong>RRI</strong> (Relationship Risk Index) &mdash; risk score for a single violation. <code>RRI = direction_weight &times; density</code>, where density is the number of imports between the two modules.</p>
+                    <p><strong>Severity</strong> &mdash; legacy metric based on depth. Being replaced by RRI in future versions.</p>
+                    <p><strong>Total XS</strong> (Excess) &mdash; total import statements that need to be removed to fix all violations.</p>
+                    <p style=\"margin-top:0.5rem\"><strong>Direction types and weights:</strong></p>
+                    <table style=\"font-size:0.72rem;border-collapse:collapse;margin:0.25rem 0\">
+                        <tr><td style=\"padding:0.15rem 0.5rem\"><span style=\"color:#22c55e\">&darr;</span> <strong>Downward</strong></td><td style=\"padding:0.15rem 0.5rem\">Weight 2</td><td style=\"padding:0.15rem 0.5rem;color:#64748b\">Parent imports child. Normal architectural flow.</td></tr>
+                        <tr><td style=\"padding:0.15rem 0.5rem\"><span style=\"color:#eab308\">&harr;</span> <strong>Sibling</strong></td><td style=\"padding:0.15rem 0.5rem\">Weight 4</td><td style=\"padding:0.15rem 0.5rem;color:#64748b\">Same-level directories import each other. Signals missing shared abstraction.</td></tr>
+                        <tr><td style=\"padding:0.15rem 0.5rem\"><span style=\"color:#ef4444\">&uarr;</span> <strong>Upward</strong></td><td style=\"padding:0.15rem 0.5rem\">Weight 6</td><td style=\"padding:0.15rem 0.5rem;color:#64748b\">Child imports parent. Destroys module reusability.</td></tr>
+                        <tr><td style=\"padding:0.15rem 0.5rem\"><span style=\"color:#dc2626\">&#8635;</span> <strong>Circular</strong></td><td style=\"padding:0.15rem 0.5rem\">Weight 10</td><td style=\"padding:0.15rem 0.5rem;color:#64748b\">Mutual or transitive cycle. Breaks builds and makes testing impossible.</td></tr>
+                    </table>
+                </div>
+            </details>",
             banner_clr, data.total_score, data.total_modules, data.total_violations, data.total_tri, data.total_xs
         )
     } else {
@@ -580,6 +597,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         }
 
         violations_html.push_str("<h2>Circular Dependencies</h2>\n");
+        violations_html.push_str("<p class=\"section-hint\">Modules that depend on each other in a loop. These have the highest risk weight (10) because they break build isolation and make unit testing impossible. The <strong>RRI</strong> column shows the total risk for each cycle.</p>\n");
         for (order, violations) in &by_order {
             let label = match order {
                 2 => "Mutual Dependencies (Order 2)".to_string(),
@@ -592,7 +610,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 violations.len()
             ));
             violations_html.push_str("<table class=\"violations\">\n");
-            violations_html.push_str("<tr><th>Severity</th><th>RRI</th><th>Cycle</th></tr>\n");
+            violations_html.push_str("<tr><th title=\"Legacy severity metric\">Severity</th><th title=\"Relationship Risk Index = direction_weight × density\">RRI</th><th>Cycle</th></tr>\n");
             for v in violations {
                 let sev_clr = "#ef4444";
                 // Render cycle inline
@@ -625,7 +643,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
 
         if !promoted.is_empty() {
             violations_html.push_str("<div class=\"violations-promoted\">\n");
-            violations_html.push_str("<p class=\"section-hint\">Top 5 violations by severity &mdash; tackle these first for the biggest score impact.</p>\n");
+            violations_html.push_str("<p class=\"section-hint\">Top 5 violations by severity &mdash; tackle these first for the biggest score impact. <strong>RRI</strong> = direction_weight &times; number_of_imports. <strong>Dir</strong> = dependency direction (&darr; downward, &harr; sibling, &uarr; upward, &#8635; circular).</p>\n");
             for v in &promoted {
                 let sev_clr = if v.severity >= data.critical_severity {
                     "#ef4444"
@@ -677,7 +695,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             ));
             violations_html.push_str("<table class=\"violations\">\n");
             violations_html.push_str(
-                "<tr><th>Severity</th><th>RRI</th><th>Dir</th><th>From</th><th>To</th></tr>\n",
+                "<tr><th title=\"Legacy severity metric\">Severity</th><th title=\"Relationship Risk Index = direction_weight × number of imports\">RRI</th><th title=\"Dependency direction: ↓ downward, ↔ sibling, ↑ upward, ↻ circular\">Dir</th><th>From</th><th>To</th></tr>\n",
             );
             for v in &rest {
                 let sev_clr = if v.severity >= data.critical_severity {
