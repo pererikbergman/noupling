@@ -366,6 +366,63 @@ impl AuditResult {
         }
     }
 
+    /// Apply layer-specific weight reductions for sanctioned sibling connections.
+    /// If both modules in a sibling violation belong to a layer with `allow_sibling: true`,
+    /// the direction weight is reduced to the layer's `reduced_sibling_weight`.
+    pub fn apply_layer_weights(&mut self, layers: &[crate::settings::Layer]) {
+        if layers.is_empty() {
+            return;
+        }
+        let matchers: Vec<_> = layers
+            .iter()
+            .filter_map(|l| {
+                globset::Glob::new(&l.pattern)
+                    .ok()
+                    .and_then(|g| g.compile_matcher().into())
+            })
+            .collect();
+
+        fn find_layer_idx(
+            path: &str,
+            layers: &[crate::settings::Layer],
+            matchers: &[globset::GlobMatcher],
+        ) -> Option<usize> {
+            for (i, matcher) in matchers.iter().enumerate() {
+                if matcher.is_match(path) || layers[i].pattern.contains(&extract_dir(path)) {
+                    return Some(i);
+                }
+            }
+            None
+        }
+
+        fn extract_dir(path: &str) -> String {
+            std::path::Path::new(path)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        }
+
+        // Adjust sibling violations in allow_sibling layers
+        for v in self
+            .violations
+            .iter_mut()
+            .chain(self.coupling_metrics.iter_mut())
+        {
+            if v.direction != DependencyDirection::Sibling {
+                continue;
+            }
+            let from_layer = find_layer_idx(&v.from_module, layers, &matchers);
+            let to_layer = find_layer_idx(&v.to_module, layers, &matchers);
+
+            // Both in the same layer that allows siblings → reduced weight
+            if let (Some(fi), Some(ti)) = (from_layer, to_layer) {
+                if fi == ti && layers[fi].allow_sibling {
+                    v.rri = layers[fi].reduced_sibling_weight * v.weight.max(1) as f64;
+                }
+            }
+        }
+    }
+
     /// Compute Relationship Risk Index (RRI) for each violation using
     /// the configured direction weights. RRI = direction_weight × density.
     ///
