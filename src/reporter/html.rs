@@ -26,6 +26,10 @@ struct ViolationInfo {
     from_module: String,
     to_module: String,
     severity: f64,
+    rri: f64,
+    direction: crate::core::DependencyDirection,
+    #[allow(dead_code)]
+    weight: usize,
     is_circular: bool,
     #[allow(dead_code)]
     circular_direction: Option<String>,
@@ -234,6 +238,9 @@ fn build_report_data(
             from_module: violation.from_module.clone(),
             to_module: violation.to_module.clone(),
             severity: violation.severity,
+            rri: violation.rri,
+            direction: violation.direction.clone(),
+            weight: violation.weight,
             is_circular: violation.is_circular,
             circular_direction,
             cycle_path: violation.cycle_path.clone(),
@@ -254,6 +261,9 @@ fn build_report_data(
             from_module: cm.from_module.clone(),
             to_module: cm.to_module.clone(),
             severity: cm.severity,
+            rri: cm.rri,
+            direction: cm.direction.clone(),
+            weight: cm.weight,
             is_circular: false,
             circular_direction: None,
             cycle_path: Vec::new(),
@@ -453,6 +463,23 @@ fn module_label(path: &str, current_dir: &str) -> String {
     }
 }
 
+fn direction_badge(dir: &crate::core::DependencyDirection) -> &'static str {
+    match dir {
+        crate::core::DependencyDirection::Downward => {
+            "<span title=\"Downward dependency\" style=\"color:#22c55e\">\u{2193}</span>"
+        }
+        crate::core::DependencyDirection::Sibling => {
+            "<span title=\"Sibling dependency\" style=\"color:#eab308\">\u{2194}</span>"
+        }
+        crate::core::DependencyDirection::Upward => {
+            "<span title=\"Upward dependency\" style=\"color:#ef4444\">\u{2191}</span>"
+        }
+        crate::core::DependencyDirection::Circular => {
+            "<span title=\"Circular dependency\" style=\"color:#dc2626\">\u{21bb}</span>"
+        }
+    }
+}
+
 fn score_color(score: f64, green: f64, yellow: f64) -> &'static str {
     if score >= green {
         "#22c55e"
@@ -565,14 +592,14 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 violations.len()
             ));
             violations_html.push_str("<table class=\"violations\">\n");
-            violations_html.push_str("<tr><th>Severity</th><th>Cycle</th></tr>\n");
+            violations_html.push_str("<tr><th>Severity</th><th>RRI</th><th>Cycle</th></tr>\n");
             for v in violations {
                 let sev_clr = "#ef4444";
                 // Render cycle inline
                 let cycle_content = render_cycle_details(v, data);
                 violations_html.push_str(&format!(
-                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{}</td></tr>\n",
-                    sev_clr, v.severity, cycle_content,
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{:.0}</td><td>{}</td></tr>\n",
+                    sev_clr, v.severity, v.rri, cycle_content,
                 ));
             }
             violations_html.push_str("</table>\n");
@@ -609,17 +636,28 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 };
                 let from_label = module_label(&v.from_module, dir_path);
                 let to_label = module_label(&v.to_module, dir_path);
+                let dir_badge = direction_badge(&v.direction);
+                let rri_label = if v.rri > 0.0 {
+                    format!(
+                        "<span style=\"color:#64748b;font-size:0.75rem\"> RRI:{:.0}</span>",
+                        v.rri
+                    )
+                } else {
+                    String::new()
+                };
                 violations_html.push_str(&format!(
                     "<div class=\"violation-card\">
-                        <div class=\"violation-sev\" style=\"color:{}\">{:.2}</div>
+                        <div class=\"violation-sev\" style=\"color:{}\">{:.2}{}</div>
                         <div class=\"violation-body\">
-                            <div class=\"violation-title\">{} &rarr; {}</div>
+                            <div class=\"violation-title\">{} {} &rarr; {}</div>
                             <div class=\"violation-detail\" title=\"{}\">{}</div>
                             <div class=\"violation-detail\" title=\"{}\">{}</div>
                         </div>
                     </div>\n",
                     sev_clr,
                     v.severity,
+                    rri_label,
+                    dir_badge,
                     from_label,
                     to_label,
                     v.from_module,
@@ -638,7 +676,9 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 coupling_violations.len()
             ));
             violations_html.push_str("<table class=\"violations\">\n");
-            violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+            violations_html.push_str(
+                "<tr><th>Severity</th><th>RRI</th><th>Dir</th><th>From</th><th>To</th></tr>\n",
+            );
             for v in &rest {
                 let sev_clr = if v.severity >= data.critical_severity {
                     "#ef4444"
@@ -649,9 +689,10 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 };
                 let from_label = module_label(&v.from_module, dir_path);
                 let to_label = module_label(&v.to_module, dir_path);
+                let dir_badge = direction_badge(&v.direction);
                 violations_html.push_str(&format!(
-                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
-                    sev_clr, v.severity, v.from_module, from_label, v.to_module, to_label,
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{:.0}</td><td>{}</td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                    sev_clr, v.severity, v.rri, dir_badge, v.from_module, from_label, v.to_module, to_label,
                 ));
             }
             violations_html.push_str("</table>\n");
