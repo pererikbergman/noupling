@@ -1254,6 +1254,7 @@ mod tests {
             to_module: to.to_string(),
             depth,
             severity,
+            direction: crate::core::DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

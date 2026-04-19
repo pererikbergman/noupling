@@ -1045,6 +1045,7 @@ mod tests {
                 to_module: "src/storage/mod.rs".to_string(),
                 depth: 1,
                 severity: 0.5,
+                direction: crate::core::DependencyDirection::Sibling,
                 is_circular: false,
                 cycle_path: Vec::new(),
                 cycle_hop_files: Vec::new(),

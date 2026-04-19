@@ -6,7 +6,7 @@
 use fxhash::{FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
 
-use crate::core::{Dependency, Module};
+use crate::core::{Dependency, DependencyDirection, Module};
 
 /// A detected coupling violation or circular dependency between modules.
 #[derive(Debug, Clone)]
@@ -27,6 +27,8 @@ pub struct CouplingViolation {
     pub weight: usize,
     /// Severity score. Coupling: `weight/(depth+1)`. Circular: `modules/(depth+1)/10`.
     pub severity: f64,
+    /// Architectural direction of this dependency (sibling, circular, etc.).
+    pub direction: DependencyDirection,
     /// Whether this is a circular dependency (vs. a coupling violation).
     pub is_circular: bool,
     /// For circular deps: the full cycle path as directory paths.
@@ -869,6 +871,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                 depth,
                 weight: 0,
                 severity: modules.len() as f64 / (depth as f64 + 1.0) / 10.0,
+                direction: DependencyDirection::Circular,
                 is_circular: true,
                 cycle_path: cycle.dir_path.clone(),
                 cycle_hop_files: cycle.hop_files.clone(),
@@ -915,6 +918,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     depth,
                                                     weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
+                                                    direction: DependencyDirection::Sibling,
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
@@ -959,6 +963,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
                                                     depth,
                                                     weight: 1,
                                                     severity: 1.0 / (depth as f64 + 1.0),
+                                                    direction: DependencyDirection::Sibling,
                                                     is_circular: false,
                                                     cycle_path: Vec::new(),
                                                     cycle_hop_files: Vec::new(),
@@ -1916,6 +1921,41 @@ mod tests {
     }
 
     #[test]
+    fn sibling_violations_have_sibling_direction() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![make_dep("a", "b", 1)];
+        let result = audit(&modules, &deps);
+        let siblings: Vec<&CouplingViolation> = result
+            .violations
+            .iter()
+            .filter(|v| !v.is_circular)
+            .collect();
+        assert!(!siblings.is_empty(), "Should have sibling violations");
+        for v in siblings {
+            assert_eq!(v.direction, DependencyDirection::Sibling);
+        }
+    }
+
+    #[test]
+    fn circular_violations_have_circular_direction() {
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![make_dep("a", "b", 1), make_dep("b", "a", 5)];
+        let result = audit(&modules, &deps);
+        let circular: Vec<&CouplingViolation> =
+            result.violations.iter().filter(|v| v.is_circular).collect();
+        assert!(!circular.is_empty(), "Should have circular violations");
+        for v in circular {
+            assert_eq!(v.direction, DependencyDirection::Circular);
+        }
+    }
+
+    #[test]
     fn empty_project_scores_100() {
         let result = audit(&[], &[]);
         assert!((result.score - 100.0).abs() < f64::EPSILON);
@@ -2394,6 +2434,7 @@ mod tests {
             depth: 1,
             weight: 1,
             severity: 0.5,
+            direction: DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
@@ -2420,6 +2461,7 @@ mod tests {
             depth: 1,
             weight: 1,
             severity: 0.5,
+            direction: DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

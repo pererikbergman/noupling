@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::analyzer::{AuditResult, CouplingViolation};
+use crate::core::DependencyDirection;
 
 /// A fingerprint that uniquely identifies a violation.
 fn fingerprint(v: &CouplingViolation) -> String {
@@ -125,6 +126,7 @@ mod tests {
             weight: 1,
             depth: 0,
             severity: 0.5,
+            direction: DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),

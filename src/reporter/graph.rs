@@ -230,6 +230,7 @@ mod tests {
             depth: 1,
             weight: 1,
             severity: 0.5,
+            direction: crate::core::DependencyDirection::Sibling,
             is_circular: false,
             cycle_path: Vec::new(),
             cycle_hop_files: Vec::new(),
