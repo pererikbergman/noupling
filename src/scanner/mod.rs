@@ -24,6 +24,16 @@ pub struct ScanResult {
     pub dependencies: Vec<Dependency>,
     /// Number of imports suppressed by `noupling:ignore` comments.
     pub suppressed_count: usize,
+    /// Per-module count of external (unresolved) imports.
+    pub external_imports: Vec<ExternalImportCount>,
+}
+
+/// Count of imports in a module that don't resolve to any project file.
+pub struct ExternalImportCount {
+    /// Path of the module containing the unresolved imports.
+    pub module_path: String,
+    /// Number of unique external imports.
+    pub count: usize,
 }
 
 /// Check if an import line is suppressed by a `noupling:ignore` comment.
@@ -61,7 +71,7 @@ pub fn scan_project(
 
     let all_paths: Vec<String> = modules.iter().map(|m| m.path.clone()).collect();
 
-    let per_file: Vec<(Vec<Dependency>, usize)> = modules
+    let per_file: Vec<(Vec<Dependency>, usize, ExternalImportCount)> = modules
         .par_iter()
         .filter_map(|module| {
             let rel_path = Path::new(&module.path);
@@ -87,6 +97,7 @@ pub fn scan_project(
                 _ => return None,
             };
             let mut suppressed = 0usize;
+            let mut external_count = 0usize;
             let deps: Vec<Dependency> = imports
                 .iter()
                 .filter_map(|entry| {
@@ -95,30 +106,47 @@ pub fn scan_project(
                         return None;
                     }
                     let resolved =
-                        resolve_import(&entry.path, &module.path, Path::new(""), &all_paths)?;
-                    let to_module = modules.iter().find(|m| m.path == resolved)?;
-                    Some(Dependency {
-                        from_module_id: module.id.clone(),
-                        to_module_id: to_module.id.clone(),
-                        line_number: entry.line_number,
-                    })
+                        resolve_import(&entry.path, &module.path, Path::new(""), &all_paths);
+                    match resolved {
+                        Some(path) => {
+                            let to_module = modules.iter().find(|m| m.path == path)?;
+                            Some(Dependency {
+                                from_module_id: module.id.clone(),
+                                to_module_id: to_module.id.clone(),
+                                line_number: entry.line_number,
+                            })
+                        }
+                        None => {
+                            external_count += 1;
+                            None
+                        }
+                    }
                 })
                 .collect();
-            Some((deps, suppressed))
+            let ext = ExternalImportCount {
+                module_path: module.path.clone(),
+                count: external_count,
+            };
+            Some((deps, suppressed, ext))
         })
         .collect();
 
     let mut dependencies = Vec::new();
     let mut suppressed_count = 0usize;
-    for (deps, suppressed) in per_file {
+    let mut external_imports = Vec::new();
+    for (deps, suppressed, ext) in per_file {
         dependencies.extend(deps);
         suppressed_count += suppressed;
+        if ext.count > 0 {
+            external_imports.push(ext);
+        }
     }
 
     Ok(ScanResult {
         modules,
         dependencies,
         suppressed_count,
+        external_imports,
     })
 }
 

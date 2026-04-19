@@ -291,6 +291,8 @@ fn render_dir_page(
                     crate::core::DependencyDirection::Downward => "↓",
                     crate::core::DependencyDirection::Sibling => "↔",
                     crate::core::DependencyDirection::Upward => "↑",
+                    crate::core::DependencyDirection::External => "↗",
+                    crate::core::DependencyDirection::Transitive => "⇝",
                     crate::core::DependencyDirection::Circular => "↻",
                 };
                 md.push_str(&format!(

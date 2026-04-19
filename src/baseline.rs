@@ -165,6 +165,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         // Save baseline
@@ -191,6 +193,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
@@ -222,6 +226,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -248,6 +254,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
@@ -280,6 +288,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -303,6 +313,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);

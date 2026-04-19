@@ -474,6 +474,12 @@ fn direction_badge(dir: &crate::core::DependencyDirection) -> &'static str {
         crate::core::DependencyDirection::Upward => {
             "<span title=\"Upward dependency\" style=\"color:#ef4444\">\u{2191}</span>"
         }
+        crate::core::DependencyDirection::External => {
+            "<span title=\"External dependency\" style=\"color:#f97316\">\u{2197}</span>"
+        }
+        crate::core::DependencyDirection::Transitive => {
+            "<span title=\"Transitive dependency\" style=\"color:#a855f7\">\u{21dd}</span>"
+        }
         crate::core::DependencyDirection::Circular => {
             "<span title=\"Circular dependency\" style=\"color:#dc2626\">\u{21bb}</span>"
         }
@@ -1022,6 +1028,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1053,6 +1061,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1090,6 +1100,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1145,6 +1157,8 @@ mod tests {
             suppressed_count: 0,
             gravity_wells: Vec::new(),
             red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
         };
 
         let dir = tempfile::tempdir().unwrap();
