@@ -15,6 +15,7 @@ struct DirNode {
     children_dirs: Vec<String>,
     files: Vec<String>,
     violations_here: Vec<ViolationInfo>,
+    coupling_metrics_here: Vec<ViolationInfo>,
     has_deep_violations: bool,
     score: f64,
     module_count: usize,
@@ -114,6 +115,7 @@ fn build_report_data(
                         children_dirs: Vec::new(),
                         files: Vec::new(),
                         violations_here: Vec::new(),
+                        coupling_metrics_here: Vec::new(),
                         has_deep_violations: false,
                         score: 100.0,
                         module_count: 0,
@@ -138,6 +140,7 @@ fn build_report_data(
                 children_dirs: Vec::new(),
                 files: Vec::new(),
                 violations_here: Vec::new(),
+                coupling_metrics_here: Vec::new(),
                 has_deep_violations: false,
                 score: 100.0,
                 module_count: 0,
@@ -240,6 +243,25 @@ fn build_report_data(
 
         if let Some(dir) = dirs.get_mut(&parent) {
             dir.violations_here.push(info);
+        }
+    }
+
+    // Distribute coupling metrics (informational, not violations) to directories
+    for cm in &result.coupling_metrics {
+        let parent = find_common_parent(&cm.dir_a, &cm.dir_b);
+        let info = ViolationInfo {
+            from_module: cm.from_module.clone(),
+            to_module: cm.to_module.clone(),
+            severity: cm.severity,
+            is_circular: false,
+            circular_direction: None,
+            cycle_path: Vec::new(),
+            cycle_hop_files: Vec::new(),
+            cycle_order: 0,
+            cycle_hop_counts: Vec::new(),
+        };
+        if let Some(dir) = dirs.get_mut(&parent) {
+            dir.coupling_metrics_here.push(info);
         }
     }
 
@@ -394,6 +416,41 @@ fn short_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
+/// Render a file path as `relative/path: file.ext` for display.
+/// `current_dir` is the directory of the page we're rendering — paths are
+/// shown relative to it so users can see where each file lives.
+fn module_label(path: &str, current_dir: &str) -> String {
+    let p = std::path::Path::new(path);
+    let file = p.file_name().and_then(|f| f.to_str()).unwrap_or(path);
+    let parent = p
+        .parent()
+        .map(|d| d.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    // Strip the current_dir prefix so the displayed path is relative
+    let relative = if !current_dir.is_empty() {
+        let prefix = format!("{}/", current_dir);
+        if let Some(stripped) = parent.strip_prefix(&prefix) {
+            stripped.to_string()
+        } else if parent == current_dir {
+            String::new()
+        } else {
+            parent.clone()
+        }
+    } else {
+        parent.clone()
+    };
+
+    if relative.is_empty() {
+        file.to_string()
+    } else {
+        format!(
+            "<span class=\"module-tag\" title=\"{}\">{}</span> {}",
+            parent, relative, file
+        )
+    }
+}
+
 fn score_color(score: f64, green: f64, yellow: f64) -> &'static str {
     if score >= green {
         "#22c55e"
@@ -418,11 +475,12 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         let banner_clr = score_color(data.total_score, data.score_green, data.score_yellow);
         format!(
             "<div class=\"summary\" style=\"background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem\">
-                <div class=\"summary-card\"><div class=\"label\">Project Score</div><div class=\"value\" style=\"color:{}\">{:.1}</div></div>
+                <div class=\"summary-card\" title=\"Overall project health, computed from all violations across the entire codebase. This is the canonical score reported by audit and used in CI gates.\"><div class=\"label\">Project Score <span class=\"info-icon\">&#9432;</span></div><div class=\"value\" style=\"color:{}\">{:.1}</div></div>
                 <div class=\"summary-card\"><div class=\"label\">Total Modules</div><div class=\"value\">{}</div></div>
                 <div class=\"summary-card\"><div class=\"label\">Total Violations</div><div class=\"value\">{}</div></div>
-                <div class=\"summary-card\"><div class=\"label\">Total XS</div><div class=\"value\">{}</div></div>
-            </div>",
+                <div class=\"summary-card\" title=\"Total Excess: imports that need to be removed across all violations to reach a clean state.\"><div class=\"label\">Total XS <span class=\"info-icon\">&#9432;</span></div><div class=\"value\">{}</div></div>
+            </div>
+            <p class=\"score-hint\">The <strong>Project Score</strong> above is the overall codebase health. The <strong>Health Score</strong> in the cards below reflects only this directory &mdash; a directory can be 100/100 while the project score is lower because violations live in subdirectories.</p>",
             banner_clr, data.total_score, data.total_modules, data.total_violations, data.total_xs
         )
     } else {
@@ -519,33 +577,106 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     }
 
     if !coupling_violations.is_empty() {
-        violations_html.push_str("<h2>Coupling Violations</h2>\n<table class=\"violations\">\n");
-        violations_html
-            .push_str("<tr><th>Severity</th><th>From</th><th>To</th><th>Details</th></tr>\n");
-        for v in &coupling_violations {
-            let sev_clr = if v.severity >= data.critical_severity {
-                "#ef4444"
-            } else if v.severity >= 0.2 {
-                "#eab308"
-            } else {
-                "#6b7280"
-            };
-            let from_short = std::path::Path::new(&v.from_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.from_module);
-            let to_short = std::path::Path::new(&v.to_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.to_module);
+        violations_html.push_str(&format!(
+            "<h2>Coupling Violations <small style=\"font-weight:400;color:#64748b\">({} total)</small></h2>\n",
+            coupling_violations.len()
+        ));
+
+        // Tier 1: Promoted (top 5 by severity, card layout)
+        let mut sorted = coupling_violations.clone();
+        sorted.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let promoted: Vec<&&ViolationInfo> = sorted.iter().take(5).collect();
+        let rest: Vec<&&ViolationInfo> = sorted.iter().skip(5).collect();
+
+        if !promoted.is_empty() {
+            violations_html.push_str("<div class=\"violations-promoted\">\n");
+            violations_html.push_str("<p class=\"section-hint\">Top 5 violations by severity &mdash; tackle these first for the biggest score impact.</p>\n");
+            for v in &promoted {
+                let sev_clr = if v.severity >= data.critical_severity {
+                    "#ef4444"
+                } else if v.severity >= 0.2 {
+                    "#eab308"
+                } else {
+                    "#6b7280"
+                };
+                let from_label = module_label(&v.from_module, dir_path);
+                let to_label = module_label(&v.to_module, dir_path);
+                violations_html.push_str(&format!(
+                    "<div class=\"violation-card\">
+                        <div class=\"violation-sev\" style=\"color:{}\">{:.2}</div>
+                        <div class=\"violation-body\">
+                            <div class=\"violation-title\">{} &rarr; {}</div>
+                            <div class=\"violation-detail\" title=\"{}\">{}</div>
+                            <div class=\"violation-detail\" title=\"{}\">{}</div>
+                        </div>
+                    </div>\n",
+                    sev_clr,
+                    v.severity,
+                    from_label,
+                    to_label,
+                    v.from_module,
+                    v.from_module,
+                    v.to_module,
+                    v.to_module,
+                ));
+            }
+            violations_html.push_str("</div>\n");
+        }
+
+        // Show ALL remaining violations always (no hiding behind disclosure)
+        if !rest.is_empty() {
             violations_html.push_str(&format!(
-                "<tr>
-                    <td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td>
-                    <td title=\"{}\">{}</td>
-                    <td title=\"{}\">{}</td>
-                    <td>Coupling</td>
-                </tr>\n",
-                sev_clr, v.severity, v.from_module, from_short, v.to_module, to_short,
+                "<h3 style=\"font-size:0.95rem;color:#475569;margin:1.25rem 0 0.5rem\">All {} violations</h3>\n",
+                coupling_violations.len()
+            ));
+            violations_html.push_str("<table class=\"violations\">\n");
+            violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+            for v in &rest {
+                let sev_clr = if v.severity >= data.critical_severity {
+                    "#ef4444"
+                } else if v.severity >= 0.2 {
+                    "#eab308"
+                } else {
+                    "#6b7280"
+                };
+                let from_label = module_label(&v.from_module, dir_path);
+                let to_label = module_label(&v.to_module, dir_path);
+                violations_html.push_str(&format!(
+                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                    sev_clr, v.severity, v.from_module, from_label, v.to_module, to_label,
+                ));
+            }
+            violations_html.push_str("</table>\n");
+        }
+    }
+
+    // Coupling Metrics — informational sibling coupling pairs (not violations)
+    if !dir.coupling_metrics_here.is_empty() {
+        violations_html.push_str(&format!(
+            "<h2>Coupling Metrics <small style=\"font-weight:400;color:#64748b\">({} sibling coupling pair{})</small></h2>\n",
+            dir.coupling_metrics_here.len(),
+            if dir.coupling_metrics_here.len() == 1 { "" } else { "s" }
+        ));
+        violations_html.push_str("<p class=\"section-hint\">Sibling directories that import each other. Informational &mdash; not flagged as violations in actionable mode. Use to gauge coupling density.</p>\n");
+        violations_html.push_str("<table class=\"violations\">\n");
+        violations_html.push_str("<tr><th>Severity</th><th>From</th><th>To</th></tr>\n");
+        let mut sorted_metrics = dir.coupling_metrics_here.clone();
+        sorted_metrics.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for v in &sorted_metrics {
+            let from_label = module_label(&v.from_module, dir_path);
+            let to_label = module_label(&v.to_module, dir_path);
+            violations_html.push_str(&format!(
+                "<tr><td><span class=\"severity\" style=\"color:#94a3b8\">{:.2}</span></td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
+                v.severity, v.from_module, from_label, v.to_module, to_label,
             ));
         }
         violations_html.push_str("</table>\n");
@@ -603,6 +734,22 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 .violations {{ margin-bottom: 1.5rem; }}
 .snapshot {{ font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; }}
 .footer {{ margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }}
+.violations-promoted {{ margin-bottom: 1rem; }}
+.section-hint {{ font-size: 0.75rem; color: #64748b; margin-bottom: 0.6rem; font-style: italic; }}
+.module-tag {{ display: inline-block; background: #e0f2fe; color: #075985; font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.35rem; border-radius: 3px; margin-right: 0.25rem; vertical-align: middle; }}
+.score-hint {{ font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; line-height: 1.4; }}
+.info-icon {{ color: #94a3b8; font-size: 0.7rem; cursor: help; margin-left: 0.15rem; }}
+.summary-card[title] {{ cursor: help; }}
+.violation-card {{ display: flex; align-items: center; gap: 1rem; background: #fff; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }}
+.violation-sev {{ font-weight: 800; font-size: 1.05rem; min-width: 50px; text-align: right; }}
+.violation-body {{ flex: 1; font-size: 0.85rem; }}
+.violation-title {{ color: #1e293b; margin-bottom: 0.25rem; }}
+.violation-detail {{ color: #6b7280; font-size: 0.7rem; word-break: break-all; }}
+.violations-section {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 0.75rem; }}
+.violations-section > summary {{ list-style: revert; cursor: pointer; font-weight: 600; color: #475569; font-size: 0.9rem; padding: 0.25rem 0; user-select: none; }}
+.violations-section[open] > summary {{ margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }}
+.violations-section > summary::before {{ content: ''; }}
+.violations-section > summary::marker {{ display: revert; content: revert; }}
 </style>
 </head>
 <body>
@@ -613,16 +760,16 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 {project_banner}
 
 <div class="summary">
-    <div class="summary-card">
-        <div class="label">Health Score</div>
+    <div class="summary-card" title="Health Score for this directory only. Computed from violations originating here (not from subdirectories).">
+        <div class="label">Health Score <span class="info-icon">&#9432;</span></div>
         <div class="value score-big">{score:.1}</div>
     </div>
-    <div class="summary-card">
-        <div class="label">Modules</div>
+    <div class="summary-card" title="Total source files in this directory and its subdirectories.">
+        <div class="label">Modules <span class="info-icon">&#9432;</span></div>
         <div class="value">{modules}</div>
     </div>
-    <div class="summary-card">
-        <div class="label">Violations</div>
+    <div class="summary-card" title="Violations that have this directory as their common parent (i.e., the directory pair both belong to this subtree).">
+        <div class="label">Violations <span class="info-icon">&#9432;</span></div>
         <div class="value">{violations}</div>
     </div>
 </div>
@@ -808,6 +955,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -835,6 +983,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -868,6 +1017,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 
@@ -917,6 +1067,7 @@ mod tests {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
 

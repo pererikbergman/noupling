@@ -12,6 +12,8 @@ struct SunburstNode {
     score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<usize>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    has_cycle_in_subtree: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     children: Vec<SunburstNode>,
 }
@@ -23,10 +25,23 @@ struct DepEdge {
 }
 
 #[derive(Serialize)]
+struct CycleHop {
+    from: String,
+    to: String,
+    count: usize,
+}
+
+#[derive(Serialize)]
+struct CycleAtLevel {
+    hops: Vec<CycleHop>,
+}
+
+#[derive(Serialize)]
 struct BundleData {
     tree: SunburstNode,
     deps: Vec<DepEdge>,
     violation_deps: Vec<DepEdge>,
+    cycles: Vec<CycleAtLevel>,
 }
 
 pub fn generate_bundle_report(
@@ -82,23 +97,104 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
 
     let tree = build_tree(&dir_files);
 
-    // Compute per-directory scores from violations
+    // Compute per-directory scores from violations.
+    // Each module is counted in every ancestor directory, and each violation
+    // is assigned to the common parent of its two directories (matching the
+    // HTML report's logic so colors are meaningful).
     let mut dir_violation_severity: HashMap<String, f64> = HashMap::new();
     let mut dir_module_count: HashMap<String, usize> = HashMap::new();
     for m in modules {
         let rel = strip_path_prefix(&m.path, &common);
-        let parent = std::path::Path::new(&rel)
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        *dir_module_count.entry(parent).or_insert(0) += 1;
+        let parts: Vec<&str> = rel.split('/').collect();
+        // Count this module in every ancestor directory
+        for end in 1..parts.len() {
+            let dir = parts[..end].join("/");
+            *dir_module_count.entry(dir).or_insert(0) += 1;
+        }
     }
     for v in &result.violations {
-        let dir = strip_path_prefix(&v.dir_a, &common);
-        *dir_violation_severity.entry(dir).or_insert(0.0) += v.severity;
+        let a = strip_path_prefix(&v.dir_a, &common);
+        let b = strip_path_prefix(&v.dir_b, &common);
+        let parent = common_parent_of(&a, &b);
+        if !parent.is_empty() {
+            *dir_violation_severity.entry(parent).or_insert(0.0) += v.severity;
+        }
     }
 
-    let tree = apply_scores(tree, &dir_violation_severity, &dir_module_count);
+    let mut tree = apply_scores(tree, &dir_violation_severity, &dir_module_count);
+
+    // Mark every ancestor directory of a circular violation so the user can
+    // visually trace which subtrees contain cycles, even when the score for
+    // that directory is otherwise green. Marks both the cycle dir endpoints
+    // AND the directories of the actual files involved in each hop, so users
+    // can drill down to find the offending file.
+    let mut cycle_ancestors: HashSet<String> = HashSet::new();
+
+    fn mark_path(path: &str, set: &mut HashSet<String>) {
+        let parts: Vec<&str> = path.split('/').collect();
+        // Skip the file itself; mark each ancestor directory
+        let depth = parts.len().saturating_sub(1);
+        for end in 1..=depth {
+            set.insert(parts[..end].join("/"));
+        }
+    }
+
+    for v in &result.violations {
+        if !v.is_circular {
+            continue;
+        }
+        let a = strip_path_prefix(&v.dir_a, &common);
+        let b = strip_path_prefix(&v.dir_b, &common);
+        for path in [a.as_str(), b.as_str()] {
+            let parts: Vec<&str> = path.split('/').collect();
+            for end in 1..=parts.len() {
+                cycle_ancestors.insert(parts[..end].join("/"));
+            }
+        }
+        // Also mark every file that participates in the cycle hops
+        for (from_file, to_file, _) in &v.cycle_hop_files {
+            if !from_file.is_empty() {
+                mark_path(&strip_path_prefix(from_file, &common), &mut cycle_ancestors);
+            }
+            if !to_file.is_empty() {
+                mark_path(&strip_path_prefix(to_file, &common), &mut cycle_ancestors);
+            }
+        }
+        // And the actual from_module / to_module
+        if !v.from_module.is_empty() {
+            mark_path(
+                &strip_path_prefix(&v.from_module, &common),
+                &mut cycle_ancestors,
+            );
+        }
+        if !v.to_module.is_empty() {
+            mark_path(
+                &strip_path_prefix(&v.to_module, &common),
+                &mut cycle_ancestors,
+            );
+        }
+    }
+    fn mark_cycles(node: &mut SunburstNode, path: &str, ancestors: &HashSet<String>) {
+        let full_path = if path.is_empty() {
+            node.name.clone()
+        } else if node.name == "root" {
+            String::new()
+        } else {
+            format!("{}/{}", path, node.name)
+        };
+        if ancestors.contains(&full_path) {
+            node.has_cycle_in_subtree = true;
+        }
+        let child_path = if node.name == "root" {
+            String::new()
+        } else {
+            full_path
+        };
+        for child in &mut node.children {
+            mark_cycles(child, &child_path, ancestors);
+        }
+    }
+    mark_cycles(&mut tree, "", &cycle_ancestors);
 
     // Build cross-directory dependency edges (file-level, stripped paths)
     let mut deps: Vec<DepEdge> = Vec::new();
@@ -149,10 +245,41 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
         }
     }
 
+    // Build per-cycle hop lists (directories + import counts) so the JS
+    // can project each cycle onto the current zoom level and highlight
+    // the participating siblings + the weakest hop to break.
+    let mut cycles: Vec<CycleAtLevel> = Vec::new();
+    for v in &result.violations {
+        if !v.is_circular {
+            continue;
+        }
+        if v.cycle_path.len() < 2 || v.cycle_hop_counts.is_empty() {
+            continue;
+        }
+        let mut hops: Vec<CycleHop> = Vec::new();
+        for i in 0..v.cycle_hop_counts.len() {
+            // cycle_path closes the loop, so cycle_path.len() == cycle_hop_counts.len() + 1
+            if i + 1 >= v.cycle_path.len() {
+                break;
+            }
+            let from = strip_path_prefix(&v.cycle_path[i], &common);
+            let to = strip_path_prefix(&v.cycle_path[i + 1], &common);
+            hops.push(CycleHop {
+                from,
+                to,
+                count: v.cycle_hop_counts[i],
+            });
+        }
+        if hops.len() >= 2 {
+            cycles.push(CycleAtLevel { hops });
+        }
+    }
+
     BundleData {
         tree,
         deps,
         violation_deps,
+        cycles,
     }
 }
 
@@ -160,6 +287,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
     let mut root = SunburstNode {
         name: "root".to_string(),
         score: None,
+        has_cycle_in_subtree: false,
         value: None,
         children: Vec::new(),
     };
@@ -196,6 +324,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
                 current.children.push(SunburstNode {
                     name: part.to_string(),
                     score: None,
+                    has_cycle_in_subtree: false,
                     value: None,
                     children: Vec::new(),
                 });
@@ -217,6 +346,7 @@ fn build_tree(dir_files: &BTreeMap<String, Vec<String>>) -> SunburstNode {
             parent.children.push(SunburstNode {
                 name: file.clone(),
                 score: None,
+                has_cycle_in_subtree: false,
                 value: Some(1),
                 children: Vec::new(),
             });
@@ -254,9 +384,10 @@ fn apply_scores(
             format!("{}/{}", path, node.name)
         };
 
-        if let Some(&s) = sev.get(&full_path) {
-            let modules = cnt.get(&full_path).copied().unwrap_or(1) as f64;
-            node.score = Some((100.0 * (1.0 - s / modules.max(1.0))).max(0.0));
+        // Always assign a score for non-leaf nodes so the sunburst is fully colored
+        if let Some(&modules) = cnt.get(&full_path) {
+            let s = sev.get(&full_path).copied().unwrap_or(0.0);
+            node.score = Some((100.0 * (1.0 - s / (modules as f64).max(1.0))).clamp(0.0, 100.0));
         }
 
         let child_path = if node.name == "root" {
@@ -294,6 +425,26 @@ fn find_common_path_prefix(paths: &[&str]) -> String {
         len -= 1;
     }
     first[..len].join("/")
+}
+
+/// Return the deepest common parent directory of two paths.
+/// e.g. ("a/b/c", "a/b/d") -> "a/b"
+fn common_parent_of(a: &str, b: &str) -> String {
+    let a_parts: Vec<&str> = a.split('/').collect();
+    let b_parts: Vec<&str> = b.split('/').collect();
+    let mut len = 0;
+    for (x, y) in a_parts.iter().zip(b_parts.iter()) {
+        if x == y {
+            len += 1;
+        } else {
+            break;
+        }
+    }
+    if len > 0 {
+        a_parts[..len].join("/")
+    } else {
+        String::new()
+    }
 }
 
 fn strip_path_prefix(path: &str, prefix: &str) -> String {

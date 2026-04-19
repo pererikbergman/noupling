@@ -87,6 +87,9 @@ pub struct AuditResult {
     pub violation_age: ViolationAgeSummary,
     /// Sibling coupling pairs tracked as metrics (not violations) in actionable mode.
     pub coupling_metrics_count: usize,
+    /// The actual sibling coupling pairs (kept for display in actionable mode,
+    /// where they are informational rather than violations).
+    pub coupling_metrics: Vec<CouplingViolation>,
     /// Number of imports suppressed by `noupling:ignore` comments.
     pub suppressed_count: usize,
 }
@@ -273,8 +276,15 @@ impl AuditResult {
     /// no longer treated as a violation that drags down the score.
     pub fn apply_coupling_mode(&mut self, mode: &str) {
         if mode == "actionable" {
-            self.coupling_metrics_count = self.violations.iter().filter(|v| !v.is_circular).count();
-            self.violations.retain(|v| v.is_circular);
+            // Move non-circular (sibling coupling) entries from violations into
+            // coupling_metrics — they remain available for display but no longer
+            // count as violations or affect the score.
+            let (cycles, coupling): (Vec<_>, Vec<_>) = std::mem::take(&mut self.violations)
+                .into_iter()
+                .partition(|v| v.is_circular);
+            self.violations = cycles;
+            self.coupling_metrics_count = coupling.len();
+            self.coupling_metrics = coupling;
             self.total_xs = self
                 .violations
                 .iter()
@@ -544,80 +554,153 @@ fn detect_sibling_cycles(
     // all elementary cycles.
     let sccs = find_sccs(&adj, siblings.len());
 
+    // For each SCC of size >= 2, enumerate every mutual-dependency pair
+    // (i, j) where both i -> j and j -> i exist. Each pair is reported as
+    // a separate 2-cycle violation. This gives users actionable visibility
+    // into specific module pairs that need decoupling, while still being
+    // bounded (O(edges in SCC) instead of O(elementary cycles)).
     let mut cycles: Vec<DetectedCycle> = Vec::new();
+    let mut reported: FxHashSet<(usize, usize)> = FxHashSet::default();
+
     for scc in sccs {
         if scc.len() < 2 {
             continue;
         }
-        // Build a representative cycle path through the SCC.
-        // Walk the nodes in order, finding edges that exist in adj.
         let scc_set: FxHashSet<usize> = scc.iter().copied().collect();
-        let mut ordered: Vec<usize> = Vec::new();
-        let mut visited_in_path: FxHashSet<usize> = FxHashSet::default();
 
-        // Try to construct a Hamiltonian-like cycle: start at first node,
-        // greedily pick neighbors within the SCC.
-        let start = scc[0];
-        ordered.push(start);
-        visited_in_path.insert(start);
-        let mut current = start;
-        loop {
-            let next = adj.get(&current).and_then(|neighbors| {
-                neighbors
-                    .iter()
-                    .find(|&&n| scc_set.contains(&n) && !visited_in_path.contains(&n))
-                    .copied()
-            });
-            match next {
-                Some(n) => {
-                    ordered.push(n);
-                    visited_in_path.insert(n);
-                    current = n;
+        // Find all mutual pairs within the SCC
+        for &i in &scc {
+            if let Some(neighbors) = adj.get(&i) {
+                for &j in neighbors {
+                    if !scc_set.contains(&j) || i == j {
+                        continue;
+                    }
+                    // Check reverse edge exists
+                    let reverse = adj.get(&j).is_some_and(|nbrs| nbrs.contains(&i));
+                    if !reverse {
+                        continue;
+                    }
+                    // Canonical ordering to dedupe
+                    let key = if i < j { (i, j) } else { (j, i) };
+                    if !reported.insert(key) {
+                        continue;
+                    }
+                    let (a, b) = key;
+                    let dir_path = vec![
+                        siblings[a].clone(),
+                        siblings[b].clone(),
+                        siblings[a].clone(),
+                    ];
+                    let hop_files = vec![
+                        edge_files.get(&(a, b)).cloned().unwrap_or_default(),
+                        edge_files.get(&(b, a)).cloned().unwrap_or_default(),
+                    ];
+                    let hop_import_counts = vec![
+                        edge_import_count.get(&(a, b)).copied().unwrap_or(1),
+                        edge_import_count.get(&(b, a)).copied().unwrap_or(1),
+                    ];
+                    cycles.push(DetectedCycle {
+                        dir_path,
+                        hop_files,
+                        hop_import_counts,
+                    });
                 }
-                None => break,
-            }
-        }
-        // Add any remaining SCC nodes that weren't reached (rare)
-        for &n in &scc {
-            if !visited_in_path.contains(&n) {
-                ordered.push(n);
             }
         }
 
-        // Build dir_path with the cycle closed by repeating the start
-        let mut dir_path: Vec<String> = ordered.iter().map(|&i| siblings[i].clone()).collect();
-        dir_path.push(siblings[start].clone());
+        // If no mutual pairs were found in this SCC (e.g. A→B→C→A with no
+        // reverse edges), find a directed cycle through the SCC so the user
+        // still sees the violation.
+        if reported.is_empty()
+            || scc.iter().all(|n| {
+                !scc.iter().any(|m| {
+                    n != m && {
+                        let key = if n < m { (*n, *m) } else { (*m, *n) };
+                        reported.contains(&key)
+                    }
+                })
+            })
+        {
+            // Check if we already reported anything for this SCC
+            let scc_covered: bool = scc.iter().any(|n| {
+                scc.iter().any(|m| {
+                    if n >= m {
+                        return false;
+                    }
+                    reported.contains(&(*n, *m))
+                })
+            });
+            if !scc_covered {
+                // DFS from first node to find a cycle within the SCC
+                if let Some(cycle_nodes) = find_cycle_in_scc(&scc_set, &adj, scc[0]) {
+                    let mut dir_path: Vec<String> = cycle_nodes
+                        .iter()
+                        .map(|&idx| siblings[idx].clone())
+                        .collect();
+                    dir_path.push(siblings[cycle_nodes[0]].clone()); // close the loop
 
-        // Build hop_files and hop_import_counts using adj
-        let mut hop_files = Vec::new();
-        let mut hop_import_counts = Vec::new();
-        for w in 0..ordered.len() {
-            let from_idx = ordered[w];
-            let to_idx = if w + 1 < ordered.len() {
-                ordered[w + 1]
-            } else {
-                start
-            };
-            let files = edge_files
-                .get(&(from_idx, to_idx))
-                .cloned()
-                .unwrap_or_default();
-            hop_files.push(files);
-            let count = edge_import_count
-                .get(&(from_idx, to_idx))
-                .copied()
-                .unwrap_or(1);
-            hop_import_counts.push(count);
+                    let mut hop_files_list = Vec::new();
+                    let mut hop_counts = Vec::new();
+                    for w in cycle_nodes.windows(2) {
+                        hop_files_list
+                            .push(edge_files.get(&(w[0], w[1])).cloned().unwrap_or_default());
+                        hop_counts.push(edge_import_count.get(&(w[0], w[1])).copied().unwrap_or(1));
+                    }
+                    // Closing edge
+                    let last = *cycle_nodes.last().unwrap();
+                    let first = cycle_nodes[0];
+                    hop_files_list
+                        .push(edge_files.get(&(last, first)).cloned().unwrap_or_default());
+                    hop_counts.push(edge_import_count.get(&(last, first)).copied().unwrap_or(1));
+
+                    cycles.push(DetectedCycle {
+                        dir_path,
+                        hop_files: hop_files_list,
+                        hop_import_counts: hop_counts,
+                    });
+                }
+            }
         }
-
-        cycles.push(DetectedCycle {
-            dir_path,
-            hop_files,
-            hop_import_counts,
-        });
     }
 
     cycles
+}
+
+/// Find a simple directed cycle within an SCC starting from `start`.
+/// Returns the cycle as a list of node indices (without the closing duplicate).
+fn find_cycle_in_scc(
+    scc_set: &FxHashSet<usize>,
+    adj: &FxHashMap<usize, Vec<usize>>,
+    start: usize,
+) -> Option<Vec<usize>> {
+    let mut visited: FxHashMap<usize, usize> = FxHashMap::default(); // node -> parent
+    let mut stack = vec![(start, 0usize)]; // (node, neighbor_index)
+    visited.insert(start, usize::MAX);
+
+    while let Some((node, ni)) = stack.last_mut() {
+        let node = *node;
+        let neighbors = adj.get(&node);
+        let len = neighbors.map(|n| n.len()).unwrap_or(0);
+        if *ni >= len {
+            stack.pop();
+            continue;
+        }
+        let next = neighbors.unwrap()[*ni];
+        *ni += 1;
+        if !scc_set.contains(&next) {
+            continue;
+        }
+        if next == start {
+            // Found cycle back to start — extract path
+            let path: Vec<usize> = stack.iter().map(|(n, _)| *n).collect();
+            return Some(path);
+        }
+        if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(next) {
+            e.insert(node);
+            stack.push((next, 0));
+        }
+    }
+    None
 }
 
 /// Tarjan's strongly connected components algorithm (iterative).
@@ -706,6 +789,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             critical_path: Vec::new(),
             violation_age: ViolationAgeSummary::default(),
             coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
             suppressed_count: 0,
         };
     }
@@ -1189,6 +1273,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         critical_path,
         violation_age: ViolationAgeSummary::default(),
         coupling_metrics_count: 0,
+        coupling_metrics: Vec::new(),
         suppressed_count: 0,
     }
 }
