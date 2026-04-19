@@ -25,10 +25,23 @@ struct DepEdge {
 }
 
 #[derive(Serialize)]
+struct CycleHop {
+    from: String,
+    to: String,
+    count: usize,
+}
+
+#[derive(Serialize)]
+struct CycleAtLevel {
+    hops: Vec<CycleHop>,
+}
+
+#[derive(Serialize)]
 struct BundleData {
     tree: SunburstNode,
     deps: Vec<DepEdge>,
     violation_deps: Vec<DepEdge>,
+    cycles: Vec<CycleAtLevel>,
 }
 
 pub fn generate_bundle_report(
@@ -232,10 +245,41 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
         }
     }
 
+    // Build per-cycle hop lists (directories + import counts) so the JS
+    // can project each cycle onto the current zoom level and highlight
+    // the participating siblings + the weakest hop to break.
+    let mut cycles: Vec<CycleAtLevel> = Vec::new();
+    for v in &result.violations {
+        if !v.is_circular {
+            continue;
+        }
+        if v.cycle_path.len() < 2 || v.cycle_hop_counts.is_empty() {
+            continue;
+        }
+        let mut hops: Vec<CycleHop> = Vec::new();
+        for i in 0..v.cycle_hop_counts.len() {
+            // cycle_path closes the loop, so cycle_path.len() == cycle_hop_counts.len() + 1
+            if i + 1 >= v.cycle_path.len() {
+                break;
+            }
+            let from = strip_path_prefix(&v.cycle_path[i], &common);
+            let to = strip_path_prefix(&v.cycle_path[i + 1], &common);
+            hops.push(CycleHop {
+                from,
+                to,
+                count: v.cycle_hop_counts[i],
+            });
+        }
+        if hops.len() >= 2 {
+            cycles.push(CycleAtLevel { hops });
+        }
+    }
+
     BundleData {
         tree,
         deps,
         violation_deps,
+        cycles,
     }
 }
 
