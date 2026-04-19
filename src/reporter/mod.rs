@@ -78,6 +78,7 @@ pub struct JsonHopFile {
 pub struct JsonCouplingViolation {
     pub severity: f64,
     pub weight: usize,
+    pub direction: String,
     pub from_module: String,
     pub to_module: String,
     pub dir_a: String,
@@ -178,6 +179,7 @@ impl JsonReport {
             .map(|v| JsonCouplingViolation {
                 severity: v.severity,
                 weight: v.weight,
+                direction: format!("{:?}", v.direction).to_lowercase(),
                 from_module: v.from_module.clone(),
                 to_module: v.to_module.clone(),
                 dir_a: v.dir_a.clone(),

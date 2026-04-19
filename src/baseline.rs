@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::analyzer::{AuditResult, CouplingViolation};
-use crate::core::DependencyDirection;
 
 /// A fingerprint that uniquely identifies a violation.
 fn fingerprint(v: &CouplingViolation) -> String {
@@ -115,6 +114,7 @@ fn chrono_now() -> String {
 mod tests {
     use super::*;
     use crate::analyzer::ViolationAgeSummary;
+    use crate::core::DependencyDirection;
 
     fn make_coupling(from: &str, to: &str) -> CouplingViolation {
         CouplingViolation {
