@@ -43,6 +43,7 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 - **Risk-weighted scoring (RRI/TRI)**: Quantify coupling risk by dependency direction and density
 - **Gravity Well detection**: Identify modules that attract excessive inbound dependencies
 - **Red Flags (Fused Sibling, Trapped Child)**: Detect structural anti-patterns in module relationships
+- **External dependency tracking**: Count third-party (unresolved) imports per module
 - **Configurable risk weights per dependency direction**: Tune scoring to match your architecture's priorities
 - **Configurable**: Thresholds, layers, dependency rules, glob ignore patterns
 
@@ -216,6 +217,8 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
     "downward": 2,
     "sibling": 4,
     "upward": 6,
+    "external": 8,
+    "transitive": 9,
     "circular": 10
   },
   "coupling_mode": "strict"
@@ -231,7 +234,7 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
 | `source_extensions` | File types to scan | 17 extensions |
 | `allow_inline_suppression` | Enable `noupling:ignore` comments | true |
-| `risk_weights` | Risk weights per dependency direction (downward, sibling, upward, circular) | 2, 4, 6, 10 |
+| `risk_weights` | Risk weights per dependency direction (downward, sibling, upward, external, transitive, circular) | 2, 4, 6, 8, 9, 10 |
 | `coupling_mode` | Coupling analysis mode (`strict` or `relaxed`) | `strict` |
 
 ### Architectural Layers
@@ -241,7 +244,7 @@ Define layers to suppress coupling violations that follow the intended dependenc
 ```json
 {
   "layers": [
-    { "name": "presentation", "pattern": "**/ui/**" },
+    { "name": "presentation", "pattern": "**/ui/**", "allow_sibling": false, "max_sibling_density": 3, "reduced_sibling_weight": 2 },
     { "name": "domain", "pattern": "**/domain/**" },
     { "name": "data", "pattern": "**/data/**" }
   ]
@@ -302,6 +305,8 @@ Works with `//`, `#`, and `--` comment styles. Disable with `"allow_inline_suppr
    - **Downward** (weight 2) - following the intended layer direction
    - **Sibling** (weight 4) - coupling between peer modules
    - **Upward** (weight 6) - violating the layer direction
+   - **External** (weight 8) - dependency on a third-party (unresolved) import
+   - **Transitive** (weight 9) - indirect dependency through intermediate modules
    - **Circular** (weight 10) - part of a dependency cycle
 
    **RRI** (Relationship Risk Index) = `direction_weight × density` (number of imports)
