@@ -41,10 +41,7 @@ fn collect_ruby_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec
                 method_name = node_text(child, source);
             }
         }
-        if method_name == "require"
-            || method_name == "require_relative"
-            || method_name == "load"
-        {
+        if method_name == "require" || method_name == "require_relative" || method_name == "load" {
             let line_number = (node.start_position().row + 1) as i32;
             let mut cursor2 = node.walk();
             for child in node.children(&mut cursor2) {
@@ -53,8 +50,7 @@ fn collect_ruby_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec
                     for arg in child.children(&mut arg_cursor) {
                         if arg.kind() == "string" {
                             let text = node_text(arg, source);
-                            let path =
-                                text.trim_matches('\'').trim_matches('"').to_string();
+                            let path = text.trim_matches('\'').trim_matches('"').to_string();
                             if !path.is_empty() {
                                 imports.push(ImportEntry { path, line_number });
                             }
@@ -130,8 +126,7 @@ mod tests {
 
     #[test]
     fn ruby_parses_require_relative() {
-        let source =
-            "require_relative 'lib/utils'\nrequire_relative '../models/user'\n";
+        let source = "require_relative 'lib/utils'\nrequire_relative '../models/user'\n";
         let imports = RubyParser.parse(source);
         assert_eq!(imports.len(), 2);
     }

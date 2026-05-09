@@ -112,9 +112,7 @@ pub(super) fn resolve_typescript_import(
                 components.pop();
             }
             std::path::Component::CurDir => {}
-            std::path::Component::Normal(s) => {
-                components.push(s.to_string_lossy().to_string())
-            }
+            std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
             _ => {}
         }
     }
@@ -211,8 +209,7 @@ mod tests {
 
     #[test]
     fn tsx_parses_imports() {
-        let source =
-            "import { useState } from 'react';\nimport { Button } from './Button';";
+        let source = "import { useState } from 'react';\nimport { Button } from './Button';";
         let imports = TsxParser.parse(source);
         assert_eq!(imports.len(), 2);
         assert_eq!(imports[0].path, "react");
@@ -250,8 +247,7 @@ mod tests {
     #[test]
     fn ts_resolves_tsx_extension() {
         let paths = ts_paths();
-        let result =
-            TypeScriptParser.resolve("../components/Button", "src/pages/Home.ts", &paths);
+        let result = TypeScriptParser.resolve("../components/Button", "src/pages/Home.ts", &paths);
         assert_eq!(result, Some("src/components/Button.tsx".to_string()));
     }
 }

@@ -32,11 +32,7 @@ impl LanguageParser for RustParser {
     }
 }
 
-fn collect_use_declarations(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_use_declarations(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     if node.kind() == "use_declaration" {
         let line_number = (node.start_position().row + 1) as i32;
         extract_paths_from_use(node, source, line_number, imports);

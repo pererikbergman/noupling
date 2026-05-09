@@ -110,8 +110,7 @@ mod tests {
 
     #[test]
     fn java_parses_multiple_imports() {
-        let source =
-            "import java.util.List;\nimport java.util.Map;\nimport com.example.Foo;\n";
+        let source = "import java.util.List;\nimport java.util.Map;\nimport com.example.Foo;\n";
         let imports = JavaParser.parse(source);
         assert_eq!(imports.len(), 3);
     }

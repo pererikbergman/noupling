@@ -92,9 +92,7 @@ fn resolve_zig_import(
                 components.pop();
             }
             std::path::Component::CurDir => {}
-            std::path::Component::Normal(s) => {
-                components.push(s.to_string_lossy().to_string())
-            }
+            std::path::Component::Normal(s) => components.push(s.to_string_lossy().to_string()),
             _ => {}
         }
     }

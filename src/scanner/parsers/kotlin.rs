@@ -128,8 +128,7 @@ mod tests {
 
     #[test]
     fn kotlin_parses_multiple_imports() {
-        let source =
-            "import com.example.Foo\nimport com.example.Bar\nimport org.utils.Helper\n";
+        let source = "import com.example.Foo\nimport com.example.Bar\nimport org.utils.Helper\n";
         let imports = parse(source);
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].path, "com.example.Foo");
@@ -147,8 +146,7 @@ mod tests {
 
     #[test]
     fn kotlin_line_numbers_correct() {
-        let source =
-            "package com.example\n\nimport com.example.Foo\nimport com.example.Bar\n";
+        let source = "package com.example\n\nimport com.example.Foo\nimport com.example.Bar\n";
         let imports = parse(source);
         assert_eq!(imports.len(), 2);
         assert_eq!(imports[0].line_number, 3);

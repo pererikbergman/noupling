@@ -50,8 +50,7 @@ fn collect_php_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<
                     let mut group_cursor = child.walk();
                     for group_child in child.children(&mut group_cursor) {
                         if group_child.kind() == "namespace_use_clause" {
-                            let text =
-                                node_text(group_child, source).trim().replace('\\', "/");
+                            let text = node_text(group_child, source).trim().replace('\\', "/");
                             if !text.is_empty() {
                                 imports.push(ImportEntry {
                                     path: text,
@@ -129,16 +128,14 @@ mod tests {
 
     #[test]
     fn php_parses_use_statement() {
-        let source =
-            "<?php\nuse App\\Models\\User;\nuse App\\Services\\AuthService;\n";
+        let source = "<?php\nuse App\\Models\\User;\nuse App\\Services\\AuthService;\n";
         let imports = PhpParser.parse(source);
         assert!(imports.len() >= 2, "got {} imports", imports.len());
     }
 
     #[test]
     fn php_parses_require() {
-        let source =
-            "<?php\nrequire_once 'vendor/autoload.php';\nrequire 'config.php';\n";
+        let source = "<?php\nrequire_once 'vendor/autoload.php';\nrequire 'config.php';\n";
         let imports = PhpParser.parse(source);
         assert!(imports.len() >= 2, "got {} imports", imports.len());
     }

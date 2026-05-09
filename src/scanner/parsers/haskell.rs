@@ -37,11 +37,7 @@ impl LanguageParser for HaskellParser {
     }
 }
 
-fn collect_haskell_imports(
-    node: tree_sitter::Node,
-    source: &str,
-    imports: &mut Vec<ImportEntry>,
-) {
+fn collect_haskell_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
     if node.kind() == "import" {
         let line_number = (node.start_position().row + 1) as i32;
         let mut cursor = node.walk();

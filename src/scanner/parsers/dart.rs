@@ -108,16 +108,14 @@ mod tests {
 
     #[test]
     fn dart_parses_imports() {
-        let source =
-            "import 'package:flutter/material.dart';\nimport 'src/utils.dart';\n";
+        let source = "import 'package:flutter/material.dart';\nimport 'src/utils.dart';\n";
         let imports = DartParser.parse(source);
         assert_eq!(imports.len(), 2);
     }
 
     #[test]
     fn dart_skips_stdlib() {
-        let source =
-            "import 'dart:core';\nimport 'dart:async';\nimport 'src/model.dart';\n";
+        let source = "import 'dart:core';\nimport 'dart:async';\nimport 'src/model.dart';\n";
         let imports = DartParser.parse(source);
         assert_eq!(imports.len(), 1);
     }

@@ -94,8 +94,7 @@ mod tests {
 
     #[test]
     fn go_parses_grouped_imports() {
-        let source =
-            "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"myapp/utils\"\n)";
+        let source = "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"myapp/utils\"\n)";
         let imports = GoParser.parse(source);
         assert_eq!(imports.len(), 3);
         assert_eq!(imports[0].path, "fmt");

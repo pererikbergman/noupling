@@ -95,8 +95,7 @@ pub fn scan_project(
                         suppressed += 1;
                         return None;
                     }
-                    let resolved =
-                        adapter.resolve(&entry.path, &module.path, &all_paths);
+                    let resolved = adapter.resolve(&entry.path, &module.path, &all_paths);
                     match resolved {
                         Some(path) => {
                             let to_module = modules.iter().find(|m| m.path == path)?;
@@ -213,8 +212,7 @@ mod tests {
 
     #[test]
     fn is_suppressed_inline_same_line_kotlin() {
-        let source =
-            "import com.example.foo // noupling:ignore\nimport com.example.bar\n";
+        let source = "import com.example.foo // noupling:ignore\nimport com.example.bar\n";
         assert!(is_suppressed(source, 1));
         assert!(!is_suppressed(source, 2));
     }

@@ -1,7 +1,7 @@
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
 use super::typescript::resolve_typescript_import;
+use super::{ImportEntry, LanguageParser};
 
 pub struct JavaScriptParser;
 
