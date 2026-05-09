@@ -3,6 +3,26 @@ use rusqlite::Connection;
 
 use crate::core::{Dependency, Module, ModuleType, Snapshot};
 
+/// Scan metadata stored alongside a snapshot in SQLite.
+#[derive(Debug, Default)]
+pub struct SnapshotMeta {
+    /// Number of imports suppressed by `noupling:ignore` comments.
+    pub suppressed_count: usize,
+    /// The base branch/commit used for diff mode, if any.
+    pub diff_base: Option<String>,
+    /// Files changed compared to the diff base, if diff mode was used.
+    pub diff_changed_files: Option<Vec<String>>,
+    /// Per-module count of external (third-party) imports.
+    pub external_deps: Vec<ExternalDepRow>,
+}
+
+/// One row from snapshot_external_deps.
+#[derive(Debug, Clone)]
+pub struct ExternalDepRow {
+    pub module_path: String,
+    pub count: usize,
+}
+
 /// Repository for creating and querying scan snapshots.
 pub struct SnapshotRepository<'a> {
     conn: &'a Connection,
@@ -77,6 +97,78 @@ impl<'a> SnapshotRepository<'a> {
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Persist scan-time metadata for an existing snapshot.
+    pub fn save_meta(&self, snapshot_id: &str, meta: &SnapshotMeta) -> Result<()> {
+        let diff_changed_files_json = meta
+            .diff_changed_files
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+
+        self.conn.execute(
+            "UPDATE snapshots SET suppressed_count = ?1, diff_base = ?2, diff_changed_files = ?3 WHERE id = ?4",
+            rusqlite::params![
+                meta.suppressed_count as i64,
+                meta.diff_base,
+                diff_changed_files_json,
+                snapshot_id,
+            ],
+        )?;
+
+        // Insert external dep rows
+        let tx = self.conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO snapshot_external_deps (snapshot_id, module_path, count) VALUES (?1, ?2, ?3)",
+            )?;
+            for row in &meta.external_deps {
+                stmt.execute(rusqlite::params![
+                    snapshot_id,
+                    row.module_path,
+                    row.count as i64
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Load scan-time metadata for a snapshot.
+    pub fn get_meta(&self, snapshot_id: &str) -> Result<SnapshotMeta> {
+        let (suppressed_count, diff_base, diff_changed_files_json): (i64, Option<String>, Option<String>) = self
+            .conn
+            .query_row(
+                "SELECT suppressed_count, diff_base, diff_changed_files FROM snapshots WHERE id = ?1",
+                rusqlite::params![snapshot_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap_or((0, None, None));
+
+        let diff_changed_files: Option<Vec<String>> = diff_changed_files_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok());
+
+        let mut ext_stmt = self.conn.prepare(
+            "SELECT module_path, count FROM snapshot_external_deps WHERE snapshot_id = ?1",
+        )?;
+        let external_deps: Vec<ExternalDepRow> = ext_stmt
+            .query_map(rusqlite::params![snapshot_id], |row| {
+                Ok(ExternalDepRow {
+                    module_path: row.get(0)?,
+                    count: row.get::<_, i64>(1)? as usize,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(SnapshotMeta {
+            suppressed_count: suppressed_count as usize,
+            diff_base,
+            diff_changed_files,
+            external_deps,
+        })
     }
 }
 
@@ -413,5 +505,56 @@ mod tests {
         let dep_repo = DependencyRepository::new(&db.conn);
         let result = dep_repo.get_by_snapshot(&snap.id).unwrap();
         assert!(result.is_empty());
+    }
+
+    // ── SnapshotMeta (scan-time metadata) ──
+
+    #[test]
+    fn snapshot_meta_save_and_load_roundtrip() {
+        let db = setup_db();
+        let repo = SnapshotRepository::new(&db.conn);
+        let snap = repo.create("/project").unwrap();
+
+        let meta = SnapshotMeta {
+            suppressed_count: 7,
+            diff_base: Some("origin/main".to_string()),
+            diff_changed_files: Some(vec!["src/foo.rs".to_string(), "src/bar.rs".to_string()]),
+            external_deps: vec![
+                ExternalDepRow {
+                    module_path: "src/main.rs".to_string(),
+                    count: 3,
+                },
+                ExternalDepRow {
+                    module_path: "src/lib.rs".to_string(),
+                    count: 5,
+                },
+            ],
+        };
+
+        repo.save_meta(&snap.id, &meta).unwrap();
+        let loaded = repo.get_meta(&snap.id).unwrap();
+
+        assert_eq!(loaded.suppressed_count, 7);
+        assert_eq!(loaded.diff_base.as_deref(), Some("origin/main"));
+        let files = loaded.diff_changed_files.unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(files.contains(&"src/foo.rs".to_string()));
+        assert_eq!(loaded.external_deps.len(), 2);
+        let total: usize = loaded.external_deps.iter().map(|e| e.count).sum();
+        assert_eq!(total, 8);
+    }
+
+    #[test]
+    fn snapshot_meta_defaults_when_not_set() {
+        let db = setup_db();
+        let repo = SnapshotRepository::new(&db.conn);
+        let snap = repo.create("/project").unwrap();
+
+        // Don't call save_meta — get_meta should return safe defaults
+        let loaded = repo.get_meta(&snap.id).unwrap();
+        assert_eq!(loaded.suppressed_count, 0);
+        assert!(loaded.diff_base.is_none());
+        assert!(loaded.diff_changed_files.is_none());
+        assert!(loaded.external_deps.is_empty());
     }
 }

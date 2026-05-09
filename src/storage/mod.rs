@@ -4,3 +4,4 @@ mod db;
 pub mod repository;
 
 pub use db::Database;
+pub use repository::{ExternalDepRow, SnapshotMeta};
