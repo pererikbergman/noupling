@@ -1,19 +1,17 @@
 //! Source file discovery, Tree-sitter parsing, and import resolution.
 //!
-//! Supports 11 languages: C#, Go, Haskell, Java, JavaScript, Kotlin,
-//! Python, Rust, Swift, TypeScript, and Zig.
+//! Supports 14 languages via the `parsers` registry: C#, Dart, Go, Haskell,
+//! Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, and Zig.
 
 mod discovery;
-mod parser;
-mod resolver;
+pub mod parsers;
 
 pub use discovery::discover_files;
-pub use parser::parse_rust_imports;
-pub use resolver::resolve_import;
 
 use crate::core::{Dependency, Module};
 use anyhow::Result;
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// The result of scanning a project directory.
@@ -71,31 +69,23 @@ pub fn scan_project(
 
     let all_paths: Vec<String> = modules.iter().map(|m| m.path.clone()).collect();
 
+    // Build a map from extension -> adapter (avoids cloning boxes repeatedly)
+    let registry = parsers::registry();
+    let ext_map: HashMap<&str, &dyn parsers::LanguageParser> = registry
+        .iter()
+        .map(|(ext, adapter)| (*ext, adapter.as_ref()))
+        .collect();
+
     let per_file: Vec<(Vec<Dependency>, usize, ExternalImportCount)> = modules
         .par_iter()
         .filter_map(|module| {
             let rel_path = Path::new(&module.path);
             let ext = rel_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let adapter = ext_map.get(ext)?;
             let abs_path = root.join(rel_path);
             let source = std::fs::read_to_string(&abs_path).ok()?;
-            let imports = match ext {
-                "rs" => parse_rust_imports(&source),
-                "kt" | "kts" => parser::parse_kotlin_imports(&source),
-                "ts" => parser::parse_typescript_imports(&source),
-                "tsx" => parser::parse_tsx_imports(&source),
-                "swift" => parser::parse_swift_imports(&source),
-                "cs" => parser::parse_csharp_imports(&source),
-                "go" => parser::parse_go_imports(&source),
-                "hs" => parser::parse_haskell_imports(&source),
-                "java" => parser::parse_java_imports(&source),
-                "js" | "jsx" => parser::parse_javascript_imports(&source),
-                "py" => parser::parse_python_imports(&source),
-                "dart" => parser::parse_dart_imports(&source),
-                "php" => parser::parse_php_imports(&source),
-                "rb" => parser::parse_ruby_imports(&source),
-                "zig" => parser::parse_zig_imports(&source),
-                _ => return None,
-            };
+            let imports = adapter.parse(&source);
+
             let mut suppressed = 0usize;
             let mut external_count = 0usize;
             let deps: Vec<Dependency> = imports
@@ -105,8 +95,7 @@ pub fn scan_project(
                         suppressed += 1;
                         return None;
                     }
-                    let resolved =
-                        resolve_import(&entry.path, &module.path, Path::new(""), &all_paths);
+                    let resolved = adapter.resolve(&entry.path, &module.path, &all_paths);
                     match resolved {
                         Some(path) => {
                             let to_module = modules.iter().find(|m| m.path == path)?;
@@ -123,11 +112,11 @@ pub fn scan_project(
                     }
                 })
                 .collect();
-            let ext = ExternalImportCount {
+            let ext_count = ExternalImportCount {
                 module_path: module.path.clone(),
                 count: external_count,
             };
-            Some((deps, suppressed, ext))
+            Some((deps, suppressed, ext_count))
         })
         .collect();
 
