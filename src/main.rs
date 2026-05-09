@@ -79,7 +79,6 @@ fn run_init(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-
 fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
     match action {
         "install" => hook::install(Path::new(path)),

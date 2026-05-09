@@ -69,12 +69,12 @@ impl Database {
         let _ = self.conn.execute_batch(
             "ALTER TABLE snapshots ADD COLUMN suppressed_count INTEGER NOT NULL DEFAULT 0;",
         );
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE snapshots ADD COLUMN diff_base TEXT;",
-        );
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE snapshots ADD COLUMN diff_changed_files TEXT;",
-        );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE snapshots ADD COLUMN diff_base TEXT;");
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE snapshots ADD COLUMN diff_changed_files TEXT;");
         Ok(())
     }
 }

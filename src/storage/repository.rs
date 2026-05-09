@@ -124,7 +124,11 @@ impl<'a> SnapshotRepository<'a> {
                 "INSERT OR REPLACE INTO snapshot_external_deps (snapshot_id, module_path, count) VALUES (?1, ?2, ?3)",
             )?;
             for row in &meta.external_deps {
-                stmt.execute(rusqlite::params![snapshot_id, row.module_path, row.count as i64])?;
+                stmt.execute(rusqlite::params![
+                    snapshot_id,
+                    row.module_path,
+                    row.count as i64
+                ])?;
             }
         }
         tx.commit()?;
