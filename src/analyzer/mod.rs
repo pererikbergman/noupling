@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::core::{Dependency, DependencyDirection, Module};
 
+mod cohesion;
 mod critical_path;
 mod gravity_wells;
 mod layers;
@@ -15,6 +16,7 @@ mod red_flags;
 mod rules;
 mod violation_age;
 
+pub use cohesion::{compute_cohesion, CohesionMetrics};
 pub use critical_path::compute_critical_path;
 pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use layers::{check_layer_rules, LayerViolation};
@@ -148,19 +150,6 @@ pub struct TopAction {
     pub impact: f64,
     /// Category: "circular", "layer", "rule", "cross-module", "hotspot".
     pub category: String,
-}
-
-/// Cohesion metrics for a directory.
-#[derive(Debug, Clone)]
-pub struct CohesionMetrics {
-    /// Directory path.
-    pub dir: String,
-    /// Number of files in the directory.
-    pub file_count: usize,
-    /// Number of internal dependencies (files importing each other within this directory).
-    pub internal_deps: usize,
-    /// Cohesion score: internal_deps / (file_count * (file_count - 1)). Range 0.0 to 1.0.
-    pub cohesion: f64,
 }
 
 /// Independence score for a top-level module/directory.
@@ -1091,46 +1080,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         .collect();
     hotspots.sort_by_key(|h| std::cmp::Reverse(h.fan_in));
 
-    // Compute per-directory cohesion
-    let mut dir_files: FxHashMap<String, Vec<&str>> = FxHashMap::default();
-    for module in modules {
-        let dir = std::path::Path::new(&module.path)
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if !dir.is_empty() {
-            dir_files.entry(dir).or_default().push(module.id.as_str());
-        }
-    }
-
-    let mut cohesion: Vec<CohesionMetrics> = dir_files
-        .iter()
-        .filter(|(_, files)| files.len() >= 2)
-        .map(|(dir, files)| {
-            let file_set: FxHashSet<&str> = files.iter().copied().collect();
-            let internal_deps = dependencies
-                .iter()
-                .filter(|d| {
-                    file_set.contains(d.from_module_id.as_str())
-                        && file_set.contains(d.to_module_id.as_str())
-                })
-                .count();
-            let n = files.len();
-            let max_possible = n * (n - 1);
-            let cohesion_score = if max_possible > 0 {
-                internal_deps as f64 / max_possible as f64
-            } else {
-                0.0
-            };
-            CohesionMetrics {
-                dir: dir.clone(),
-                file_count: n,
-                internal_deps,
-                cohesion: cohesion_score,
-            }
-        })
-        .collect();
-    cohesion.sort_by(|a, b| a.cohesion.partial_cmp(&b.cohesion).unwrap());
+    let cohesion = compute_cohesion(modules, dependencies);
 
     // Compute per-module independence (top-level directories)
     let mut top_dirs: FxHashMap<String, FxHashSet<&str>> = FxHashMap::default();
