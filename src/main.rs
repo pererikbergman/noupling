@@ -772,11 +772,8 @@ fn run_report(
             let (prev_score, prev_count) = if let Some(prev_snap) = prev {
                 let prev_modules = module_repo.get_by_snapshot(&prev_snap.id)?;
                 let prev_deps = dep_repo.get_by_snapshot(&prev_snap.id)?;
-                let prev_result = analyzer::audit_with_settings(
-                    &prev_modules,
-                    &prev_deps,
-                    &project_settings,
-                );
+                let prev_result =
+                    analyzer::audit_with_settings(&prev_modules, &prev_deps, &project_settings);
                 (Some(prev_result.score), Some(prev_result.violations.len()))
             } else {
                 (None, None)
