@@ -13,6 +13,7 @@ mod critical_path;
 mod gravity_wells;
 mod independence;
 mod layers;
+mod metrics;
 mod red_flags;
 mod rules;
 mod violation_age;
@@ -22,6 +23,7 @@ pub use critical_path::compute_critical_path;
 pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use independence::{compute_independence, ModuleIndependence};
 pub use layers::{check_layer_rules, LayerViolation};
+pub use metrics::{compute_hotspots, ExternalDepMetric, ModuleMetrics};
 pub use red_flags::{compute_red_flags, RedFlag, RedFlagType};
 pub use rules::{check_dependency_rules, RuleViolation};
 pub use violation_age::{compute_violation_age, ViolationAgeSummary};
@@ -64,21 +66,6 @@ pub struct CouplingViolation {
     pub weakest_link: Option<String>,
     /// For circular deps: number of imports to remove at the weakest link to break the cycle.
     pub break_cost: usize,
-}
-
-/// A module's dependency metrics.
-#[derive(Debug, Clone)]
-pub struct ModuleMetrics {
-    /// Relative path of the module.
-    pub path: String,
-    /// Number of other modules that import this module (incoming).
-    pub fan_in: usize,
-    /// Number of modules this module imports (outgoing).
-    pub fan_out: usize,
-    /// Martin's Instability: fan_out / (fan_in + fan_out). Range 0.0 (stable) to 1.0 (unstable).
-    pub instability: f64,
-    /// Number of modules transitively affected if this module changes.
-    pub blast_radius: usize,
 }
 
 /// The result of running an architectural audit on a project snapshot.
@@ -125,15 +112,6 @@ pub struct AuditResult {
     pub external_deps: Vec<ExternalDepMetric>,
     /// Total external import count across all modules.
     pub total_external_imports: usize,
-}
-
-/// External dependency count for a single module.
-#[derive(Debug, Clone)]
-pub struct ExternalDepMetric {
-    /// Module file path.
-    pub module_path: String,
-    /// Number of external (unresolved) imports.
-    pub count: usize,
 }
 
 /// A prioritized, actionable recommendation derived from analysis results.
@@ -1012,60 +990,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     let total_modules = modules.len();
     let score = (100.0 * (1.0 - sum_severity / total_modules as f64)).max(0.0);
 
-    // Compute hotspots (fan-in / fan-out / instability / blast radius per module)
-    let mut fan_in: FxHashMap<&str, usize> = FxHashMap::default();
-    let mut fan_out: FxHashMap<&str, usize> = FxHashMap::default();
-    let mut reverse_adj: FxHashMap<&str, FxHashSet<&str>> = FxHashMap::default();
-    for dep in dependencies {
-        *fan_in.entry(dep.to_module_id.as_str()).or_insert(0) += 1;
-        *fan_out.entry(dep.from_module_id.as_str()).or_insert(0) += 1;
-        reverse_adj
-            .entry(dep.to_module_id.as_str())
-            .or_default()
-            .insert(dep.from_module_id.as_str());
-    }
-
-    // BFS on reverse graph for blast radius
-    let blast_radius: FxHashMap<&str, usize> = modules
-        .iter()
-        .map(|m| {
-            let mut visited: FxHashSet<&str> = FxHashSet::default();
-            let mut queue: std::collections::VecDeque<&str> = std::collections::VecDeque::new();
-            queue.push_back(m.id.as_str());
-            visited.insert(m.id.as_str());
-            while let Some(current) = queue.pop_front() {
-                if let Some(dependents) = reverse_adj.get(current) {
-                    for &dep in dependents {
-                        if visited.insert(dep) {
-                            queue.push_back(dep);
-                        }
-                    }
-                }
-            }
-            (m.id.as_str(), visited.len().saturating_sub(1))
-        })
-        .collect();
-
-    let mut hotspots: Vec<ModuleMetrics> = modules
-        .iter()
-        .map(|m| {
-            let fi = *fan_in.get(m.id.as_str()).unwrap_or(&0);
-            let fo = *fan_out.get(m.id.as_str()).unwrap_or(&0);
-            let total = fi + fo;
-            ModuleMetrics {
-                path: m.path.clone(),
-                fan_in: fi,
-                fan_out: fo,
-                instability: if total > 0 {
-                    fo as f64 / total as f64
-                } else {
-                    0.0
-                },
-                blast_radius: *blast_radius.get(m.id.as_str()).unwrap_or(&0),
-            }
-        })
-        .collect();
-    hotspots.sort_by_key(|h| std::cmp::Reverse(h.fan_in));
+    let hotspots = compute_hotspots(modules, dependencies);
 
     let cohesion = compute_cohesion(modules, dependencies);
 
