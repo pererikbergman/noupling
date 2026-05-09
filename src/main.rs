@@ -79,54 +79,6 @@ fn run_init(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Load diff metadata if a diff scan was performed.
-fn load_diff_meta(path: &str) -> Option<Vec<String>> {
-    let meta_path = Path::new(path).join(".noupling").join("diff-meta.json");
-    if !meta_path.exists() {
-        return None;
-    }
-    let content = std::fs::read_to_string(&meta_path).ok()?;
-    let meta: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let files = meta["changed_files"]
-        .as_array()?
-        .iter()
-        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-        .collect();
-    let base = meta["diff_base"].as_str().unwrap_or("");
-    if !base.is_empty() {
-        println!("Diff mode: filtered to changes against {}", base);
-    }
-    Some(files)
-}
-
-fn load_suppressed_count(path: &str) -> usize {
-    let meta_path = Path::new(path).join(".noupling").join("suppressed.json");
-    let content = std::fs::read_to_string(&meta_path).ok();
-    content
-        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-        .and_then(|v| v["suppressed_count"].as_u64())
-        .unwrap_or(0) as usize
-}
-
-fn load_external_deps(path: &str) -> Vec<analyzer::ExternalDepMetric> {
-    let ext_path = Path::new(path).join(".noupling").join("external.json");
-    let content = match std::fs::read_to_string(&ext_path) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
-    let data: Vec<serde_json::Value> = match serde_json::from_str(&content) {
-        Ok(d) => d,
-        Err(_) => return Vec::new(),
-    };
-    data.iter()
-        .filter_map(|v| {
-            Some(analyzer::ExternalDepMetric {
-                module_path: v["module"].as_str()?.to_string(),
-                count: v["count"].as_u64()? as usize,
-            })
-        })
-        .collect()
-}
 
 fn run_hook(action: &str, path: &str) -> anyhow::Result<()> {
     match action {
@@ -414,17 +366,7 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     dep_repo.bulk_insert(&unique_deps)?;
     println!("Found {} dependencies", unique_deps.len());
 
-    // Store suppressed count for audit/report
-    let suppressed_path = project_path.join(".noupling").join("suppressed.json");
-    if result.suppressed_count > 0 {
-        let meta = serde_json::json!({ "suppressed_count": result.suppressed_count });
-        std::fs::write(&suppressed_path, serde_json::to_string(&meta)?)?;
-    } else {
-        let _ = std::fs::remove_file(&suppressed_path);
-    }
-
-    // Store external import counts for audit/report
-    let external_path = project_path.join(".noupling").join("external.json");
+    // Log external imports summary
     if !result.external_imports.is_empty() {
         let total: usize = result.external_imports.iter().map(|e| e.count).sum();
         println!(
@@ -432,30 +374,23 @@ fn run_scan(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
             total,
             result.external_imports.len()
         );
-        let data: Vec<serde_json::Value> = result
-            .external_imports
-            .iter()
-            .map(|e| serde_json::json!({"module": e.module_path, "count": e.count}))
-            .collect();
-        std::fs::write(&external_path, serde_json::to_string(&data)?)?;
-    } else {
-        let _ = std::fs::remove_file(&external_path);
     }
 
-    // Store diff metadata alongside the snapshot
-    if let Some(ref files) = changed_files {
-        let diff_meta = serde_json::json!({
-            "diff_base": diff_base.unwrap_or(""),
-            "changed_files": files,
-            "changed_count": files.len(),
-        });
-        let meta_path = project_path.join(".noupling").join("diff-meta.json");
-        std::fs::write(&meta_path, serde_json::to_string_pretty(&diff_meta)?)?;
-    } else {
-        // Remove old diff metadata if doing a full scan
-        let meta_path = project_path.join(".noupling").join("diff-meta.json");
-        let _ = std::fs::remove_file(&meta_path);
-    }
+    // Persist scan metadata in SQLite alongside the snapshot
+    let scan_meta = storage::SnapshotMeta {
+        suppressed_count: result.suppressed_count,
+        diff_base: diff_base.map(|s| s.to_string()),
+        diff_changed_files: changed_files.clone(),
+        external_deps: result
+            .external_imports
+            .iter()
+            .map(|e| storage::ExternalDepRow {
+                module_path: e.module_path.clone(),
+                count: e.count,
+            })
+            .collect(),
+    };
+    snap_repo.save_meta(&snapshot.id, &scan_meta)?;
 
     println!("Scan complete. Database: {}", db_path.display());
     Ok(())
@@ -583,11 +518,18 @@ fn run_audit(
     result.layer_violations =
         analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
 
-    // Load suppressed count from scan
-    result.suppressed_count = load_suppressed_count(path);
-    let ext_deps = load_external_deps(path);
-    result.total_external_imports = ext_deps.iter().map(|e| e.count).sum();
-    result.external_deps = ext_deps;
+    // Load scan-time metadata from SQLite
+    let scan_meta = snap_repo.get_meta(&snapshot.id)?;
+    result.suppressed_count = scan_meta.suppressed_count;
+    result.external_deps = scan_meta
+        .external_deps
+        .iter()
+        .map(|e| analyzer::ExternalDepMetric {
+            module_path: e.module_path.clone(),
+            count: e.count,
+        })
+        .collect();
+    result.total_external_imports = result.external_deps.iter().map(|e| e.count).sum();
 
     // Compute violation age from snapshot history
     let all_snapshots = snap_repo.get_all()?;
@@ -609,8 +551,13 @@ fn run_audit(
     result.violation_age = analyzer::compute_violation_age(&result.violations, &historical);
 
     // Apply diff filter if a diff scan was performed
-    if let Some(changed_files) = load_diff_meta(path) {
-        result.filter_by_changed_files(&changed_files);
+    if let Some(ref changed_files) = scan_meta.diff_changed_files {
+        if let Some(ref base) = scan_meta.diff_base {
+            if !base.is_empty() {
+                println!("Diff mode: filtered to changes against {}", base);
+            }
+        }
+        result.filter_by_changed_files(changed_files);
     }
 
     // Apply baseline filter
@@ -708,15 +655,22 @@ fn run_report(
     result.layer_violations =
         analyzer::check_layer_rules(&report_modules, &report_deps, &project_settings.layers);
 
-    // Load suppressed count from scan
-    result.suppressed_count = load_suppressed_count(path);
-    let ext_deps = load_external_deps(path);
-    result.total_external_imports = ext_deps.iter().map(|e| e.count).sum();
-    result.external_deps = ext_deps;
+    // Load scan-time metadata from SQLite
+    let scan_meta = snap_repo.get_meta(&snapshot.id)?;
+    result.suppressed_count = scan_meta.suppressed_count;
+    result.external_deps = scan_meta
+        .external_deps
+        .iter()
+        .map(|e| analyzer::ExternalDepMetric {
+            module_path: e.module_path.clone(),
+            count: e.count,
+        })
+        .collect();
+    result.total_external_imports = result.external_deps.iter().map(|e| e.count).sum();
 
     // Apply diff filter if a diff scan was performed
-    if let Some(changed_files) = load_diff_meta(path) {
-        result.filter_by_changed_files(&changed_files);
+    if let Some(ref changed_files) = scan_meta.diff_changed_files {
+        result.filter_by_changed_files(changed_files);
     }
 
     let report_dir = Path::new(path).join(".noupling");

@@ -35,7 +35,10 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS snapshots (
                 id TEXT PRIMARY KEY,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                root_path TEXT NOT NULL
+                root_path TEXT NOT NULL,
+                suppressed_count INTEGER NOT NULL DEFAULT 0,
+                diff_base TEXT,
+                diff_changed_files TEXT
             );
 
             CREATE TABLE IF NOT EXISTS modules (
@@ -53,8 +56,25 @@ impl Database {
                 to_module_id TEXT REFERENCES modules(id),
                 line_number INTEGER,
                 PRIMARY KEY (from_module_id, to_module_id, line_number)
+            );
+
+            CREATE TABLE IF NOT EXISTS snapshot_external_deps (
+                snapshot_id TEXT REFERENCES snapshots(id),
+                module_path TEXT NOT NULL,
+                count INTEGER NOT NULL,
+                PRIMARY KEY (snapshot_id, module_path)
             );",
         )?;
+        // Migrate existing snapshots table if it lacks the new columns
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE snapshots ADD COLUMN suppressed_count INTEGER NOT NULL DEFAULT 0;",
+        );
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE snapshots ADD COLUMN diff_base TEXT;",
+        );
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE snapshots ADD COLUMN diff_changed_files TEXT;",
+        );
         Ok(())
     }
 }
@@ -113,7 +133,31 @@ mod tests {
             .unwrap()
             .filter_map(|r| r.ok())
             .collect();
-        assert_eq!(columns, vec!["id", "timestamp", "root_path"]);
+        assert_eq!(
+            columns,
+            vec![
+                "id",
+                "timestamp",
+                "root_path",
+                "suppressed_count",
+                "diff_base",
+                "diff_changed_files"
+            ]
+        );
+    }
+
+    #[test]
+    fn snapshot_external_deps_table_exists() {
+        let db = Database::open_in_memory().unwrap();
+        let tables: Vec<String> = db
+            .conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(tables.contains(&"snapshot_external_deps".to_string()));
     }
 
     #[test]
