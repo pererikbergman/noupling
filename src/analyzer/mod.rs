@@ -1622,6 +1622,30 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     }
 }
 
+/// Audit a snapshot and apply all settings-driven transformations in one call.
+///
+/// Wraps [`audit`] with the deterministic 5-step pipeline that every command
+/// previously had to spell out: severity filtering, coupling-mode adjustment,
+/// risk-weight RRI computation, layer-weight reductions, and layer filtering.
+/// Call order matters and is fixed here so callers can't get it wrong.
+///
+/// Command-specific augmentations (violation age, rule violations, layer
+/// violations, sidecar metadata, diff filtering) are intentionally left out
+/// — they vary per command and stay as separate post-hoc operations.
+pub fn audit_with_settings(
+    modules: &[Module],
+    dependencies: &[Dependency],
+    settings: &crate::settings::Settings,
+) -> AuditResult {
+    let mut result = audit(modules, dependencies);
+    result.filter_by_severity(settings.thresholds.minimum_severity);
+    result.apply_coupling_mode(settings.effective_coupling_mode());
+    result.apply_risk_weights(&settings.risk_weights);
+    result.apply_layer_weights(&settings.layers);
+    result.filter_by_layers(&settings.layers);
+    result
+}
+
 /// Compute violation ages by comparing current violations against historical snapshots.
 /// Returns an updated ViolationAgeSummary.
 pub fn compute_violation_age(
@@ -2951,5 +2975,48 @@ mod tests {
         let age = compute_violation_age(&violations, &historical);
         assert_eq!(age.new_count, 0);
         assert_eq!(age.chronic_count, 1);
+    }
+
+    // ── audit_with_settings: the deterministic settings-aware seam ──
+
+    #[test]
+    fn audit_with_settings_matches_manual_pipeline() {
+        // The seam must produce the same AuditResult as calling the 5 methods by hand
+        // in the documented order. This pins the contract so callers can't drift.
+        let modules = vec![
+            make_module("a", "src/alpha/mod.rs"),
+            make_module("b", "src/beta/mod.rs"),
+        ];
+        let deps = vec![
+            make_dep("a", "b", 1),
+            make_dep("a", "b", 2),
+            make_dep("a", "b", 3),
+        ];
+        let settings = crate::settings::Settings::default();
+
+        let auto = audit_with_settings(&modules, &deps, &settings);
+
+        let mut manual = audit(&modules, &deps);
+        manual.filter_by_severity(settings.thresholds.minimum_severity);
+        manual.apply_coupling_mode(settings.effective_coupling_mode());
+        manual.apply_risk_weights(&settings.risk_weights);
+        manual.apply_layer_weights(&settings.layers);
+        manual.filter_by_layers(&settings.layers);
+
+        assert_eq!(auto.score, manual.score);
+        assert_eq!(auto.violations.len(), manual.violations.len());
+        assert_eq!(auto.tri, manual.tri);
+        for (a, m) in auto.violations.iter().zip(manual.violations.iter()) {
+            assert_eq!(a.rri, m.rri);
+            assert_eq!(a.from_module, m.from_module);
+            assert_eq!(a.to_module, m.to_module);
+        }
+    }
+
+    #[test]
+    fn audit_with_settings_empty_project_scores_100() {
+        let settings = crate::settings::Settings::default();
+        let result = audit_with_settings(&[], &[], &settings);
+        assert!((result.score - 100.0).abs() < f64::EPSILON);
     }
 }
