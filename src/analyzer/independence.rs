@@ -77,3 +77,104 @@ pub fn compute_independence(
     independence.sort_by(|a, b| a.independence.partial_cmp(&b.independence).unwrap());
     independence
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ModuleType;
+
+    fn make_module(id: &str, path: &str) -> Module {
+        Module {
+            id: id.to_string(),
+            snapshot_id: "snap".to_string(),
+            parent_id: None,
+            name: std::path::Path::new(path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            path: path.to_string(),
+            module_type: ModuleType::File,
+            depth: std::path::Path::new(path).components().count() as i32,
+        }
+    }
+
+    #[test]
+    fn independence_fully_internal() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+        ];
+        let deps = vec![Dependency {
+            from_module_id: "a1".to_string(),
+            to_module_id: "a2".to_string(),
+            line_number: 1,
+        }];
+        let independence = compute_independence(&modules, &deps);
+        let app = independence.iter().find(|m| m.dir == "app");
+        assert!(app.is_some());
+        let app = app.unwrap();
+        assert_eq!(app.internal_deps, 1);
+        assert_eq!(app.external_deps, 0);
+        assert!((app.independence - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn independence_mixed_deps() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+            make_module("l1", "lib/core.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "a2".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "l1".to_string(),
+                line_number: 2,
+            },
+        ];
+        let independence = compute_independence(&modules, &deps);
+        let app = independence.iter().find(|m| m.dir == "app");
+        assert!(app.is_some());
+        let app = app.unwrap();
+        assert_eq!(app.internal_deps, 1);
+        assert_eq!(app.external_deps, 1);
+        assert!((app.independence - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn independence_sorted_lowest_first() {
+        let modules = vec![
+            make_module("a1", "app/main.rs"),
+            make_module("a2", "app/util.rs"),
+            make_module("l1", "lib/core.rs"),
+            make_module("l2", "lib/helper.rs"),
+        ];
+        let deps = vec![
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "a2".to_string(),
+                line_number: 1,
+            },
+            Dependency {
+                from_module_id: "a1".to_string(),
+                to_module_id: "l1".to_string(),
+                line_number: 2,
+            },
+            Dependency {
+                from_module_id: "l1".to_string(),
+                to_module_id: "l2".to_string(),
+                line_number: 1,
+            },
+        ];
+        let independence = compute_independence(&modules, &deps);
+        assert_eq!(independence.len(), 2);
+        assert_eq!(independence[0].dir, "app");
+        assert_eq!(independence[1].dir, "lib");
+    }
+}

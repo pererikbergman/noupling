@@ -19,7 +19,9 @@ mod red_flags;
 mod rules;
 mod violation_age;
 
-pub use actions::{compute_top_actions, TopAction};
+pub use actions::compute_top_actions;
+#[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
+pub use actions::TopAction;
 pub use cohesion::{compute_cohesion, CohesionMetrics};
 pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
@@ -27,7 +29,9 @@ pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use independence::{compute_independence, ModuleIndependence};
 pub use layers::{check_layer_rules, LayerViolation};
 pub use metrics::{compute_hotspots, ExternalDepMetric, ModuleMetrics};
-pub use monorepo::{audit_modules, CrossModuleViolation, MonorepoResult};
+pub use monorepo::{audit_modules, MonorepoResult};
+#[allow(unused_imports)] // Public API surface: kept reachable as analyzer::CrossModuleViolation
+pub use monorepo::CrossModuleViolation;
 pub use red_flags::{compute_red_flags, RedFlag, RedFlagType};
 pub use rules::{check_dependency_rules, RuleViolation};
 pub use violation_age::{compute_violation_age, ViolationAgeSummary};
