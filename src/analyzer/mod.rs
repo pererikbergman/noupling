@@ -11,11 +11,13 @@ use crate::core::{Dependency, DependencyDirection, Module};
 mod critical_path;
 mod gravity_wells;
 mod red_flags;
+mod rules;
 mod violation_age;
 
 pub use critical_path::compute_critical_path;
 pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use red_flags::{compute_red_flags, RedFlag, RedFlagType};
+pub use rules::{check_dependency_rules, RuleViolation};
 pub use violation_age::{compute_violation_age, ViolationAgeSummary};
 
 /// A detected coupling violation or circular dependency between modules.
@@ -172,19 +174,6 @@ pub struct ModuleIndependence {
     pub external_deps: usize,
     /// Independence score: internal / (internal + external). Range 0.0 to 1.0.
     pub independence: f64,
-}
-
-/// A violation of a custom dependency rule.
-#[derive(Debug, Clone)]
-pub struct RuleViolation {
-    /// Source file path.
-    pub from_module: String,
-    /// Target file path.
-    pub to_module: String,
-    /// Line number of the import.
-    pub line_number: i32,
-    /// Custom message from the rule definition.
-    pub message: String,
 }
 
 /// A violation of architectural layer ordering.
@@ -1491,65 +1480,6 @@ fn short_file(path: &str) -> String {
         .and_then(|f| f.to_str())
         .unwrap_or(path)
         .to_string()
-}
-
-/// Check dependencies against custom rules from settings.json.
-pub fn check_dependency_rules(
-    modules: &[Module],
-    dependencies: &[Dependency],
-    rules: &[crate::settings::DependencyRule],
-) -> Vec<RuleViolation> {
-    if rules.is_empty() {
-        return Vec::new();
-    }
-
-    let id_to_path: FxHashMap<&str, &str> = modules
-        .iter()
-        .map(|m| (m.id.as_str(), m.path.as_str()))
-        .collect();
-
-    let mut violations = Vec::new();
-
-    for rule in rules {
-        if rule.allow {
-            continue; // Only check forbidden rules
-        }
-
-        let from_glob = match globset::Glob::new(&rule.from) {
-            Ok(g) => g.compile_matcher(),
-            Err(_) => continue,
-        };
-        let to_glob = match globset::Glob::new(&rule.to) {
-            Ok(g) => g.compile_matcher(),
-            Err(_) => continue,
-        };
-
-        for dep in dependencies {
-            let from_path = match id_to_path.get(dep.from_module_id.as_str()) {
-                Some(p) => *p,
-                None => continue,
-            };
-            let to_path = match id_to_path.get(dep.to_module_id.as_str()) {
-                Some(p) => *p,
-                None => continue,
-            };
-
-            if from_glob.is_match(from_path) && to_glob.is_match(to_path) {
-                violations.push(RuleViolation {
-                    from_module: from_path.to_string(),
-                    to_module: to_path.to_string(),
-                    line_number: dep.line_number,
-                    message: if rule.message.is_empty() {
-                        format!("Forbidden dependency: {} -> {}", rule.from, rule.to)
-                    } else {
-                        rule.message.clone()
-                    },
-                });
-            }
-        }
-    }
-
-    violations
 }
 
 /// Check dependencies against architectural layer ordering.
