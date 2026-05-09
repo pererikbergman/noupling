@@ -181,12 +181,7 @@ fn run_trend(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
 
-        let mut result = analyzer::audit(&modules, &dependencies);
-        result.filter_by_severity(project_settings.thresholds.minimum_severity);
-        result.apply_coupling_mode(project_settings.effective_coupling_mode());
-        result.apply_risk_weights(&project_settings.risk_weights);
-        result.apply_layer_weights(&project_settings.layers);
-        result.filter_by_layers(&project_settings.layers);
+        let result = analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
 
         let delta = match prev_score {
             Some(prev) => {
@@ -246,12 +241,7 @@ fn run_trend_by_module(
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
 
-        let mut result = analyzer::audit(&modules, &dependencies);
-        result.filter_by_severity(settings.thresholds.minimum_severity);
-        result.apply_coupling_mode(settings.effective_coupling_mode());
-        result.apply_risk_weights(&settings.risk_weights);
-        result.apply_layer_weights(&settings.layers);
-        result.filter_by_layers(&settings.layers);
+        let result = analyzer::audit_with_settings(&modules, &dependencies, settings);
 
         let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
         let mut dir_modules: BTreeMap<String, usize> = BTreeMap::new();
@@ -476,12 +466,7 @@ fn run_baseline(action: &str, path: &str) -> anyhow::Result<()> {
             let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
             let project_settings = settings::Settings::load(Path::new(path))?;
-            let mut result = analyzer::audit(&modules, &dependencies);
-            result.filter_by_severity(project_settings.thresholds.minimum_severity);
-            result.apply_coupling_mode(project_settings.effective_coupling_mode());
-            result.apply_risk_weights(&project_settings.risk_weights);
-            result.apply_layer_weights(&project_settings.layers);
-            result.filter_by_layers(&project_settings.layers);
+            let result = analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
 
             baseline::save_baseline(Path::new(path), &result)?;
         }
@@ -569,12 +554,7 @@ fn run_audit(
     }
 
     // Single-project mode (existing behavior)
-    let mut result = analyzer::audit(&modules, &dependencies);
-    result.filter_by_severity(project_settings.thresholds.minimum_severity);
-    result.apply_coupling_mode(project_settings.effective_coupling_mode());
-    result.apply_risk_weights(&project_settings.risk_weights);
-    result.apply_layer_weights(&project_settings.layers);
-    result.filter_by_layers(&project_settings.layers);
+    let mut result = analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
     result.rule_violations = analyzer::check_dependency_rules(
         &modules,
         &dependencies,
@@ -694,12 +674,8 @@ fn run_report(
         (modules, dependencies)
     };
 
-    let mut result = analyzer::audit(&report_modules, &report_deps);
-    result.filter_by_severity(project_settings.thresholds.minimum_severity);
-    result.apply_coupling_mode(project_settings.effective_coupling_mode());
-    result.apply_risk_weights(&project_settings.risk_weights);
-    result.apply_layer_weights(&project_settings.layers);
-    result.filter_by_layers(&project_settings.layers);
+    let mut result =
+        analyzer::audit_with_settings(&report_modules, &report_deps, &project_settings);
     result.rule_violations = analyzer::check_dependency_rules(
         &report_modules,
         &report_deps,
@@ -796,13 +772,11 @@ fn run_report(
             let (prev_score, prev_count) = if let Some(prev_snap) = prev {
                 let prev_modules = module_repo.get_by_snapshot(&prev_snap.id)?;
                 let prev_deps = dep_repo.get_by_snapshot(&prev_snap.id)?;
-                let mut prev_result = analyzer::audit(&prev_modules, &prev_deps);
-                prev_result.filter_by_severity(project_settings.thresholds.minimum_severity);
-                prev_result.apply_coupling_mode(project_settings.effective_coupling_mode());
-                prev_result.apply_risk_weights(&project_settings.risk_weights);
-                prev_result.apply_layer_weights(&project_settings.layers);
-                result.apply_layer_weights(&project_settings.layers);
-                prev_result.filter_by_layers(&project_settings.layers);
+                let prev_result = analyzer::audit_with_settings(
+                    &prev_modules,
+                    &prev_deps,
+                    &project_settings,
+                );
                 (Some(prev_result.score), Some(prev_result.violations.len()))
             } else {
                 (None, None)
