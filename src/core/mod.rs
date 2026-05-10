@@ -63,8 +63,6 @@ pub struct Snapshot {
 
 #[cfg(test)]
 mod tests {
-    use serde_json;
-
     #[test]
     fn module_type_serializes_to_string() {
         let file_type = super::ModuleType::File;
