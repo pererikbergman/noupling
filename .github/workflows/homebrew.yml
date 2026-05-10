@@ -1,22 +1,39 @@
 name: Update Homebrew
 
+# Triggers:
+#   release: published    — manual release via the GitHub UI.
+#   repository_dispatch   — fired by release.yml after the binary build job.
+#                          GITHUB_TOKEN-created release events don't chain by
+#                          design; repository_dispatch is the documented escape
+#                          hatch and needs no extra secret.
 on:
   release:
     types: [published]
+  repository_dispatch:
+    types: [release-published]
 
 jobs:
   update-formula:
     name: Update Homebrew Formula
     runs-on: ubuntu-latest
     steps:
-      - name: Extract version
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      - name: Resolve tag
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            TAG="${{ github.event.client_payload.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Resolved: tag=${TAG} version=${VERSION}"
 
       - name: Calculate SHA256
         id: sha
         run: |
-          SHA=$(curl -sL "https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz" | sha256sum | awk '{print $1}')
+          SHA=$(curl -sL "https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.resolve.outputs.tag }}.tar.gz" | sha256sum | awk '{print $1}')
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
           echo "SHA256: $SHA"
 
@@ -27,9 +44,9 @@ jobs:
           git clone https://x-access-token:${TAP_TOKEN}@github.com/pererikbergman/homebrew-noupling.git tap
           cd tap
 
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.resolve.outputs.version }}"
           SHA256="${{ steps.sha.outputs.sha256 }}"
-          TAG="${{ github.ref_name }}"
+          TAG="${{ steps.resolve.outputs.tag }}"
           URL="https://github.com/pererikbergman/noupling/archive/refs/tags/${TAG}.tar.gz"
 
           sed -i "s|url \".*\"|url \"${URL}\"|" Formula/noupling.rb
