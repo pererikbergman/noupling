@@ -104,3 +104,17 @@ jobs:
             noupling-windows-x86_64.exe
             noupling-windows-x86_64.exe.sha256
           generate_release_notes: true
+
+      # GITHUB_TOKEN-published releases don't fire downstream workflows
+      # (release: published) by design. repository_dispatch is the documented
+      # exception that DOES chain — used here to wake homebrew.yml.
+      - name: Dispatch homebrew update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh api "repos/${{ github.repository }}/dispatches" \
+            --method POST \
+            --raw-field event_type=release-published \
+            --raw-field "client_payload[tag]=${{ github.ref_name }}" \
+            --raw-field "client_payload[version]=${VERSION}"
