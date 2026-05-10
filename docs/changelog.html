@@ -17,7 +17,7 @@
       <li><a href="docs.html">Docs</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.6.0</span></li>
+      <li><span class="badge">v0.7.0</span></li>
     </ul>
   </div>
 </nav>
@@ -29,6 +29,40 @@
     <p class="lead">
       Not a commit log. A narrative of architectural decisions&mdash;what broke, what was built, and why each change exists.
     </p>
+
+    <!-- ── v0.7.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.7.0 &mdash; Architectural Deepening + Elixir/Scala</h2>
+      <div class="date">May 2026</div>
+
+      <h3><span class="tag tag-refactor">refactor</span> Deepening pass: collapse, split, relocate</h3>
+      <p><strong>The friction:</strong> The codebase had grown a few god files. <code>src/analyzer/mod.rs</code> was 2,955 LOC mixing cycle detection, scoring, gravity wells, red flags, layers, rules, and metrics. <code>src/main.rs</code> was 988 LOC of CLI handlers that each spelled out the same 5-step <code>apply_*</code>/<code>filter_*</code> incantation on <code>AuditResult</code>. JSON sidecar files (<code>diff-meta.json</code>, <code>suppressed.json</code>, <code>external.json</code>) wrote the scan&rarr;audit contract through the filesystem. 14 per-language parsers lived as 14 free functions in two large shared files. The tool flagged a <code>reporter &harr; analyzer</code> red flag on its own audit.</p>
+      <p><strong>The implementation:</strong> Six PRs, no behavior change.</p>
+      <ul>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/192">#192</a></strong> introduced <code>analyzer::audit_with_settings(modules, deps, &amp;settings)</code> as the canonical seam. Six call sites collapsed to one each.</li>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/193">#193</a></strong> deleted the JSON sidecars. <code>suppressed_count</code>, <code>diff_base</code>, and <code>diff_changed_files</code> are now columns on the <code>snapshots</code> table; external-dep counts live in a new <code>snapshot_external_deps</code> table. Existing databases auto-migrate via <code>ALTER TABLE&hellip;ADD COLUMN</code>.</li>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/194">#194</a></strong> introduced the <code>LanguageParser</code> trait. Each language is now a self-contained adapter at <code>src/scanner/parsers/&lt;lang&gt;.rs</code>. Adding a language = one new file + one registry line.</li>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/195">#195</a></strong> split <code>src/analyzer/mod.rs</code> into 15 concern files (cycles, coupling, metrics, cohesion, independence, gravity_wells, red_flags, layers, rules, violation_age, critical_path, actions, monorepo, tests, mod). The orchestrator is &lt;330 LOC; no concern file exceeds 540 LOC.</li>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/196">#196</a></strong> moved <code>run_*</code> handlers into <code>src/commands/</code>. <code>main.rs</code> shrank from 988 LOC to 72. Added the first end-to-end integration test at <code>tests/cli.rs</code>.</li>
+        <li><strong><a href="https://github.com/pererikbergman/noupling/pull/198">#198</a></strong> moved <code>DependencyDirection</code> from <code>core</code> (where it was misplaced as a scanner primitive) to <code>analyzer/direction.rs</code> where it belongs. Eliminated the <code>analyzer &harr; core</code> red flag.</li>
+      </ul>
+      <p><strong>The ripple effect:</strong> Self-audit went from 1 red flag to 0. Test count grew from 195 to 213 unit tests. The reporter still depends on the analyzer, but on specific concerns rather than a fat <code>AuditResult</code> struct.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Elixir &amp; Scala parsers (<a href="https://github.com/pererikbergman/noupling/issues/89">#89</a>, <a href="https://github.com/pererikbergman/noupling/issues/88">#88</a>)</h3>
+      <p>Total supported languages now <strong>16</strong>. Both adapters were added in 6 file changes (no trait modification, no dispatch changes, no other adapter touched)&mdash;empirical proof that the <code>LanguageParser</code> seam from #194 was correctly shaped.</p>
+
+      <h3><span class="tag tag-rm">remove</span> JSON sidecar files in <code>.noupling/</code></h3>
+      <p><code>diff-meta.json</code>, <code>suppressed.json</code>, and <code>external.json</code> are no longer written. Snapshot metadata is fully in SQLite. Existing databases migrate forward automatically.</p>
+
+      <h3>Also in this release:</h3>
+      <ul>
+        <li><span class="tag tag-docs">docs</span> <code>llms.txt</code> at the repo root for AI/LLM-friendly project documentation (<a href="https://github.com/pererikbergman/noupling/issues/141">#141</a>)</li>
+        <li><span class="tag tag-test">tests</span> 4 new CLI integration tests covering <code>--fail-below</code> exit codes and report-format contracts. Total 218 tests (213 unit + 5 integration), up from 195.</li>
+        <li><span class="tag tag-infra">infra</span> Opt-in pre-commit hook at <code>.githooks/pre-commit</code> running <code>cargo fmt --check</code> + <code>cargo clippy</code>. Enable with <code>git config core.hooksPath .githooks</code>.</li>
+        <li><span class="tag tag-infra">infra</span> CI architecture-audit threshold raised from <code>--fail-below 80</code> to <code>--fail-below 95</code>. Future PRs that drop the project's own health below 95 will fail.</li>
+        <li><span class="tag tag-fix">fix</span> Resolved the only remaining clippy warning (<code>single_component_path_imports</code> in <code>src/core/mod.rs</code>). <code>cargo clippy --all-targets</code> is now warning-free.</li>
+      </ul>
+    </article>
 
     <!-- ── v0.6.0 ─────────────────────────────────────── -->
     <article class="release">
