@@ -7,7 +7,7 @@
     <a href="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml"><img src="https://github.com/pererikbergman/noupling/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
     <img src="https://img.shields.io/badge/rust-2021-orange.svg" alt="Rust 2021">
-    <img src="https://img.shields.io/badge/languages-14-green.svg" alt="14 Languages">
+    <img src="https://img.shields.io/badge/languages-16-green.svg" alt="16 Languages">
   </p>
 </p>
 
@@ -26,7 +26,7 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 
 ### Key Features
 
-- **14 languages**: C#, Dart, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Swift, TypeScript, Zig
+- **16 languages**: C#, Dart, Elixir, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Scala, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
 - **12 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy (or `all` to generate every format)
@@ -325,6 +325,7 @@ See [docs/architecture.md](docs/architecture.md) for the full technical details.
 | :--- | :--- | :--- |
 | C# | `.cs` | `using` directives |
 | Dart | `.dart` | `import` directives |
+| Elixir | `.ex`, `.exs` | `alias` / `import` / `use` / `require` |
 | Go | `.go` | `import` declarations |
 | Haskell | `.hs` | `import` declarations |
 | Java | `.java` | `import` declarations |
@@ -334,6 +335,7 @@ See [docs/architecture.md](docs/architecture.md) for the full technical details.
 | Python | `.py` | `import` / `from...import` |
 | Ruby | `.rb` | `require` / `require_relative` |
 | Rust | `.rs` | `use` declarations |
+| Scala | `.scala`, `.sc` | `import` declarations |
 | Swift | `.swift` | `import` declarations |
 | TypeScript | `.ts`, `.tsx` | ES `import` statements |
 | Zig | `.zig` | `@import()` builtins |

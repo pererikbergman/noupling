@@ -9,6 +9,7 @@
 
 pub mod csharp;
 pub mod dart;
+pub mod elixir;
 pub mod go;
 pub mod haskell;
 pub mod java;
@@ -18,6 +19,7 @@ pub mod php;
 pub mod python;
 pub mod ruby;
 pub mod rust;
+pub mod scala;
 pub mod swift;
 pub mod typescript;
 pub mod zig;
@@ -76,5 +78,9 @@ pub fn registry() -> Vec<(&'static str, Box<dyn LanguageParser>)> {
         ("php", Box::new(php::PhpParser)),
         ("rb", Box::new(ruby::RubyParser)),
         ("zig", Box::new(zig::ZigParser)),
+        ("ex", Box::new(elixir::ElixirParser)),
+        ("exs", Box::new(elixir::ElixirParser)),
+        ("scala", Box::new(scala::ScalaParser)),
+        ("sc", Box::new(scala::ScalaParser)),
     ]
 }
