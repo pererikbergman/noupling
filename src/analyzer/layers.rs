@@ -4,7 +4,8 @@
 use fxhash::FxHashMap;
 
 use super::AuditResult;
-use crate::core::{Dependency, DependencyDirection, Module};
+use super::DependencyDirection;
+use crate::core::{Dependency, Module};
 
 /// A violation of architectural layer ordering.
 #[derive(Debug, Clone)]

@@ -113,8 +113,8 @@ fn chrono_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::DependencyDirection;
     use crate::analyzer::ViolationAgeSummary;
-    use crate::core::DependencyDirection;
 
     fn make_coupling(from: &str, to: &str) -> CouplingViolation {
         CouplingViolation {

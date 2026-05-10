@@ -7,7 +7,8 @@ use std::collections::BTreeMap;
 use fxhash::{FxHashMap, FxHashSet};
 
 use super::cycles::detect_sibling_cycles;
-use crate::core::{Dependency, DependencyDirection, Module};
+use super::DependencyDirection;
+use crate::core::{Dependency, Module};
 
 /// A detected coupling violation or circular dependency between modules.
 #[derive(Debug, Clone)]

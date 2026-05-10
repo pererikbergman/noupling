@@ -288,12 +288,12 @@ fn render_dir_page(
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
                 let dir_symbol = match v.direction {
-                    crate::core::DependencyDirection::Downward => "↓",
-                    crate::core::DependencyDirection::Sibling => "↔",
-                    crate::core::DependencyDirection::Upward => "↑",
-                    crate::core::DependencyDirection::External => "↗",
-                    crate::core::DependencyDirection::Transitive => "⇝",
-                    crate::core::DependencyDirection::Circular => "↻",
+                    crate::analyzer::DependencyDirection::Downward => "↓",
+                    crate::analyzer::DependencyDirection::Sibling => "↔",
+                    crate::analyzer::DependencyDirection::Upward => "↑",
+                    crate::analyzer::DependencyDirection::External => "↗",
+                    crate::analyzer::DependencyDirection::Transitive => "⇝",
+                    crate::analyzer::DependencyDirection::Circular => "↻",
                 };
                 md.push_str(&format!(
                     "| {:.2} | {:.0} | {} | `{}` | `{}` |\n",

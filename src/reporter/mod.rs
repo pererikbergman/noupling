@@ -782,12 +782,12 @@ pub fn format_text(result: &AuditResult) -> String {
         output.push('\n');
         for v in &result.violations {
             let dir_label = match v.direction {
-                crate::core::DependencyDirection::Downward => "\u{2193}",
-                crate::core::DependencyDirection::Sibling => "\u{2194}",
-                crate::core::DependencyDirection::Upward => "\u{2191}",
-                crate::core::DependencyDirection::External => "\u{2197}",
-                crate::core::DependencyDirection::Transitive => "\u{21dd}",
-                crate::core::DependencyDirection::Circular => "\u{21bb}",
+                crate::analyzer::DependencyDirection::Downward => "\u{2193}",
+                crate::analyzer::DependencyDirection::Sibling => "\u{2194}",
+                crate::analyzer::DependencyDirection::Upward => "\u{2191}",
+                crate::analyzer::DependencyDirection::External => "\u{2197}",
+                crate::analyzer::DependencyDirection::Transitive => "\u{21dd}",
+                crate::analyzer::DependencyDirection::Circular => "\u{21bb}",
             };
             let rri_label = if v.rri > 0.0 {
                 format!(" RRI:{:.0}", v.rri)
@@ -1482,7 +1482,7 @@ mod tests {
             to_module: to.to_string(),
             depth,
             severity,
-            direction: crate::core::DependencyDirection::Sibling,
+            direction: crate::analyzer::DependencyDirection::Sibling,
             rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
