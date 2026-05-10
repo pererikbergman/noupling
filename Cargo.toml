@@ -32,6 +32,8 @@ tree-sitter-php = "0.24"
 tree-sitter-python = "0.25"
 tree-sitter-ruby = "0.23"
 tree-sitter-zig = "1.1"
+tree-sitter-elixir = "0.3.5"
+tree-sitter-scala = "0.26.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 rayon = "1.10"
 fxhash = "0.2"

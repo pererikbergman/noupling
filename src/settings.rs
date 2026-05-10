@@ -252,6 +252,10 @@ fn default_source_extensions() -> Vec<String> {
         "php".to_string(),
         "rb".to_string(),
         "zig".to_string(),
+        "ex".to_string(),
+        "exs".to_string(),
+        "scala".to_string(),
+        "sc".to_string(),
     ]
 }
 
