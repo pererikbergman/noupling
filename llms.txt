@@ -1,0 +1,42 @@
+# noupling
+
+> noupling is an architecture auditing CLI that scans source code, builds a dependency graph from actual import statements, and quantifies coupling using risk-weighted scoring (RRI/TRI). It detects coupling violations between sibling modules and circular dependencies, then produces a single health score (0-100) you can track over time and enforce in CI. Supports 14 languages via Tree-sitter AST parsing.
+
+## Documentation
+
+- [README](https://github.com/pererikbergman/noupling/blob/main/README.md): Project overview, quickstart, installation, usage examples, configuration reference, and supported languages.
+- [Architecture](https://github.com/pererikbergman/noupling/blob/main/docs/architecture.md): Internal data flow (scan → store → analyze → report), module responsibilities, and key design decisions.
+- [Changelog](https://github.com/pererikbergman/noupling/blob/main/CHANGELOG.md): Released versions, migration notes, and recent architectural changes.
+- [Contributing](https://github.com/pererikbergman/noupling/blob/main/CONTRIBUTING.md): Build instructions, coding standards, branching strategy, and how to add a new language parser.
+
+## Concepts
+
+- [Risk Framework](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): RRI (Relationship Risk Index = direction_weight × density) and TRI (Total Risk Index = sum of RRIs) replace depth-based severity. Higher weights for more harmful directions.
+- [Health Score](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): `100 × (1 - TRI / (total_modules × max_weight))`. A single 0-100 metric for CI gating (`--fail-below`).
+- [Dependency Directions](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): Downward (weight 2), Sibling (4), Upward (6), External (8), Transitive (9), Circular (10). Configurable via `risk_weights` in settings.json.
+- [Architectural Layers](https://github.com/pererikbergman/noupling/blob/main/README.md#architectural-layers): Define allowed dependency flow (e.g. presentation → domain → data). Downward dependencies are suppressed; upward dependencies are flagged as layer violations.
+- [Gravity Wells](https://github.com/pererikbergman/noupling/blob/main/README.md#key-features): Modules whose aggregate RRI exceeds 2× the project median — the "God Object" coupling hotspots.
+- [Red Flags](https://github.com/pererikbergman/noupling/blob/main/README.md#key-features): Architectural anti-patterns: *Fused Sibling* (high-density co-dependent peers) and *Trapped Child* (upward dependencies on parent/ancestors).
+- [Monorepo Support](https://github.com/pererikbergman/noupling/blob/main/README.md#monorepo-modules): Independent analysis per module; cross-module imports not listed in `depends_on` are flagged as violations.
+
+## Supported Languages
+
+14 languages parsed via Tree-sitter AST (no regex):
+
+C#, Dart, Go, Haskell, Java, JavaScript (+ JSX), Kotlin (+ KTS), PHP, Python, Ruby, Rust, Swift, TypeScript (+ TSX), Zig
+
+## Commands
+
+- `init` — Create `.noupling/settings.json` with defaults.
+- `scan` — Discover source files, parse imports, persist dependency graph to SQLite.
+- `audit` — Compute health score (0-100), list coupling violations and circular dependencies. Use `--fail-below N` for CI gating.
+- `report` — Generate output in one of 12 formats: `json`, `xml`, `md`, `html`, `sonar`, `mermaid`, `dot`, `bundle`, `dashboard`, `pr`, `briefing`, `strategy` (or `all`).
+- `trend` — Show health score history across snapshots with delta.
+- `baseline` — Save a violation baseline; `audit --baseline` only fails on new violations.
+- `hook` — Install/uninstall a pre-commit hook that blocks commits introducing violations.
+
+## Optional
+
+- [Issue Tracker](https://github.com/pererikbergman/noupling/issues): Bug reports and feature requests.
+- [Releases](https://github.com/pererikbergman/noupling/releases): Prebuilt binaries for Linux (x86_64, aarch64), macOS (Apple Silicon, Intel), and Windows.
+- [llms.txt standard](https://llmstxt.org/): Specification this file follows.
