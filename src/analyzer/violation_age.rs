@@ -50,7 +50,7 @@ pub fn compute_violation_age(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::DependencyDirection;
+    use crate::analyzer::DependencyDirection;
 
     #[test]
     fn violation_age_all_new() {

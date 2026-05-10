@@ -27,7 +27,7 @@ struct ViolationInfo {
     to_module: String,
     severity: f64,
     rri: f64,
-    direction: crate::core::DependencyDirection,
+    direction: crate::analyzer::DependencyDirection,
     #[allow(dead_code)]
     weight: usize,
     is_circular: bool,
@@ -463,24 +463,24 @@ fn module_label(path: &str, current_dir: &str) -> String {
     }
 }
 
-fn direction_badge(dir: &crate::core::DependencyDirection) -> &'static str {
+fn direction_badge(dir: &crate::analyzer::DependencyDirection) -> &'static str {
     match dir {
-        crate::core::DependencyDirection::Downward => {
+        crate::analyzer::DependencyDirection::Downward => {
             "<span title=\"Downward dependency\" style=\"color:#22c55e\">\u{2193}</span>"
         }
-        crate::core::DependencyDirection::Sibling => {
+        crate::analyzer::DependencyDirection::Sibling => {
             "<span title=\"Sibling dependency\" style=\"color:#eab308\">\u{2194}</span>"
         }
-        crate::core::DependencyDirection::Upward => {
+        crate::analyzer::DependencyDirection::Upward => {
             "<span title=\"Upward dependency\" style=\"color:#ef4444\">\u{2191}</span>"
         }
-        crate::core::DependencyDirection::External => {
+        crate::analyzer::DependencyDirection::External => {
             "<span title=\"External dependency\" style=\"color:#f97316\">\u{2197}</span>"
         }
-        crate::core::DependencyDirection::Transitive => {
+        crate::analyzer::DependencyDirection::Transitive => {
             "<span title=\"Transitive dependency\" style=\"color:#a855f7\">\u{21dd}</span>"
         }
-        crate::core::DependencyDirection::Circular => {
+        crate::analyzer::DependencyDirection::Circular => {
             "<span title=\"Circular dependency\" style=\"color:#dc2626\">\u{21bb}</span>"
         }
     }
@@ -1128,7 +1128,7 @@ mod tests {
                 to_module: "src/storage/mod.rs".to_string(),
                 depth: 1,
                 severity: 0.5,
-                direction: crate::core::DependencyDirection::Sibling,
+                direction: crate::analyzer::DependencyDirection::Sibling,
                 rri: 0.0,
                 is_circular: false,
                 cycle_path: Vec::new(),

@@ -2,7 +2,7 @@
 //! anti-patterns derived from the violation set.
 
 use super::CouplingViolation;
-use crate::core::DependencyDirection;
+use super::DependencyDirection;
 
 /// An architectural anti-pattern detected from the dependency analysis.
 #[derive(Debug, Clone)]

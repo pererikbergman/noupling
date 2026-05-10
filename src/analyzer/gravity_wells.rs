@@ -3,7 +3,7 @@
 //! system into their orbit, making extraction or replacement difficult.
 
 use super::CouplingViolation;
-use crate::core::DependencyDirection;
+use super::DependencyDirection;
 
 /// A module with disproportionately high aggregate RRI across multiple
 /// dependency types. These "God Objects" pull the system into their orbit,

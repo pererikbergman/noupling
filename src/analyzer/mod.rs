@@ -3,13 +3,14 @@
 //! Computes coupling violations and circular dependencies using
 //! bottom-up D_acc aggregation and top-down BFS sibling analysis.
 
-use crate::core::{Dependency, DependencyDirection, Module};
+use crate::core::{Dependency, Module};
 
 mod actions;
 mod cohesion;
 mod coupling;
 mod critical_path;
 mod cycles;
+mod direction;
 mod gravity_wells;
 mod independence;
 mod layers;
@@ -18,6 +19,8 @@ mod monorepo;
 mod red_flags;
 mod rules;
 mod violation_age;
+
+pub use direction::DependencyDirection;
 
 pub use actions::compute_top_actions;
 #[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
