@@ -7,14 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-10
+
+This release is dominated by an **architectural deepening pass**: the codebase was reorganized for locality and testability without changing behavior. Two new languages (Elixir, Scala) bring the total to **16 supported**. Snapshot metadata is now fully in SQLite (no more JSON sidecars).
+
+### Added
+
+- **Elixir parser** (#89 / PR #206): `.ex` and `.exs` files via `tree-sitter-elixir`. Captures `alias`, `import`, `use`, and `require` directives.
+- **Scala parser** (#88 / PR #206): `.scala` and `.sc` files via `tree-sitter-scala`. Captures `import` declarations and grouped imports.
+- **`llms.txt`** (#141 / PR #207): AI-friendly project entry point at the repo root, following the [llmstxt.org](https://llmstxt.org) spec.
+- **CLI integration test suite** (#200 / PR #205): 4 new end-to-end tests in `tests/cli.rs` covering `--fail-below` exit codes and report-format contracts. Total: 5 integration tests, 205 tests overall.
+- **Opt-in pre-commit hook** (#201 / PR #204): `.githooks/pre-commit` runs `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` to catch issues before CI. Enable with `git config core.hooksPath .githooks`.
+
 ### Changed
 
 - **Architectural refactor: analyzer split** (#190 / PR #195): `src/analyzer/mod.rs` (was 2,955 LOC) split into 15 focused files — `coupling`, `cycles`, `direction`, `metrics`, `cohesion`, `independence`, `gravity_wells`, `red_flags`, `layers`, `rules`, `violation_age`, `critical_path`, `actions`, `monorepo`, `tests`. `mod.rs` is now the orchestrator.
 - **`audit_with_settings` canonical seam** (#187 / PR #192): The 5-step `apply_*`/`filter_*` pipeline is now encapsulated in `analyzer::audit_with_settings(modules, deps, &settings)`. Command handlers call this once instead of spelling out the sequence themselves.
-- **SQLite-only scan metadata** (#188 / PR #193): JSON sidecar files (`diff-meta.json`, `suppressed.json`, `external.json`) deleted. `suppressed_count`, `diff_base`, and `diff_changed_files` are now columns on the `snapshots` table. External dependency counts live in the new `snapshot_external_deps` table.
-- **`LanguageParser` trait + per-language adapter files** (#189 / PR #194): `src/scanner/parser.rs` and `src/scanner/resolver.rs` deleted. Each language now lives in `src/scanner/parsers/<lang>.rs` (14 files). Adding a language requires one new file and one line in `parsers/mod.rs::registry()`.
-- **Thin command handlers** (#191 / PR #196): `src/main.rs` reduced from 988 LOC to 72 LOC (pure dispatch). Each command has its own handler in `src/commands/{init,scan,audit,trend,report,baseline,hook}.rs`. First end-to-end integration test added at `tests/cli.rs::init_scan_audit_smoke`.
+- **`LanguageParser` trait + per-language adapter files** (#189 / PR #194): `src/scanner/parser.rs` and `src/scanner/resolver.rs` deleted. Each language now lives in `src/scanner/parsers/<lang>.rs` (16 files after #206). Adding a language requires one new file and one line in `parsers/mod.rs::registry()`.
+- **Thin command handlers** (#191 / PR #196): `src/main.rs` reduced from 988 LOC to 72 LOC (pure dispatch). Each command has its own handler in `src/commands/{init,scan,audit,trend,report,baseline,hook}.rs`.
 - **`DependencyDirection` moved to `src/analyzer/direction.rs`** (#197 / PR #198): Previously defined in `src/core/mod.rs`. Re-exported as `analyzer::DependencyDirection`; call sites are unchanged.
+- **Documentation refresh** (#199 / PR #203): `docs/architecture.md` and `CHANGELOG.md` updated to reflect the post-refactor structure.
+- **CI architecture-audit threshold raised from 80 → 95** (PR #202): `.github/workflows/noupling-pr.yml` now fails any PR that drops the project's own health score below 95.
+
+### Removed
+
+- **JSON sidecar files in `.noupling/`** (#188 / PR #193): `diff-meta.json`, `suppressed.json`, and `external.json` are no longer written. Their data lives in SQLite alongside the snapshot: new `suppressed_count`, `diff_base`, `diff_changed_files` columns on the `snapshots` table; new `snapshot_external_deps` table. Existing databases are migrated forward via `ALTER TABLE … ADD COLUMN` (no-op if columns already exist).
+
+### Fixed
+
+- **Redundant `use serde_json;`** in `src/core/mod.rs` test module (PR #202). Resolves the only remaining `clippy::single_component_path_imports` warning. `cargo clippy --all-targets` is now warning-free.
 
 ## [0.6.0] - 2026-04-19
 
