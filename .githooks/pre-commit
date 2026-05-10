@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-commit hook: checks formatting and lints with Clippy.
+# Opt-in — activate once per clone with:
+#   git config core.hooksPath .githooks
+
+cargo fmt --check
+if [ $? -ne 0 ]; then
+    printf '❌ Code is not formatted. Run: cargo fmt\n'
+    exit 1
+fi
+
+cargo clippy --all-targets -- -W clippy::all -D warnings
+if [ $? -ne 0 ]; then
+    printf '❌ Clippy reports issues. Review the output above.\n'
+    exit 1
+fi
+
+printf '✅ Pre-commit checks passed\n'
+exit 0

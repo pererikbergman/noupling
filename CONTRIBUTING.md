@@ -42,6 +42,16 @@ git push -u origin feature/42-add-ruby-parser
 gh pr create
 ```
 
+## Local Hooks (recommended)
+
+The repo ships an opt-in pre-commit hook that runs `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` before each commit, catching issues before CI does. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook is opt-in — it does nothing until you run that command. Disable with `git config --unset core.hooksPath`.
+
 ## Coding Standards
 
 - **Format**: Run `cargo fmt` before committing.
