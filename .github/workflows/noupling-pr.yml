@@ -114,6 +114,6 @@ jobs:
       - name: Fail on threshold
         if: always()
         run: |
-          # Fail if score below 80 (customize this threshold)
+          # Fail if score below 95 (we're currently at 100; this leaves a small noise margin)
           noupling scan .
-          noupling audit . --fail-below 80
+          noupling audit . --fail-below 95
