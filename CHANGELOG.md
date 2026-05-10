@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Architectural refactor: analyzer split** (#190 / PR #195): `src/analyzer/mod.rs` (was 2,955 LOC) split into 15 focused files — `coupling`, `cycles`, `direction`, `metrics`, `cohesion`, `independence`, `gravity_wells`, `red_flags`, `layers`, `rules`, `violation_age`, `critical_path`, `actions`, `monorepo`, `tests`. `mod.rs` is now the orchestrator.
+- **`audit_with_settings` canonical seam** (#187 / PR #192): The 5-step `apply_*`/`filter_*` pipeline is now encapsulated in `analyzer::audit_with_settings(modules, deps, &settings)`. Command handlers call this once instead of spelling out the sequence themselves.
+- **SQLite-only scan metadata** (#188 / PR #193): JSON sidecar files (`diff-meta.json`, `suppressed.json`, `external.json`) deleted. `suppressed_count`, `diff_base`, and `diff_changed_files` are now columns on the `snapshots` table. External dependency counts live in the new `snapshot_external_deps` table.
+- **`LanguageParser` trait + per-language adapter files** (#189 / PR #194): `src/scanner/parser.rs` and `src/scanner/resolver.rs` deleted. Each language now lives in `src/scanner/parsers/<lang>.rs` (14 files). Adding a language requires one new file and one line in `parsers/mod.rs::registry()`.
+- **Thin command handlers** (#191 / PR #196): `src/main.rs` reduced from 988 LOC to 72 LOC (pure dispatch). Each command has its own handler in `src/commands/{init,scan,audit,trend,report,baseline,hook}.rs`. First end-to-end integration test added at `tests/cli.rs::init_scan_audit_smoke`.
+- **`DependencyDirection` moved to `src/analyzer/direction.rs`** (#197 / PR #198): Previously defined in `src/core/mod.rs`. Re-exported as `analyzer::DependencyDirection`; call sites are unchanged.
+
 ## [0.6.0] - 2026-04-19
 
 ### Added
