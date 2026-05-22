@@ -1,6 +1,6 @@
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct ElixirParser;
 
@@ -153,7 +153,7 @@ fn resolve_elixir_import(import_path: &str, known_paths: &[String]) -> Option<St
 
     for ext in &["ex", "exs"] {
         let candidate = format!("{}.{}", file_path, ext);
-        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
             return Some(found.clone());
         }
     }

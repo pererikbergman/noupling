@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct PythonParser;
 
@@ -119,11 +119,11 @@ fn resolve_python_import(
 
     let file_path = import_path.replace('.', "/");
     let candidate = format!("{}.py", file_path);
-    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
         return Some(found.clone());
     }
     let candidate = format!("{}/__init__.py", file_path);
-    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
         return Some(found.clone());
     }
     None
@@ -162,5 +162,38 @@ mod tests {
     fn python_handles_empty_source() {
         let imports = PythonParser.parse("");
         assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn python_resolver_does_not_substring_match_stdlib_with_filename_suffix() {
+        let known = vec!["src/wave2md/stages/structure.py".to_string()];
+        let result = PythonParser.resolve("re", "src/wave2md/stages/structure.py", &known);
+        assert!(
+            result.is_none(),
+            "stdlib `import re` must not substring-match structure.py, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn python_resolver_does_not_substring_match_short_stdlib_inside_filename() {
+        let known = vec!["src/chaos.py".to_string()];
+        let result = PythonParser.resolve("os", "src/main.py", &known);
+        assert!(
+            result.is_none(),
+            "`import os` must not substring-match chaos.py, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn python_resolver_resolves_exact_segment_match() {
+        let known = vec!["src/wave2md/context.py".to_string()];
+        let result = PythonParser.resolve(
+            "wave2md.context",
+            "src/wave2md/stages/structure.py",
+            &known,
+        );
+        assert_eq!(result, Some("src/wave2md/context.py".to_string()));
     }
 }

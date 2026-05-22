@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct PhpParser;
 
@@ -108,7 +108,7 @@ fn resolve_php_import(
         import_path.to_string()
     };
 
-    if let Some(found) = known_paths.iter().find(|p| p.ends_with(&as_path)) {
+    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &as_path)) {
         return Some(found.clone());
     }
 
@@ -116,7 +116,7 @@ fn resolve_php_import(
     let resolved = normalize_path(&source_dir.join(import_path).to_string_lossy());
     known_paths
         .iter()
-        .find(|p| **p == resolved || p.ends_with(&resolved))
+        .find(|p| ends_with_segment(p, &resolved))
         .cloned()
 }
 

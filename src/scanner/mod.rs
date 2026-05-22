@@ -99,6 +99,12 @@ pub fn scan_project(
                     match resolved {
                         Some(path) => {
                             let to_module = modules.iter().find(|m| m.path == path)?;
+                            // Defence in depth: a file importing itself is never a
+                            // meaningful coupling event. Drop self-edges so a future
+                            // resolver bug can't surface them as cross-module deps.
+                            if to_module.id == module.id {
+                                return None;
+                            }
                             Some(Dependency {
                                 from_module_id: module.id.clone(),
                                 to_module_id: to_module.id.clone(),
@@ -222,5 +228,43 @@ mod tests {
         let source = "use crate::foo;\nuse crate::bar;\n";
         assert!(!is_suppressed(source, 1));
         assert!(!is_suppressed(source, 2));
+    }
+
+    #[test]
+    fn stdlib_python_import_does_not_create_self_edge() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let stages = dir.path().join("src").join("stages");
+        fs::create_dir_all(&stages).unwrap();
+        // `structure.py` ends with the literal string "re.py" — before the resolver
+        // fix, `import re` would substring-match this file and produce a self-edge.
+        fs::write(
+            stages.join("structure.py"),
+            "import re\nimport os\n",
+        )
+        .unwrap();
+        fs::write(
+            stages.join("chords.py"),
+            "import os\n",
+        )
+        .unwrap();
+
+        let result = scan_project(dir.path(), "test-self-edge", true).unwrap();
+
+        let self_edges: Vec<_> = result
+            .dependencies
+            .iter()
+            .filter(|d| d.from_module_id == d.to_module_id)
+            .collect();
+        assert!(
+            self_edges.is_empty(),
+            "stdlib imports must not produce self-edges, got {:?}",
+            self_edges
+        );
+        assert!(
+            result.dependencies.is_empty(),
+            "stdlib-only imports must not produce any deps, got {:?}",
+            result.dependencies
+        );
     }
 }

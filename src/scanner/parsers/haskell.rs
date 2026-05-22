@@ -1,6 +1,6 @@
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct HaskellParser;
 
@@ -32,7 +32,7 @@ impl LanguageParser for HaskellParser {
         let candidate = format!("{}.hs", file_path);
         known_paths
             .iter()
-            .find(|p| p.ends_with(&candidate))
+            .find(|p| ends_with_segment(p, &candidate))
             .cloned()
     }
 }
