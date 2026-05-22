@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct RubyParser;
 
@@ -99,14 +99,14 @@ fn resolve_ruby_import(
 
     let source_dir = Path::new(source_file).parent()?;
     let resolved = normalize_path(&source_dir.join(&with_ext).to_string_lossy());
-    if let Some(found) = known_paths
-        .iter()
-        .find(|p| **p == resolved || p.ends_with(&resolved))
-    {
+    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &resolved)) {
         return Some(found.clone());
     }
 
-    known_paths.iter().find(|p| p.ends_with(&with_ext)).cloned()
+    known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &with_ext))
+        .cloned()
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

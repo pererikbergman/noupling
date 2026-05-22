@@ -1,6 +1,6 @@
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct SwiftParser;
 
@@ -29,7 +29,10 @@ impl LanguageParser for SwiftParser {
         known_paths: &[String],
     ) -> Option<String> {
         let filename = format!("{}.swift", import_path);
-        known_paths.iter().find(|p| p.ends_with(&filename)).cloned()
+        known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &filename))
+            .cloned()
     }
 }
 

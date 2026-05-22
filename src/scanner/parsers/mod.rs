@@ -30,6 +30,17 @@ pub struct ImportEntry {
     pub line_number: i32,
 }
 
+/// True when `path` ends with `candidate` on a `/`-separated segment boundary.
+///
+/// `"foo/bar.py".ends_with("bar.py")` is true under both this helper and the
+/// stdlib `ends_with`. The difference: `"structure.py".ends_with("re.py")` is
+/// true via stdlib but false here — a path suffix has to start at a segment
+/// boundary, not at an arbitrary byte. This prevents stdlib imports like
+/// `import re` from substring-matching unrelated project files.
+pub fn ends_with_segment(path: &str, candidate: &str) -> bool {
+    path == candidate || path.ends_with(&format!("/{}", candidate))
+}
+
 /// Common interface for all language adapters.
 ///
 /// # Contract
@@ -53,6 +64,34 @@ pub trait LanguageParser: Send + Sync {
         source_file: &str,
         known_paths: &[String],
     ) -> Option<String>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ends_with_segment;
+
+    #[test]
+    fn ends_with_segment_matches_exact_path() {
+        assert!(ends_with_segment("foo.py", "foo.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_matches_slash_boundary() {
+        assert!(ends_with_segment("src/pkg/foo.py", "pkg/foo.py"));
+        assert!(ends_with_segment("src/pkg/foo.py", "foo.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_rejects_mid_segment_suffix() {
+        assert!(!ends_with_segment("src/structure.py", "re.py"));
+        assert!(!ends_with_segment("src/chaos.py", "os.py"));
+        assert!(!ends_with_segment("src/figure.py", "re.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_rejects_partial_segment_match() {
+        assert!(!ends_with_segment("xfoo/bar.py", "foo/bar.py"));
+    }
 }
 
 /// Maps each supported file extension to its language adapter.

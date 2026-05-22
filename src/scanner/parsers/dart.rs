@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser};
 
 pub struct DartParser;
 
@@ -83,12 +83,15 @@ fn resolve_dart_import(
         let after_package = import_path.strip_prefix("package:")?;
         let after_name = after_package.split_once('/')?.1;
         let candidate = format!("lib/{}", after_name);
-        if let Some(found) = known_paths.iter().find(|p| p.ends_with(&candidate)) {
+        if let Some(found) = known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &candidate))
+        {
             return Some(found.clone());
         }
         return known_paths
             .iter()
-            .find(|p| p.ends_with(after_name))
+            .find(|p| ends_with_segment(p, after_name))
             .cloned();
     }
 
@@ -96,7 +99,7 @@ fn resolve_dart_import(
     let resolved = normalize_path(&source_dir.join(import_path).to_string_lossy());
     known_paths
         .iter()
-        .find(|p| **p == resolved || p.ends_with(&resolved))
+        .find(|p| ends_with_segment(p, &resolved))
         .cloned()
 }
 
