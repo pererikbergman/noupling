@@ -302,6 +302,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);
@@ -339,6 +340,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let dot = format_dot(&modules, &result);
@@ -373,6 +375,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let mermaid = format_mermaid(&modules, &result);

@@ -30,6 +30,17 @@ pub struct ImportEntry {
     pub line_number: i32,
 }
 
+/// Per-file count of abstract vs concrete type declarations.
+///
+/// Abstract = trait / interface / abstract class. Concrete = everything else
+/// that declares a named type (struct, enum, class, etc.). Used to compute the
+/// Martin abstractness metric `A = abstract / (abstract + concrete)` per directory.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TypeCounts {
+    pub abstract_count: usize,
+    pub concrete_count: usize,
+}
+
 /// True when `path` ends with `candidate` on a `/`-separated segment boundary.
 ///
 /// `"foo/bar.py".ends_with("bar.py")` is true under both this helper and the
@@ -64,6 +75,14 @@ pub trait LanguageParser: Send + Sync {
         source_file: &str,
         known_paths: &[String],
     ) -> Option<String>;
+
+    /// Count abstract vs concrete type declarations in the source.
+    ///
+    /// Default returns zeros; languages that participate in the abstractness
+    /// metric override this. See `TypeCounts`.
+    fn count_type_declarations(&self, _source: &str) -> TypeCounts {
+        TypeCounts::default()
+    }
 }
 
 #[cfg(test)]

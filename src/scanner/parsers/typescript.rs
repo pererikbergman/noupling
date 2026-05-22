@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ImportEntry, LanguageParser, TypeCounts};
 
 /// TypeScript adapter (`.ts` files).
 pub struct TypeScriptParser;
@@ -22,6 +22,10 @@ impl LanguageParser for TypeScriptParser {
     ) -> Option<String> {
         resolve_typescript_import(import_path, source_file, known_paths)
     }
+
+    fn count_type_declarations(&self, source: &str) -> TypeCounts {
+        count_typescript_types(source, false)
+    }
 }
 
 impl LanguageParser for TsxParser {
@@ -36,6 +40,44 @@ impl LanguageParser for TsxParser {
         known_paths: &[String],
     ) -> Option<String> {
         resolve_typescript_import(import_path, source_file, known_paths)
+    }
+
+    fn count_type_declarations(&self, source: &str) -> TypeCounts {
+        count_typescript_types(source, true)
+    }
+}
+
+fn count_typescript_types(source: &str, tsx: bool) -> TypeCounts {
+    let mut parser = Parser::new();
+    let lang: tree_sitter::Language = if tsx {
+        tree_sitter_typescript::LANGUAGE_TSX.into()
+    } else {
+        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+    };
+    parser
+        .set_language(&lang)
+        .expect("Failed to set TypeScript language");
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return TypeCounts::default(),
+    };
+    let mut counts = TypeCounts::default();
+    count_ts_types(tree.root_node(), source, &mut counts);
+    counts
+}
+
+fn count_ts_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCounts) {
+    match node.kind() {
+        "interface_declaration" => counts.abstract_count += 1,
+        "abstract_class_declaration" => counts.abstract_count += 1,
+        "class_declaration" => counts.concrete_count += 1,
+        "enum_declaration" => counts.concrete_count += 1,
+        _ => {}
+    }
+    let _ = source;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        count_ts_types(child, source, counts);
     }
 }
 
@@ -221,6 +263,22 @@ mod tests {
         let paths = ts_paths();
         let result = TypeScriptParser.resolve("./helpers", "src/utils/helpers.ts", &paths);
         assert_eq!(result, Some("src/utils/helpers.ts".to_string()));
+    }
+
+    #[test]
+    fn ts_counts_interface_abstract_class_and_concrete_class() {
+        let source = "interface I {}\nabstract class A {}\nclass C {}\nenum E {}\n";
+        let counts = TypeScriptParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 2, "got {:?}", counts);
+        assert_eq!(counts.concrete_count, 2, "got {:?}", counts);
+    }
+
+    #[test]
+    fn tsx_counts_match_ts_counts() {
+        let source = "interface I {}\nabstract class A {}\nclass C {}\n";
+        let counts = TsxParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 2);
+        assert_eq!(counts.concrete_count, 1);
     }
 
     #[test]

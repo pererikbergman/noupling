@@ -51,6 +51,7 @@ struct ReportData {
     score_green: f64,
     score_yellow: f64,
     critical_severity: f64,
+    abstractness: Vec<crate::analyzer::AbstractnessMetric>,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -340,6 +341,7 @@ fn build_report_data(
         score_green: settings.thresholds.score_green,
         score_yellow: settings.thresholds.score_yellow,
         critical_severity: settings.thresholds.critical_severity,
+        abstractness: result.abstractness.clone(),
     }
 }
 
@@ -757,6 +759,21 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         format!("{} - noupling Report", dir.name)
     };
 
+    // Root-page only: abstractness section (project-wide metric)
+    if is_root && !data.abstractness.is_empty() {
+        violations_html.push_str("<h2>Abstractness</h2>\n");
+        violations_html.push_str("<p class=\"section-hint\">Per-directory Martin abstractness A = abstract / (abstract + concrete). 0.0 = all concrete, 1.0 = all abstract.</p>\n");
+        violations_html.push_str("<table>\n");
+        violations_html.push_str("<tr><th>Directory</th><th class=\"center\">A</th><th class=\"center\">Abstract</th><th class=\"center\">Concrete</th></tr>\n");
+        for a in data.abstractness.iter().take(20) {
+            violations_html.push_str(&format!(
+                "<tr><td>{}</td><td class=\"center\">{:.2}</td><td class=\"center\">{}</td><td class=\"center\">{}</td></tr>\n",
+                a.dir, a.abstractness, a.abstract_count, a.concrete_count,
+            ));
+        }
+        violations_html.push_str("</table>\n");
+    }
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -1004,6 +1021,47 @@ mod tests {
     }
 
     #[test]
+    fn html_root_renders_abstractness_section() {
+        use crate::analyzer::AbstractnessMetric;
+        let modules = vec![make_module("a", "src/api/mod.rs")];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 1,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: vec![AbstractnessMetric {
+                dir: "src/api".into(),
+                abstract_count: 2,
+                concrete_count: 3,
+                abstractness: 0.4,
+            }],
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-x", dir.path(), &settings).unwrap();
+        let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
+        assert!(html.contains("<h2>Abstractness</h2>"), "missing header");
+        assert!(html.contains("src/api"), "missing dir name");
+        assert!(html.contains("0.40"), "missing A value");
+    }
+
+    #[test]
     fn generates_html_files() {
         let modules = vec![
             make_module("a", "src/scanner/mod.rs"),
@@ -1030,6 +1088,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1063,6 +1122,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1102,6 +1162,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1159,6 +1220,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();

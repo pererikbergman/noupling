@@ -15,8 +15,13 @@ pub fn run(action: &str, path: &str) -> anyhow::Result<()> {
             let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
             let project_settings = crate::settings::Settings::load(Path::new(path))?;
-            let result =
-                crate::analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
+            let type_counts = crate::scanner::recompute_type_counts(Path::new(path), &modules);
+            let result = crate::analyzer::audit_with_settings(
+                &modules,
+                &dependencies,
+                &type_counts,
+                &project_settings,
+            );
 
             crate::baseline::save_baseline(Path::new(path), &result)?;
         }

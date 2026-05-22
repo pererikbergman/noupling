@@ -78,8 +78,13 @@ pub fn run(
     }
 
     // Single-project mode (existing behavior)
-    let mut result =
-        crate::analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
+    let type_counts = crate::scanner::recompute_type_counts(std::path::Path::new(path), &modules);
+    let mut result = crate::analyzer::audit_with_settings(
+        &modules,
+        &dependencies,
+        &type_counts,
+        &project_settings,
+    );
     result.rule_violations = crate::analyzer::check_dependency_rules(
         &modules,
         &dependencies,

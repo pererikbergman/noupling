@@ -42,8 +42,10 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
 
+        // Historical snapshot — type counts can't be recomputed reliably from
+        // current source, so abstractness is intentionally empty in trend output.
         let result =
-            crate::analyzer::audit_with_settings(&modules, &dependencies, &project_settings);
+            crate::analyzer::audit_with_settings(&modules, &dependencies, &[], &project_settings);
 
         let delta = match prev_score {
             Some(prev) => {
@@ -103,7 +105,7 @@ fn run_by_module(
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
 
-        let result = crate::analyzer::audit_with_settings(&modules, &dependencies, settings);
+        let result = crate::analyzer::audit_with_settings(&modules, &dependencies, &[], settings);
 
         let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
         let mut dir_modules: BTreeMap<String, usize> = BTreeMap::new();

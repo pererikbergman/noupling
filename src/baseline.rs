@@ -167,6 +167,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         // Save baseline
@@ -195,6 +196,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
@@ -228,6 +230,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -256,6 +259,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
@@ -290,6 +294,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
         save_baseline(dir.path(), &baseline_result).unwrap();
 
@@ -315,6 +320,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);
