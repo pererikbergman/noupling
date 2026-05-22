@@ -238,16 +238,8 @@ mod tests {
         fs::create_dir_all(&stages).unwrap();
         // `structure.py` ends with the literal string "re.py" — before the resolver
         // fix, `import re` would substring-match this file and produce a self-edge.
-        fs::write(
-            stages.join("structure.py"),
-            "import re\nimport os\n",
-        )
-        .unwrap();
-        fs::write(
-            stages.join("chords.py"),
-            "import os\n",
-        )
-        .unwrap();
+        fs::write(stages.join("structure.py"), "import re\nimport os\n").unwrap();
+        fs::write(stages.join("chords.py"), "import os\n").unwrap();
 
         let result = scan_project(dir.path(), "test-self-edge", true).unwrap();
 

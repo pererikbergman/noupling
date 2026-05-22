@@ -119,11 +119,17 @@ fn resolve_python_import(
 
     let file_path = import_path.replace('.', "/");
     let candidate = format!("{}.py", file_path);
-    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &candidate))
+    {
         return Some(found.clone());
     }
     let candidate = format!("{}/__init__.py", file_path);
-    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &candidate))
+    {
         return Some(found.clone());
     }
     None
@@ -189,11 +195,8 @@ mod tests {
     #[test]
     fn python_resolver_resolves_exact_segment_match() {
         let known = vec!["src/wave2md/context.py".to_string()];
-        let result = PythonParser.resolve(
-            "wave2md.context",
-            "src/wave2md/stages/structure.py",
-            &known,
-        );
+        let result =
+            PythonParser.resolve("wave2md.context", "src/wave2md/stages/structure.py", &known);
         assert_eq!(result, Some("src/wave2md/context.py".to_string()));
     }
 }

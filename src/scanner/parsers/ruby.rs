@@ -99,10 +99,7 @@ fn resolve_ruby_import(
 
     let source_dir = Path::new(source_file).parent()?;
     let resolved = normalize_path(&source_dir.join(&with_ext).to_string_lossy());
-    if let Some(found) = known_paths
-        .iter()
-        .find(|p| ends_with_segment(p, &resolved))
-    {
+    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &resolved)) {
         return Some(found.clone());
     }
 

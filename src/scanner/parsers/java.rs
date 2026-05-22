@@ -80,14 +80,20 @@ fn resolve_java_import(import_path: &str, known_paths: &[String]) -> Option<Stri
 
     let file_path = segments.join("/");
     let candidate = format!("{}.java", file_path);
-    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &candidate))
+    {
         return Some(found.clone());
     }
 
     if segments.len() > 1 {
         let parent = segments[..segments.len() - 1].join("/");
         let candidate = format!("{}.java", parent);
-        if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+        if let Some(found) = known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &candidate))
+        {
             return Some(found.clone());
         }
     }

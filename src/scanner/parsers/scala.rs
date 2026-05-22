@@ -73,7 +73,10 @@ fn resolve_scala_import(import_path: &str, known_paths: &[String]) -> Option<Str
 
     for ext in &["scala", "sc"] {
         let candidate = format!("{}.{}", file_path, ext);
-        if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+        if let Some(found) = known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &candidate))
+        {
             return Some(found.clone());
         }
     }

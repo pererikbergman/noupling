@@ -72,7 +72,10 @@ fn resolve_go_import(import_path: &str, known_paths: &[String]) -> Option<String
         return Some(found.clone());
     }
     let candidate = format!("{}.go", import_path);
-    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &candidate))
+    {
         return Some(found.clone());
     }
     None

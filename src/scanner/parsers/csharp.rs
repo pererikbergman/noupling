@@ -79,14 +79,20 @@ fn resolve_csharp_import(import_path: &str, known_paths: &[String]) -> Option<St
 
     let file_path = segments.join("/");
     let candidate = format!("{}.cs", file_path);
-    if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+    if let Some(found) = known_paths
+        .iter()
+        .find(|p| ends_with_segment(p, &candidate))
+    {
         return Some(found.clone());
     }
 
     if segments.len() > 1 {
         let parent_path = segments[..segments.len() - 1].join("/");
         let candidate = format!("{}.cs", parent_path);
-        if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+        if let Some(found) = known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &candidate))
+        {
             return Some(found.clone());
         }
     }

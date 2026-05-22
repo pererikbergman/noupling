@@ -83,7 +83,10 @@ fn resolve_dart_import(
         let after_package = import_path.strip_prefix("package:")?;
         let after_name = after_package.split_once('/')?.1;
         let candidate = format!("lib/{}", after_name);
-        if let Some(found) = known_paths.iter().find(|p| ends_with_segment(p, &candidate)) {
+        if let Some(found) = known_paths
+            .iter()
+            .find(|p| ends_with_segment(p, &candidate))
+        {
             return Some(found.clone());
         }
         return known_paths
