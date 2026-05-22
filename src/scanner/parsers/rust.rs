@@ -1,7 +1,7 @@
 use std::path::Path;
 use tree_sitter::Parser;
 
-use super::{ImportEntry, LanguageParser};
+use super::{ImportEntry, LanguageParser, TypeCounts};
 
 pub struct RustParser;
 
@@ -29,6 +29,32 @@ impl LanguageParser for RustParser {
         known_paths: &[String],
     ) -> Option<String> {
         resolve_rust_import(import_path, source_file, known_paths)
+    }
+
+    fn count_type_declarations(&self, source: &str) -> TypeCounts {
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .expect("Failed to set Rust language");
+        let tree = match parser.parse(source, None) {
+            Some(t) => t,
+            None => return TypeCounts::default(),
+        };
+        let mut counts = TypeCounts::default();
+        count_rust_types(tree.root_node(), &mut counts);
+        counts
+    }
+}
+
+fn count_rust_types(node: tree_sitter::Node, counts: &mut TypeCounts) {
+    match node.kind() {
+        "trait_item" => counts.abstract_count += 1,
+        "struct_item" | "enum_item" | "union_item" => counts.concrete_count += 1,
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        count_rust_types(child, counts);
     }
 }
 
@@ -295,6 +321,14 @@ mod tests {
     }
 
     // Parser tests
+
+    #[test]
+    fn counts_one_trait_one_struct() {
+        let source = "pub trait T {}\npub struct S {}\n";
+        let counts = RustParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 1);
+        assert_eq!(counts.concrete_count, 1);
+    }
 
     #[test]
     fn parses_simple_use() {

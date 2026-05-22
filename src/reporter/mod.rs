@@ -44,6 +44,7 @@ pub struct JsonReport {
     pub gravity_wells: Vec<JsonGravityWell>,
     pub red_flags: Vec<JsonRedFlag>,
     pub directory_tree: Vec<JsonDirectory>,
+    pub abstractness: Vec<JsonAbstractness>,
 }
 
 #[derive(Serialize)]
@@ -83,6 +84,14 @@ pub struct JsonHotspot {
     pub path: String,
     pub fan_in: usize,
     pub fan_out: usize,
+}
+
+#[derive(Serialize)]
+pub struct JsonAbstractness {
+    pub dir: String,
+    pub abstract_count: usize,
+    pub concrete_count: usize,
+    pub abstractness: f64,
 }
 
 #[derive(Serialize)]
@@ -282,6 +291,16 @@ impl JsonReport {
                 })
                 .collect(),
             directory_tree,
+            abstractness: result
+                .abstractness
+                .iter()
+                .map(|a| JsonAbstractness {
+                    dir: a.dir.clone(),
+                    abstract_count: a.abstract_count,
+                    concrete_count: a.concrete_count,
+                    abstractness: a.abstractness,
+                })
+                .collect(),
         }
     }
 
@@ -909,6 +928,17 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Abstractness per directory
+    if !result.abstractness.is_empty() {
+        output.push_str("\nAbstractness:\n");
+        for a in result.abstractness.iter().take(10) {
+            output.push_str(&format!(
+                "  {:.2} {} ({} abstract, {} concrete)\n",
+                a.abstractness, a.dir, a.abstract_count, a.concrete_count
+            ));
+        }
+    }
+
     // Module independence
     let low_independence: Vec<_> = result
         .independence
@@ -1520,6 +1550,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -1558,6 +1589,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -1593,6 +1625,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -1622,6 +1655,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1653,11 +1687,115 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let text = format_text(&result);
         assert!(text.contains("Health Score: 100.0/100"));
         assert!(text.contains("Violations: 0"));
+    }
+
+    #[test]
+    fn json_report_includes_abstractness() {
+        use crate::analyzer::AbstractnessMetric;
+        let modules = vec![];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: vec![AbstractnessMetric {
+                dir: "src/api".into(),
+                abstract_count: 1,
+                concrete_count: 4,
+                abstractness: 0.2,
+            }],
+        };
+
+        let report = JsonReport::from_audit(&modules, &result, "snap-z");
+        let json = report.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let arr = parsed["abstractness"]
+            .as_array()
+            .expect("abstractness array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["dir"], "src/api");
+        assert_eq!(arr[0]["abstract_count"], 1);
+        assert_eq!(arr[0]["concrete_count"], 4);
+        let a = arr[0]["abstractness"].as_f64().unwrap();
+        assert!((a - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn text_format_includes_abstractness_section() {
+        use crate::analyzer::AbstractnessMetric;
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: vec![AbstractnessMetric {
+                dir: "src/api".into(),
+                abstract_count: 2,
+                concrete_count: 3,
+                abstractness: 0.4,
+            }],
+        };
+
+        let text = format_text(&result);
+        assert!(
+            text.contains("Abstractness:"),
+            "missing section header: {}",
+            text
+        );
+        assert!(text.contains("src/api"), "missing dir: {}", text);
+        assert!(
+            text.contains("0.40"),
+            "missing abstractness value: {}",
+            text
+        );
+        assert!(
+            text.contains("2 abstract"),
+            "missing abstract count: {}",
+            text
+        );
+        assert!(
+            text.contains("3 concrete"),
+            "missing concrete count: {}",
+            text
+        );
     }
 
     #[test]
@@ -1684,6 +1822,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -1723,6 +1862,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1754,6 +1894,7 @@ mod tests {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

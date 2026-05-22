@@ -5,6 +5,7 @@
 
 use crate::core::{Dependency, Module};
 
+mod abstractness;
 mod actions;
 mod cohesion;
 mod coupling;
@@ -22,6 +23,7 @@ mod violation_age;
 
 pub use direction::DependencyDirection;
 
+pub use abstractness::{compute_abstractness, AbstractnessMetric};
 pub use actions::compute_top_actions;
 #[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
 pub use actions::TopAction;
@@ -84,6 +86,8 @@ pub struct AuditResult {
     pub external_deps: Vec<ExternalDepMetric>,
     /// Total external import count across all modules.
     pub total_external_imports: usize,
+    /// Per-directory abstractness metric (Martin's A).
+    pub abstractness: Vec<AbstractnessMetric>,
 }
 
 impl AuditResult {
@@ -254,6 +258,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             red_flags: Vec::new(),
             external_deps: Vec::new(),
             total_external_imports: 0,
+            abstractness: Vec::new(),
         };
     }
 
@@ -305,6 +310,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         red_flags: Vec::new(),
         external_deps: Vec::new(),
         total_external_imports: 0,
+        abstractness: Vec::new(),
     }
 }
 
@@ -321,9 +327,11 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
 pub fn audit_with_settings(
     modules: &[Module],
     dependencies: &[Dependency],
+    type_counts: &[crate::scanner::ModuleTypeCounts],
     settings: &crate::settings::Settings,
 ) -> AuditResult {
     let mut result = audit(modules, dependencies);
+    result.abstractness = compute_abstractness(modules, type_counts);
     result.filter_by_severity(settings.thresholds.minimum_severity);
     result.apply_coupling_mode(settings.effective_coupling_mode());
     result.apply_risk_weights(&settings.risk_weights);

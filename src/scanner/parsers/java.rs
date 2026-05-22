@@ -1,6 +1,6 @@
 use tree_sitter::Parser;
 
-use super::{ends_with_segment, ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser, TypeCounts};
 
 pub struct JavaParser;
 
@@ -30,6 +30,54 @@ impl LanguageParser for JavaParser {
     ) -> Option<String> {
         resolve_java_import(import_path, known_paths)
     }
+
+    fn count_type_declarations(&self, source: &str) -> TypeCounts {
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_java::LANGUAGE.into())
+            .expect("Failed to set Java language");
+        let tree = match parser.parse(source, None) {
+            Some(t) => t,
+            None => return TypeCounts::default(),
+        };
+        let mut counts = TypeCounts::default();
+        count_java_types(tree.root_node(), source, &mut counts);
+        counts
+    }
+}
+
+fn count_java_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCounts) {
+    match node.kind() {
+        "interface_declaration" => counts.abstract_count += 1,
+        "class_declaration" => {
+            if class_has_abstract_modifier(node, source) {
+                counts.abstract_count += 1;
+            } else {
+                counts.concrete_count += 1;
+            }
+        }
+        "enum_declaration" | "record_declaration" => counts.concrete_count += 1,
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        count_java_types(child, source, counts);
+    }
+}
+
+fn class_has_abstract_modifier(node: tree_sitter::Node, source: &str) -> bool {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "modifiers" {
+            let mut mcursor = child.walk();
+            for m in child.children(&mut mcursor) {
+                if &source[m.byte_range()] == "abstract" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn collect_java_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
@@ -105,6 +153,14 @@ fn resolve_java_import(import_path: &str, known_paths: &[String]) -> Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn java_counts_interface_and_abstract_class_and_concrete_class() {
+        let source = "interface I {} abstract class A {} class C {} enum E {}";
+        let counts = JavaParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 2);
+        assert_eq!(counts.concrete_count, 2);
+    }
 
     #[test]
     fn java_parses_import() {

@@ -49,8 +49,13 @@ pub fn run(
         (modules, dependencies)
     };
 
-    let mut result =
-        crate::analyzer::audit_with_settings(&report_modules, &report_deps, &project_settings);
+    let type_counts = crate::scanner::recompute_type_counts(Path::new(path), &report_modules);
+    let mut result = crate::analyzer::audit_with_settings(
+        &report_modules,
+        &report_deps,
+        &type_counts,
+        &project_settings,
+    );
     result.rule_violations = crate::analyzer::check_dependency_rules(
         &report_modules,
         &report_deps,
@@ -173,6 +178,7 @@ pub fn run(
                 let prev_result = crate::analyzer::audit_with_settings(
                     &prev_modules,
                     &prev_deps,
+                    &[],
                     &project_settings,
                 );
                 (Some(prev_result.score), Some(prev_result.violations.len()))

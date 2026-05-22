@@ -424,7 +424,7 @@ fn audit_with_settings_matches_manual_pipeline() {
     ];
     let settings = crate::settings::Settings::default();
 
-    let auto = audit_with_settings(&modules, &deps, &settings);
+    let auto = audit_with_settings(&modules, &deps, &[], &settings);
 
     let mut manual = audit(&modules, &deps);
     manual.filter_by_severity(settings.thresholds.minimum_severity);
@@ -446,6 +446,44 @@ fn audit_with_settings_matches_manual_pipeline() {
 #[test]
 fn audit_with_settings_empty_project_scores_100() {
     let settings = crate::settings::Settings::default();
-    let result = audit_with_settings(&[], &[], &settings);
+    let result = audit_with_settings(&[], &[], &[], &settings);
     assert!((result.score - 100.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn audit_with_settings_populates_abstractness_from_type_counts() {
+    use crate::scanner::parsers::TypeCounts;
+    use crate::scanner::ModuleTypeCounts;
+
+    let modules = vec![
+        make_module("a", "src/foo.rs"),
+        make_module("b", "src/bar.rs"),
+    ];
+    let deps = vec![];
+    let type_counts = vec![
+        ModuleTypeCounts {
+            module_path: "src/foo.rs".into(),
+            counts: TypeCounts {
+                abstract_count: 1,
+                concrete_count: 0,
+            },
+        },
+        ModuleTypeCounts {
+            module_path: "src/bar.rs".into(),
+            counts: TypeCounts {
+                abstract_count: 0,
+                concrete_count: 1,
+            },
+        },
+    ];
+    let settings = crate::settings::Settings::default();
+
+    let result = audit_with_settings(&modules, &deps, &type_counts, &settings);
+
+    assert_eq!(result.abstractness.len(), 1);
+    let src = &result.abstractness[0];
+    assert_eq!(src.dir, "src");
+    assert_eq!(src.abstract_count, 1);
+    assert_eq!(src.concrete_count, 1);
+    assert!((src.abstractness - 0.5).abs() < 1e-9);
 }

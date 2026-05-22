@@ -1,6 +1,6 @@
 use tree_sitter::Parser;
 
-use super::{ends_with_segment, ImportEntry, LanguageParser};
+use super::{ends_with_segment, ImportEntry, LanguageParser, TypeCounts};
 
 pub struct KotlinParser;
 
@@ -30,6 +30,75 @@ impl LanguageParser for KotlinParser {
     ) -> Option<String> {
         resolve_kotlin_import(import_path, known_paths)
     }
+
+    fn count_type_declarations(&self, source: &str) -> TypeCounts {
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_kotlin_ng::LANGUAGE.into())
+            .expect("Failed to set Kotlin language");
+        let tree = match parser.parse(source, None) {
+            Some(t) => t,
+            None => return TypeCounts::default(),
+        };
+        let mut counts = TypeCounts::default();
+        count_kotlin_types(tree.root_node(), source, &mut counts);
+        counts
+    }
+}
+
+fn count_kotlin_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCounts) {
+    match node.kind() {
+        // tree-sitter-kotlin-ng folds both `interface` and `class` into
+        // `class_declaration`; the keyword child is the discriminant.
+        "class_declaration" => {
+            if kotlin_decl_is_interface(node) || kotlin_class_has_abstract_modifier(node) {
+                counts.abstract_count += 1;
+            } else {
+                counts.concrete_count += 1;
+            }
+        }
+        "object_declaration" => counts.concrete_count += 1,
+        _ => {}
+    }
+    let _ = source;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        count_kotlin_types(child, source, counts);
+    }
+}
+
+fn kotlin_decl_is_interface(node: tree_sitter::Node) -> bool {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "interface" {
+            return true;
+        }
+        if child.kind() == "class" {
+            return false;
+        }
+    }
+    false
+}
+
+fn kotlin_class_has_abstract_modifier(node: tree_sitter::Node) -> bool {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "modifiers" {
+            let mut mcursor = child.walk();
+            for m in child.children(&mut mcursor) {
+                let mut sub = m.walk();
+                for inner in m.children(&mut sub) {
+                    if inner.kind() == "abstract" {
+                        return true;
+                    }
+                }
+                if m.kind() == "abstract" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn collect_kotlin_imports(node: tree_sitter::Node, source: &str, imports: &mut Vec<ImportEntry>) {
@@ -130,6 +199,14 @@ mod tests {
         assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].path, "com.example.MyClass");
         assert_eq!(imports[0].line_number, 1);
+    }
+
+    #[test]
+    fn kotlin_counts_interface_abstract_class_and_concrete_class() {
+        let source = "interface I {}\nabstract class A {}\nclass C {}\nobject O {}\n";
+        let counts = KotlinParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 2, "got {:?}", counts);
+        assert_eq!(counts.concrete_count, 2, "got {:?}", counts);
     }
 
     #[test]

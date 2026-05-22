@@ -34,6 +34,15 @@ pub struct ExternalImportCount {
     pub count: usize,
 }
 
+/// Per-module count of abstract vs concrete type declarations.
+///
+/// Emitted by the scanner alongside dependencies; consumed by
+/// `analyzer::compute_abstractness` to derive per-directory abstractness.
+pub struct ModuleTypeCounts {
+    pub module_path: String,
+    pub counts: parsers::TypeCounts,
+}
+
 /// Check if an import line is suppressed by a `noupling:ignore` comment.
 /// Checks the import line itself for an inline comment, and the line above
 /// if it is a standalone comment line (starts with //, #, or --).
@@ -57,6 +66,38 @@ fn is_suppressed(source: &str, line_number: i32) -> bool {
     }
 
     false
+}
+
+/// Recompute per-module type counts for the current source files.
+///
+/// Used by commands that load modules from SQLite (which doesn't persist
+/// type counts) but need to feed abstractness analysis. Re-reads each
+/// source file and invokes the language adapter's `count_type_declarations`.
+/// Modules whose source files can't be read, or whose extension has no
+/// adapter, are silently skipped.
+pub fn recompute_type_counts(root: &Path, modules: &[Module]) -> Vec<ModuleTypeCounts> {
+    let registry = parsers::registry();
+    let ext_map: HashMap<&str, &dyn parsers::LanguageParser> = registry
+        .iter()
+        .map(|(ext, adapter)| (*ext, adapter.as_ref()))
+        .collect();
+    modules
+        .par_iter()
+        .filter_map(|m| {
+            let rel = Path::new(&m.path);
+            let ext = rel.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let adapter = ext_map.get(ext)?;
+            let source = std::fs::read_to_string(root.join(rel)).ok()?;
+            let counts = adapter.count_type_declarations(&source);
+            if counts.abstract_count + counts.concrete_count == 0 {
+                return None;
+            }
+            Some(ModuleTypeCounts {
+                module_path: m.path.clone(),
+                counts,
+            })
+        })
+        .collect()
 }
 
 pub fn scan_project(
@@ -228,6 +269,25 @@ mod tests {
         let source = "use crate::foo;\nuse crate::bar;\n";
         assert!(!is_suppressed(source, 1));
         assert!(!is_suppressed(source, 2));
+    }
+
+    #[test]
+    fn recompute_type_counts_finds_rust_trait_and_struct() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("lib.rs"), "pub trait T {}\npub struct S {}\n").unwrap();
+
+        let result = scan_project(dir.path(), "test-types", true).unwrap();
+        let counts = recompute_type_counts(dir.path(), &result.modules);
+
+        let lib_counts = counts
+            .iter()
+            .find(|t| t.module_path.ends_with("src/lib.rs"))
+            .expect("expected type counts for src/lib.rs");
+        assert_eq!(lib_counts.counts.abstract_count, 1);
+        assert_eq!(lib_counts.counts.concrete_count, 1);
     }
 
     #[test]
