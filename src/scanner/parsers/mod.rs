@@ -30,16 +30,7 @@ pub struct ImportEntry {
     pub line_number: i32,
 }
 
-/// Per-file count of abstract vs concrete type declarations.
-///
-/// Abstract = trait / interface / abstract class. Concrete = everything else
-/// that declares a named type (struct, enum, class, etc.). Used to compute the
-/// Martin abstractness metric `A = abstract / (abstract + concrete)` per directory.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TypeCounts {
-    pub abstract_count: usize,
-    pub concrete_count: usize,
-}
+pub use crate::core::TypeCounts;
 
 /// True when `path` ends with `candidate` on a `/`-separated segment boundary.
 ///

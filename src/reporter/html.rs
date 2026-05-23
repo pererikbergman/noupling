@@ -1033,8 +1033,8 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::AuditResultBuilder;
     use crate::analyzer::CouplingViolation;
-    use crate::analyzer::ViolationAgeSummary;
     use crate::core::ModuleType;
 
     fn make_module(id: &str, path: &str) -> Module {
@@ -1057,36 +1057,15 @@ mod tests {
     fn html_root_renders_stability_violations_section() {
         use crate::analyzer::StabilityViolation;
         let modules = vec![make_module("a", "src/api/mod.rs")];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 1,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: vec![StabilityViolation {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(1)
+            .with_stability_violations(vec![StabilityViolation {
                 from_dir: "src/stable".into(),
                 to_dir: "src/unstable".into(),
                 from_instability: 0.17,
                 to_instability: 0.83,
-            }],
-        };
+            }])
+            .build();
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
         generate_html_report(&modules, &result, "snap-sv", dir.path(), &settings).unwrap();
@@ -1103,36 +1082,15 @@ mod tests {
             make_module("a", "src/app/main.rs"),
             make_module("b", "src/core/lib.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: vec![InstabilityMetric {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(2)
+            .with_instability(vec![InstabilityMetric {
                 dir: "src/app".into(),
                 ca: 0,
                 ce: 1,
                 instability: 1.0,
-            }],
-            stability_violations: Vec::new(),
-        };
+            }])
+            .build();
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
         generate_html_report(&modules, &result, "snap-i", dir.path(), &settings).unwrap();
@@ -1149,36 +1107,15 @@ mod tests {
     fn html_root_renders_abstractness_section() {
         use crate::analyzer::AbstractnessMetric;
         let modules = vec![make_module("a", "src/api/mod.rs")];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 1,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: vec![AbstractnessMetric {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(1)
+            .with_abstractness(vec![AbstractnessMetric {
                 dir: "src/api".into(),
                 abstract_count: 2,
                 concrete_count: 3,
                 abstractness: 0.4,
-            }],
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            }])
+            .build();
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
         generate_html_report(&modules, &result, "snap-x", dir.path(), &settings).unwrap();
@@ -1194,31 +1131,7 @@ mod tests {
             make_module("a", "src/scanner/mod.rs"),
             make_module("b", "src/storage/mod.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(2).build();
 
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
@@ -1230,31 +1143,10 @@ mod tests {
     #[test]
     fn html_contains_score() {
         let modules = vec![make_module("a", "src/mod.rs")];
-        let result = AuditResult {
-            violations: vec![],
-            score: 95.5,
-            tri: 0.0,
-            total_modules: 1,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_score(95.5)
+            .with_total_modules(1)
+            .build();
 
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
@@ -1272,31 +1164,7 @@ mod tests {
             make_module("b", "src/scanner/resolver.rs"),
             make_module("c", "src/storage/db.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 3,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(3).build();
 
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
@@ -1314,8 +1182,8 @@ mod tests {
             make_module("a", "src/scanner/mod.rs"),
             make_module("b", "src/storage/mod.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![CouplingViolation {
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![CouplingViolation {
                 dir_a: "src/scanner".to_string(),
                 dir_b: "src/storage".to_string(),
                 from_module: "src/scanner/mod.rs".to_string(),
@@ -1333,30 +1201,10 @@ mod tests {
                 break_cost: 0,
                 line_number: 0,
                 weight: 0,
-            }],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            }])
+            .with_score(75.0)
+            .with_total_modules(2)
+            .build();
 
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();

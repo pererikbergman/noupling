@@ -8,7 +8,7 @@
 use fxhash::FxHashMap;
 
 use crate::core::Module;
-use crate::scanner::ModuleTypeCounts;
+use crate::core::ModuleTypeCounts;
 
 /// Abstractness metric for a directory.
 #[derive(Debug, Clone)]
@@ -73,8 +73,8 @@ pub fn compute_abstractness(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::TypeCounts;
     use crate::core::{Module, ModuleType};
-    use crate::scanner::parsers::TypeCounts;
 
     fn file_module(path: &str) -> Module {
         Module {

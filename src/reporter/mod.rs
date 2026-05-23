@@ -1564,7 +1564,7 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::ViolationAgeSummary;
+    use crate::analyzer::AuditResultBuilder;
 
     fn make_violation(from: &str, to: &str, severity: f64, depth: i32) -> CouplingViolation {
         CouplingViolation {
@@ -1591,31 +1591,11 @@ mod tests {
     #[test]
     fn json_report_has_required_fields() {
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![make_violation("a.rs", "b.rs", 1.0, 0)],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![make_violation("a.rs", "b.rs", 1.0, 0)])
+            .with_score(50.0)
+            .with_total_modules(2)
+            .build();
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
         let json = report.to_json().unwrap();
@@ -1632,31 +1612,7 @@ mod tests {
     #[test]
     fn json_report_valid_json() {
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 5,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(5).build();
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
         let json = report.to_json().unwrap();
@@ -1666,35 +1622,15 @@ mod tests {
     #[test]
     fn critical_violations_counts_high_severity() {
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![
                 make_violation("a.rs", "b.rs", 1.0, 0),
                 make_violation("c.rs", "d.rs", 0.5, 1),
                 make_violation("e.rs", "f.rs", 0.25, 2),
-            ],
-            score: 42.0,
-            tri: 0.0,
-            total_modules: 6,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            ])
+            .with_score(42.0)
+            .with_total_modules(6)
+            .build();
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
         assert_eq!(report.critical_violations, 2);
@@ -1702,31 +1638,16 @@ mod tests {
 
     #[test]
     fn text_format_shows_score_and_violations() {
-        let result = AuditResult {
-            violations: vec![make_violation("scanner/mod.rs", "storage/mod.rs", 0.5, 1)],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![make_violation(
+                "scanner/mod.rs",
+                "storage/mod.rs",
+                0.5,
+                1,
+            )])
+            .with_score(75.0)
+            .with_total_modules(4)
+            .build();
 
         let text = format_text(&result);
         assert!(text.contains("Health Score: 75.0/100"));
@@ -1736,31 +1657,7 @@ mod tests {
 
     #[test]
     fn text_format_clean_when_no_violations() {
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(4).build();
 
         let text = format_text(&result);
         assert!(text.contains("Health Score: 100.0/100"));
@@ -1771,36 +1668,15 @@ mod tests {
     fn json_report_includes_stability_violations() {
         use crate::analyzer::StabilityViolation;
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: vec![StabilityViolation {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_stability_violations(vec![StabilityViolation {
                 from_dir: "src/stable".into(),
                 to_dir: "src/unstable".into(),
                 from_instability: 0.17,
                 to_instability: 0.83,
-            }],
-        };
+            }])
+            .build();
         let report = JsonReport::from_audit(&modules, &result, "snap-s");
         let json = report.to_json().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -1816,36 +1692,15 @@ mod tests {
     fn json_report_includes_instability() {
         use crate::analyzer::InstabilityMetric;
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: vec![InstabilityMetric {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_instability(vec![InstabilityMetric {
                 dir: "src/core".into(),
                 ca: 5,
                 ce: 1,
                 instability: 1.0 / 6.0,
-            }],
-            stability_violations: Vec::new(),
-        };
+            }])
+            .build();
 
         let report = JsonReport::from_audit(&modules, &result, "snap-z");
         let json = report.to_json().unwrap();
@@ -1863,36 +1718,15 @@ mod tests {
     fn json_report_includes_abstractness() {
         use crate::analyzer::AbstractnessMetric;
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: vec![AbstractnessMetric {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_abstractness(vec![AbstractnessMetric {
                 dir: "src/api".into(),
                 abstract_count: 1,
                 concrete_count: 4,
                 abstractness: 0.2,
-            }],
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            }])
+            .build();
 
         let report = JsonReport::from_audit(&modules, &result, "snap-z");
         let json = report.to_json().unwrap();
@@ -1911,36 +1745,15 @@ mod tests {
     #[test]
     fn text_format_includes_stability_violations() {
         use crate::analyzer::StabilityViolation;
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: vec![StabilityViolation {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_stability_violations(vec![StabilityViolation {
                 from_dir: "src/stable".into(),
                 to_dir: "src/unstable".into(),
                 from_instability: 0.17,
                 to_instability: 0.83,
-            }],
-        };
+            }])
+            .build();
         let text = format_text(&result);
         assert!(
             text.contains("Stability Violations:"),
@@ -1956,29 +1769,9 @@ mod tests {
     #[test]
     fn text_format_includes_instability_section() {
         use crate::analyzer::InstabilityMetric;
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: vec![
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_instability(vec![
                 InstabilityMetric {
                     dir: "src/app".into(),
                     ca: 0,
@@ -1991,9 +1784,8 @@ mod tests {
                     ce: 0,
                     instability: 0.0,
                 },
-            ],
-            stability_violations: Vec::new(),
-        };
+            ])
+            .build();
 
         let text = format_text(&result);
         assert!(text.contains("Instability:"), "missing header: {}", text);
@@ -2007,36 +1799,15 @@ mod tests {
     #[test]
     fn text_format_includes_abstractness_section() {
         use crate::analyzer::AbstractnessMetric;
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: vec![AbstractnessMetric {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_abstractness(vec![AbstractnessMetric {
                 dir: "src/api".into(),
                 abstract_count: 2,
                 concrete_count: 3,
                 abstractness: 0.4,
-            }],
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            }])
+            .build();
 
         let text = format_text(&result);
         assert!(
@@ -2065,31 +1836,7 @@ mod tests {
     #[test]
     fn markdown_has_heading_and_summary_table() {
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 5,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(5).build();
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
         assert!(md.contains("# noupling Audit Report"));
@@ -2107,31 +1854,11 @@ mod tests {
             "dir_b".to_string(),
             "dir_a".to_string(),
         ];
-        let result = AuditResult {
-            violations: vec![v],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![v])
+            .with_score(50.0)
+            .with_total_modules(2)
+            .build();
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
         assert!(md.contains("## Circular Dependencies"));
@@ -2141,31 +1868,7 @@ mod tests {
     #[test]
     fn markdown_has_directory_tree() {
         let modules = vec![];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 3,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(3).build();
 
         let md = _format_markdown_single(&modules, &result, "snap-4");
         assert!(md.contains("## Directory Tree"));

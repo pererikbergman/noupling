@@ -7,6 +7,43 @@ use super::AuditResult;
 use super::DependencyDirection;
 use crate::core::{Dependency, Module};
 
+/// Compiled layer-pattern index. Holds one `GlobMatcher` per layer (in their
+/// configured order) and answers "which layer is this path in?" without
+/// recompiling globs on every call.
+///
+/// Existed because `check_layer_rules`, `AuditResult::filter_by_layers`, and
+/// `AuditResult::apply_layer_weights` previously each compiled their own
+/// matcher vec and walked it independently. Now there is one place to fix a
+/// layer-matching bug or change the resolution rule.
+pub(super) struct LayerIndex<'a> {
+    matchers: Vec<(usize, &'a str, globset::GlobMatcher)>,
+}
+
+impl<'a> LayerIndex<'a> {
+    pub(super) fn new(layers: &'a [crate::settings::Layer]) -> Self {
+        let matchers = layers
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| {
+                globset::Glob::new(&l.pattern)
+                    .ok()
+                    .map(|g| (i, l.name.as_str(), g.compile_matcher()))
+            })
+            .collect();
+        LayerIndex { matchers }
+    }
+
+    /// First layer whose pattern matches `path`, or `None`.
+    pub(super) fn layer_of(&self, path: &str) -> Option<(usize, &'a str)> {
+        for (idx, name, matcher) in &self.matchers {
+            if matcher.is_match(path) {
+                return Some((*idx, name));
+            }
+        }
+        None
+    }
+}
+
 /// A violation of architectural layer ordering.
 #[derive(Debug, Clone)]
 pub struct LayerViolation {
@@ -33,30 +70,17 @@ pub fn check_layer_rules(
         return Vec::new();
     }
 
-    // Build glob matchers for each layer
-    let layer_matchers: Vec<(usize, &str, globset::GlobMatcher)> = layers
-        .iter()
-        .enumerate()
-        .filter_map(|(i, l)| {
-            globset::Glob::new(&l.pattern)
-                .ok()
-                .map(|g| (i, l.name.as_str(), g.compile_matcher()))
-        })
-        .collect();
+    let index = LayerIndex::new(layers);
 
     let id_to_path: FxHashMap<&str, &str> = modules
         .iter()
         .map(|m| (m.id.as_str(), m.path.as_str()))
         .collect();
 
-    // Assign each module to a layer (first matching pattern wins)
     let mut module_layer: FxHashMap<&str, (usize, &str)> = FxHashMap::default();
     for module in modules {
-        for (idx, name, matcher) in &layer_matchers {
-            if matcher.is_match(&module.path) {
-                module_layer.insert(module.id.as_str(), (*idx, name));
-                break;
-            }
+        if let Some(layer) = index.layer_of(&module.path) {
+            module_layer.insert(module.id.as_str(), layer);
         }
     }
 
@@ -97,25 +121,7 @@ impl AuditResult {
             return;
         }
 
-        // Build layer matchers and index
-        let layer_matchers: Vec<(usize, globset::GlobMatcher)> = layers
-            .iter()
-            .enumerate()
-            .filter_map(|(i, l)| {
-                globset::Glob::new(&l.pattern)
-                    .ok()
-                    .map(|g| (i, g.compile_matcher()))
-            })
-            .collect();
-
-        let get_layer = |path: &str| -> Option<usize> {
-            for (idx, matcher) in &layer_matchers {
-                if matcher.is_match(path) {
-                    return Some(*idx);
-                }
-            }
-            None
-        };
+        let index = LayerIndex::new(layers);
 
         self.violations.retain(|v| {
             // Always keep circular violations
@@ -123,13 +129,13 @@ impl AuditResult {
                 return true;
             }
 
-            let from_layer = get_layer(&v.from_module);
-            let to_layer = get_layer(&v.to_module);
+            let from_idx = index.layer_of(&v.from_module).map(|(i, _)| i);
+            let to_idx = index.layer_of(&v.to_module).map(|(i, _)| i);
 
-            match (from_layer, to_layer) {
+            match (from_idx, to_idx) {
                 // Both have layers: suppress downward deps (from_idx < to_idx)
                 // Keep: same layer (from_idx == to_idx) or upward (from_idx > to_idx)
-                (Some(from_idx), Some(to_idx)) => from_idx >= to_idx,
+                (Some(from), Some(to)) => from >= to,
                 // One or both unassigned: keep the violation
                 _ => true,
             }
@@ -144,34 +150,8 @@ impl AuditResult {
         if layers.is_empty() {
             return;
         }
-        let matchers: Vec<_> = layers
-            .iter()
-            .filter_map(|l| {
-                globset::Glob::new(&l.pattern)
-                    .ok()
-                    .and_then(|g| g.compile_matcher().into())
-            })
-            .collect();
 
-        fn find_layer_idx(
-            path: &str,
-            layers: &[crate::settings::Layer],
-            matchers: &[globset::GlobMatcher],
-        ) -> Option<usize> {
-            for (i, matcher) in matchers.iter().enumerate() {
-                if matcher.is_match(path) || layers[i].pattern.contains(&extract_dir(path)) {
-                    return Some(i);
-                }
-            }
-            None
-        }
-
-        fn extract_dir(path: &str) -> String {
-            std::path::Path::new(path)
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default()
-        }
+        let index = LayerIndex::new(layers);
 
         // Adjust sibling violations in allow_sibling layers
         for v in self
@@ -182,8 +162,8 @@ impl AuditResult {
             if v.direction != DependencyDirection::Sibling {
                 continue;
             }
-            let from_layer = find_layer_idx(&v.from_module, layers, &matchers);
-            let to_layer = find_layer_idx(&v.to_module, layers, &matchers);
+            let from_layer = index.layer_of(&v.from_module).map(|(i, _)| i);
+            let to_layer = index.layer_of(&v.to_module).map(|(i, _)| i);
 
             // Both in the same layer that allows siblings → reduced weight
             if let (Some(fi), Some(ti)) = (from_layer, to_layer) {

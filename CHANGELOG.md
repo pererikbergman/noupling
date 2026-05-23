@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`TypeCounts` and `ModuleTypeCounts` moved to `core`**: The abstractness work in #215 introduced 4 layer violations by importing scanner-layer types into the analyzer layer. Moved both types to `core::{TypeCounts, ModuleTypeCounts}` so the analyzer can consume them without crossing layers. `scanner::parsers::TypeCounts` and `scanner::ModuleTypeCounts` remain available as re-exports. Brings the project's own health score back to 100/100.
+- **`AuditResultBuilder` for test construction**: New test-only builder in `analyzer/mod.rs` with `with_*` methods and sensible defaults (empty vecs, `score: 100.0`). Existing tests construct ~25-field literals by hand; the builder lets each test specify only what it asserts on. Converted ~37 sites across `baseline.rs`, `reporter/{mod,html,graph}.rs`. The per-new-metric test-fixture tax (which was ~20 mechanical edits in #215 and #217) drops to one default in the builder.
+- **`LayerIndex` consolidates layer-pattern matching**: `check_layer_rules`, `AuditResult::filter_by_layers`, and `AuditResult::apply_layer_weights` each previously compiled their own glob matchers and walked them independently. They now share a single `LayerIndex` in `analyzer/layers.rs` that compiles globs once and answers `layer_of(path)`. Also drops a `pattern.contains(extract_dir(path))` substring-fallback in `apply_layer_weights` that wasn't matched by any test and didn't have a documented use case.
 - **`llms.txt` moved from repo root to `docs/llms.txt`**: GitHub Pages is configured to serve from `main:/docs`, so the file at the repo root wasn't reachable at the spec-defined URL `https://pererikbergman.github.io/noupling/llms.txt` (returned 404). Moving it into `docs/` makes it accessible at that canonical URL, which is where LLM tooling probes per the [llmstxt.org](https://llmstxt.org) convention.
 
 ### Fixed
