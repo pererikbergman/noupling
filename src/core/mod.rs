@@ -47,6 +47,25 @@ pub struct Dependency {
     pub line_number: i32,
 }
 
+/// Per-file count of abstract vs concrete type declarations.
+///
+/// Abstract = trait / interface / abstract class. Concrete = everything else
+/// that declares a named type (struct, enum, class, etc.). Lives in `core`
+/// because it's a shared data shape consumed by both `scanner` (producer)
+/// and `analyzer` (consumer) — placing it in either crosses a layer.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TypeCounts {
+    pub abstract_count: usize,
+    pub concrete_count: usize,
+}
+
+/// Per-module pairing of a file path with its `TypeCounts`. Produced by
+/// `scanner::recompute_type_counts`, consumed by `analyzer::compute_abstractness`.
+pub struct ModuleTypeCounts {
+    pub module_path: String,
+    pub counts: TypeCounts,
+}
+
 /// A point-in-time scan of a project.
 ///
 /// Each scan creates a new snapshot with a unique ID, allowing

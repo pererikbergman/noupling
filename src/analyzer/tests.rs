@@ -481,8 +481,7 @@ fn audit_populates_per_directory_instability() {
 
 #[test]
 fn audit_with_settings_populates_abstractness_from_type_counts() {
-    use crate::scanner::parsers::TypeCounts;
-    use crate::scanner::ModuleTypeCounts;
+    use crate::core::{ModuleTypeCounts, TypeCounts};
 
     let modules = vec![
         make_module("a", "src/foo.rs"),

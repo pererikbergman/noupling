@@ -34,14 +34,7 @@ pub struct ExternalImportCount {
     pub count: usize,
 }
 
-/// Per-module count of abstract vs concrete type declarations.
-///
-/// Emitted by the scanner alongside dependencies; consumed by
-/// `analyzer::compute_abstractness` to derive per-directory abstractness.
-pub struct ModuleTypeCounts {
-    pub module_path: String,
-    pub counts: parsers::TypeCounts,
-}
+pub use crate::core::ModuleTypeCounts;
 
 /// Check if an import line is suppressed by a `noupling:ignore` comment.
 /// Checks the import line itself for an inline comment, and the line above

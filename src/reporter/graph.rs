@@ -234,7 +234,7 @@ fn sanitize(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::ViolationAgeSummary;
+    use crate::analyzer::AuditResultBuilder;
     use crate::core::ModuleType;
 
     fn make_module(path: &str) -> Module {
@@ -281,31 +281,11 @@ mod tests {
             make_module("src/scanner/mod.rs"),
             make_module("src/core/mod.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![make_violation("src/scanner", "src/core")],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![make_violation("src/scanner", "src/core")])
+            .with_score(75.0)
+            .with_total_modules(2)
+            .build();
 
         let mermaid = format_mermaid(&modules, &result);
         assert!(mermaid.contains("flowchart LR"));
@@ -321,31 +301,11 @@ mod tests {
             make_module("src/scanner/mod.rs"),
             make_module("src/core/mod.rs"),
         ];
-        let result = AuditResult {
-            violations: vec![make_violation("src/scanner", "src/core")],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 2,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![make_violation("src/scanner", "src/core")])
+            .with_score(75.0)
+            .with_total_modules(2)
+            .build();
 
         let dot = format_dot(&modules, &result);
         assert!(dot.contains("digraph noupling"));
@@ -358,31 +318,7 @@ mod tests {
     #[test]
     fn empty_violations_still_generates() {
         let modules = vec![make_module("src/scanner/mod.rs")];
-        let result = AuditResult {
-            violations: vec![],
-            score: 100.0,
-            tri: 0.0,
-            total_modules: 1,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new().with_total_modules(1).build();
 
         let mermaid = format_mermaid(&modules, &result);
         assert!(mermaid.contains("flowchart LR"));

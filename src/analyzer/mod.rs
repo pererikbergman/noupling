@@ -100,6 +100,139 @@ pub struct AuditResult {
     pub stability_violations: Vec<StabilityViolation>,
 }
 
+/// Test-only builder for `AuditResult` with sensible defaults.
+///
+/// Existed because the production type has ~25 fields and tests historically had
+/// to spell out every single one even when asserting on one or two. Use `with_*`
+/// to override just what the test cares about.
+#[cfg(test)]
+pub(crate) struct AuditResultBuilder {
+    inner: AuditResult,
+}
+
+#[cfg(test)]
+#[allow(dead_code)] // most setters are exercised across the crate's test modules
+impl AuditResultBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: AuditResult {
+                violations: Vec::new(),
+                score: 100.0,
+                tri: 0.0,
+                total_modules: 0,
+                hotspots: Vec::new(),
+                rule_violations: Vec::new(),
+                layer_violations: Vec::new(),
+                cohesion: Vec::new(),
+                total_xs: 0,
+                independence: Vec::new(),
+                max_depth: 0,
+                critical_path: Vec::new(),
+                violation_age: ViolationAgeSummary::default(),
+                coupling_metrics_count: 0,
+                coupling_metrics: Vec::new(),
+                suppressed_count: 0,
+                gravity_wells: Vec::new(),
+                red_flags: Vec::new(),
+                external_deps: Vec::new(),
+                total_external_imports: 0,
+                abstractness: Vec::new(),
+                instability: Vec::new(),
+                stability_violations: Vec::new(),
+            },
+        }
+    }
+
+    pub(crate) fn with_score(mut self, score: f64) -> Self {
+        self.inner.score = score;
+        self
+    }
+    pub(crate) fn with_tri(mut self, tri: f64) -> Self {
+        self.inner.tri = tri;
+        self
+    }
+    pub(crate) fn with_total_modules(mut self, n: usize) -> Self {
+        self.inner.total_modules = n;
+        self
+    }
+    pub(crate) fn with_total_xs(mut self, n: usize) -> Self {
+        self.inner.total_xs = n;
+        self
+    }
+    pub(crate) fn with_max_depth(mut self, n: usize) -> Self {
+        self.inner.max_depth = n;
+        self
+    }
+    pub(crate) fn with_suppressed_count(mut self, n: usize) -> Self {
+        self.inner.suppressed_count = n;
+        self
+    }
+    pub(crate) fn with_total_external_imports(mut self, n: usize) -> Self {
+        self.inner.total_external_imports = n;
+        self
+    }
+    pub(crate) fn with_violations(mut self, v: Vec<CouplingViolation>) -> Self {
+        self.inner.violations = v;
+        self
+    }
+    pub(crate) fn with_hotspots(mut self, v: Vec<ModuleMetrics>) -> Self {
+        self.inner.hotspots = v;
+        self
+    }
+    pub(crate) fn with_rule_violations(mut self, v: Vec<RuleViolation>) -> Self {
+        self.inner.rule_violations = v;
+        self
+    }
+    pub(crate) fn with_layer_violations(mut self, v: Vec<LayerViolation>) -> Self {
+        self.inner.layer_violations = v;
+        self
+    }
+    pub(crate) fn with_cohesion(mut self, v: Vec<CohesionMetrics>) -> Self {
+        self.inner.cohesion = v;
+        self
+    }
+    pub(crate) fn with_independence(mut self, v: Vec<ModuleIndependence>) -> Self {
+        self.inner.independence = v;
+        self
+    }
+    pub(crate) fn with_critical_path(mut self, v: Vec<String>) -> Self {
+        self.inner.critical_path = v;
+        self
+    }
+    pub(crate) fn with_coupling_metrics(mut self, v: Vec<CouplingViolation>) -> Self {
+        self.inner.coupling_metrics_count = v.len();
+        self.inner.coupling_metrics = v;
+        self
+    }
+    pub(crate) fn with_gravity_wells(mut self, v: Vec<GravityWell>) -> Self {
+        self.inner.gravity_wells = v;
+        self
+    }
+    pub(crate) fn with_red_flags(mut self, v: Vec<RedFlag>) -> Self {
+        self.inner.red_flags = v;
+        self
+    }
+    pub(crate) fn with_external_deps(mut self, v: Vec<ExternalDepMetric>) -> Self {
+        self.inner.external_deps = v;
+        self
+    }
+    pub(crate) fn with_abstractness(mut self, v: Vec<AbstractnessMetric>) -> Self {
+        self.inner.abstractness = v;
+        self
+    }
+    pub(crate) fn with_instability(mut self, v: Vec<InstabilityMetric>) -> Self {
+        self.inner.instability = v;
+        self
+    }
+    pub(crate) fn with_stability_violations(mut self, v: Vec<StabilityViolation>) -> Self {
+        self.inner.stability_violations = v;
+        self
+    }
+    pub(crate) fn build(self) -> AuditResult {
+        self.inner
+    }
+}
+
 impl AuditResult {
     /// Keep only violations involving at least one changed file and recalculate the score.
     pub fn filter_by_changed_files(&mut self, changed_files: &[String]) {
@@ -344,7 +477,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
 pub fn audit_with_settings(
     modules: &[Module],
     dependencies: &[Dependency],
-    type_counts: &[crate::scanner::ModuleTypeCounts],
+    type_counts: &[crate::core::ModuleTypeCounts],
     settings: &crate::settings::Settings,
 ) -> AuditResult {
     let mut result = audit(modules, dependencies);

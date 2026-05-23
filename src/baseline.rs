@@ -113,8 +113,7 @@ fn chrono_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::DependencyDirection;
-    use crate::analyzer::ViolationAgeSummary;
+    use crate::analyzer::{AuditResultBuilder, DependencyDirection};
 
     fn make_coupling(from: &str, to: &str) -> CouplingViolation {
         CouplingViolation {
@@ -146,62 +145,28 @@ mod tests {
         // Create a fake history.db so find_db doesn't fail
         std::fs::write(noupling_dir.join("history.db"), "").unwrap();
 
-        let result = AuditResult {
-            violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![
+                make_coupling("a.rs", "b.rs"),
+                make_coupling("c.rs", "d.rs"),
+            ])
+            .with_score(50.0)
+            .with_total_modules(4)
+            .build();
 
         // Save baseline
         save_baseline(dir.path(), &result).unwrap();
         assert!(dir.path().join(".noupling/baseline.json").exists());
 
         // Same violations = all existing, none new
-        let mut same_result = AuditResult {
-            violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let mut same_result = AuditResultBuilder::new()
+            .with_violations(vec![
+                make_coupling("a.rs", "b.rs"),
+                make_coupling("c.rs", "d.rs"),
+            ])
+            .with_score(50.0)
+            .with_total_modules(4)
+            .build();
         let (new, resolved) = compare_baseline(dir.path(), &mut same_result).unwrap();
         assert_eq!(new, 0);
         assert_eq!(resolved, 0);
@@ -213,62 +178,22 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".noupling")).unwrap();
 
-        let baseline_result = AuditResult {
-            violations: vec![make_coupling("a.rs", "b.rs")],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let baseline_result = AuditResultBuilder::new()
+            .with_violations(vec![make_coupling("a.rs", "b.rs")])
+            .with_score(75.0)
+            .with_total_modules(4)
+            .build();
         save_baseline(dir.path(), &baseline_result).unwrap();
 
         // New violation added
-        let mut current = AuditResult {
-            violations: vec![
+        let mut current = AuditResultBuilder::new()
+            .with_violations(vec![
                 make_coupling("a.rs", "b.rs"), // existing
                 make_coupling("x.rs", "y.rs"), // new
-            ],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+            ])
+            .with_score(50.0)
+            .with_total_modules(4)
+            .build();
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 1);
         assert_eq!(resolved, 0);
@@ -281,59 +206,22 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".noupling")).unwrap();
 
-        let baseline_result = AuditResult {
-            violations: vec![make_coupling("a.rs", "b.rs"), make_coupling("c.rs", "d.rs")],
-            score: 50.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let baseline_result = AuditResultBuilder::new()
+            .with_violations(vec![
+                make_coupling("a.rs", "b.rs"),
+                make_coupling("c.rs", "d.rs"),
+            ])
+            .with_score(50.0)
+            .with_total_modules(4)
+            .build();
         save_baseline(dir.path(), &baseline_result).unwrap();
 
         // One violation resolved
-        let mut current = AuditResult {
-            violations: vec![make_coupling("a.rs", "b.rs")],
-            score: 75.0,
-            tri: 0.0,
-            total_modules: 4,
-            hotspots: Vec::new(),
-            rule_violations: Vec::new(),
-            layer_violations: Vec::new(),
-            cohesion: Vec::new(),
-            total_xs: 0,
-            independence: Vec::new(),
-            max_depth: 0,
-            critical_path: Vec::new(),
-            violation_age: ViolationAgeSummary::default(),
-            coupling_metrics_count: 0,
-            coupling_metrics: Vec::new(),
-            suppressed_count: 0,
-            gravity_wells: Vec::new(),
-            red_flags: Vec::new(),
-            external_deps: Vec::new(),
-            total_external_imports: 0,
-            abstractness: Vec::new(),
-            instability: Vec::new(),
-            stability_violations: Vec::new(),
-        };
+        let mut current = AuditResultBuilder::new()
+            .with_violations(vec![make_coupling("a.rs", "b.rs")])
+            .with_score(75.0)
+            .with_total_modules(4)
+            .build();
         let (new, resolved) = compare_baseline(dir.path(), &mut current).unwrap();
         assert_eq!(new, 0);
         assert_eq!(resolved, 1);
