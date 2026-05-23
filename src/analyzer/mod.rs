@@ -29,7 +29,7 @@ pub use abstractness::{compute_abstractness, AbstractnessMetric};
 pub use actions::compute_top_actions;
 #[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
 pub use actions::TopAction;
-pub use cohesion::{compute_cohesion, CohesionMetrics};
+pub use cohesion::{compute_cohesion, CohesionMetrics, DirectoryKind};
 pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
 pub use distance::{compute_distance, DistanceMetric, Zone};
