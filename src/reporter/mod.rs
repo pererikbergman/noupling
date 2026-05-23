@@ -45,6 +45,8 @@ pub struct JsonReport {
     pub red_flags: Vec<JsonRedFlag>,
     pub directory_tree: Vec<JsonDirectory>,
     pub abstractness: Vec<JsonAbstractness>,
+    pub instability: Vec<JsonInstability>,
+    pub stability_violations: Vec<JsonStabilityViolation>,
 }
 
 #[derive(Serialize)]
@@ -92,6 +94,22 @@ pub struct JsonAbstractness {
     pub abstract_count: usize,
     pub concrete_count: usize,
     pub abstractness: f64,
+}
+
+#[derive(Serialize)]
+pub struct JsonInstability {
+    pub dir: String,
+    pub ca: usize,
+    pub ce: usize,
+    pub instability: f64,
+}
+
+#[derive(Serialize)]
+pub struct JsonStabilityViolation {
+    pub from_dir: String,
+    pub to_dir: String,
+    pub from_instability: f64,
+    pub to_instability: f64,
 }
 
 #[derive(Serialize)]
@@ -299,6 +317,26 @@ impl JsonReport {
                     abstract_count: a.abstract_count,
                     concrete_count: a.concrete_count,
                     abstractness: a.abstractness,
+                })
+                .collect(),
+            instability: result
+                .instability
+                .iter()
+                .map(|i| JsonInstability {
+                    dir: i.dir.clone(),
+                    ca: i.ca,
+                    ce: i.ce,
+                    instability: i.instability,
+                })
+                .collect(),
+            stability_violations: result
+                .stability_violations
+                .iter()
+                .map(|v| JsonStabilityViolation {
+                    from_dir: v.from_dir.clone(),
+                    to_dir: v.to_dir.clone(),
+                    from_instability: v.from_instability,
+                    to_instability: v.to_instability,
                 })
                 .collect(),
         }
@@ -939,6 +977,30 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
+    // Instability per directory (Martin's I)
+    if !result.instability.is_empty() {
+        output.push_str("\nInstability:\n");
+        for i in result.instability.iter().take(10) {
+            output.push_str(&format!(
+                "  I={:.2} {} (Ca={}, Ce={})\n",
+                i.instability, i.dir, i.ca, i.ce
+            ));
+        }
+    }
+
+    // Stable Dependencies Principle violations
+    if !result.stability_violations.is_empty() {
+        output.push_str("\nStability Violations:\n");
+        output
+            .push_str("  (a more-stable directory depends on a less-stable one — Martin's SDP)\n");
+        for v in result.stability_violations.iter().take(10) {
+            output.push_str(&format!(
+                "  {} (I={:.2}) -> {} (I={:.2})\n",
+                v.from_dir, v.from_instability, v.to_dir, v.to_instability
+            ));
+        }
+    }
+
     // Module independence
     let low_independence: Vec<_> = result
         .independence
@@ -1551,6 +1613,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-1");
@@ -1590,6 +1654,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-2");
@@ -1626,6 +1692,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-3");
@@ -1656,6 +1724,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1688,11 +1758,105 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let text = format_text(&result);
         assert!(text.contains("Health Score: 100.0/100"));
         assert!(text.contains("Violations: 0"));
+    }
+
+    #[test]
+    fn json_report_includes_stability_violations() {
+        use crate::analyzer::StabilityViolation;
+        let modules = vec![];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/unstable".into(),
+                from_instability: 0.17,
+                to_instability: 0.83,
+            }],
+        };
+        let report = JsonReport::from_audit(&modules, &result, "snap-s");
+        let json = report.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let arr = parsed["stability_violations"]
+            .as_array()
+            .expect("stability_violations array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["from_dir"], "src/stable");
+        assert_eq!(arr[0]["to_dir"], "src/unstable");
+    }
+
+    #[test]
+    fn json_report_includes_instability() {
+        use crate::analyzer::InstabilityMetric;
+        let modules = vec![];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: vec![InstabilityMetric {
+                dir: "src/core".into(),
+                ca: 5,
+                ce: 1,
+                instability: 1.0 / 6.0,
+            }],
+            stability_violations: Vec::new(),
+        };
+
+        let report = JsonReport::from_audit(&modules, &result, "snap-z");
+        let json = report.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let arr = parsed["instability"].as_array().expect("instability array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["dir"], "src/core");
+        assert_eq!(arr[0]["ca"], 5);
+        assert_eq!(arr[0]["ce"], 1);
+        let i = arr[0]["instability"].as_f64().unwrap();
+        assert!((i - 1.0 / 6.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1726,6 +1890,8 @@ mod tests {
                 concrete_count: 4,
                 abstractness: 0.2,
             }],
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let report = JsonReport::from_audit(&modules, &result, "snap-z");
@@ -1740,6 +1906,102 @@ mod tests {
         assert_eq!(arr[0]["concrete_count"], 4);
         let a = arr[0]["abstractness"].as_f64().unwrap();
         assert!((a - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn text_format_includes_stability_violations() {
+        use crate::analyzer::StabilityViolation;
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/unstable".into(),
+                from_instability: 0.17,
+                to_instability: 0.83,
+            }],
+        };
+        let text = format_text(&result);
+        assert!(
+            text.contains("Stability Violations:"),
+            "missing header: {}",
+            text
+        );
+        assert!(text.contains("src/stable"), "missing from_dir");
+        assert!(text.contains("src/unstable"), "missing to_dir");
+        assert!(text.contains("0.17"), "missing from_i");
+        assert!(text.contains("0.83"), "missing to_i");
+    }
+
+    #[test]
+    fn text_format_includes_instability_section() {
+        use crate::analyzer::InstabilityMetric;
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 4,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: vec![
+                InstabilityMetric {
+                    dir: "src/app".into(),
+                    ca: 0,
+                    ce: 3,
+                    instability: 1.0,
+                },
+                InstabilityMetric {
+                    dir: "src/core".into(),
+                    ca: 5,
+                    ce: 0,
+                    instability: 0.0,
+                },
+            ],
+            stability_violations: Vec::new(),
+        };
+
+        let text = format_text(&result);
+        assert!(text.contains("Instability:"), "missing header: {}", text);
+        assert!(text.contains("src/app"), "missing dir: {}", text);
+        assert!(text.contains("I=1.00"), "missing high-I value: {}", text);
+        assert!(text.contains("I=0.00"), "missing low-I value: {}", text);
+        assert!(text.contains("Ca=5"), "missing afferent count: {}", text);
+        assert!(text.contains("Ce=3"), "missing efferent count: {}", text);
     }
 
     #[test]
@@ -1772,6 +2034,8 @@ mod tests {
                 concrete_count: 3,
                 abstractness: 0.4,
             }],
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let text = format_text(&result);
@@ -1823,6 +2087,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-1");
@@ -1863,6 +2129,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-3");
@@ -1895,6 +2163,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let md = _format_markdown_single(&modules, &result, "snap-4");

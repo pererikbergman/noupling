@@ -52,6 +52,8 @@ struct ReportData {
     score_yellow: f64,
     critical_severity: f64,
     abstractness: Vec<crate::analyzer::AbstractnessMetric>,
+    instability: Vec<crate::analyzer::InstabilityMetric>,
+    stability_violations: Vec<crate::analyzer::StabilityViolation>,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -342,6 +344,8 @@ fn build_report_data(
         score_yellow: settings.thresholds.score_yellow,
         critical_severity: settings.thresholds.critical_severity,
         abstractness: result.abstractness.clone(),
+        instability: result.instability.clone(),
+        stability_violations: result.stability_violations.clone(),
     }
 }
 
@@ -759,6 +763,15 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         format!("{} - noupling Report", dir.name)
     };
 
+    // Per-directory instability for the summary card. "—" when the directory
+    // has no edges crossing its boundary (Ca + Ce == 0), where I is undefined.
+    let instability_label = data
+        .instability
+        .iter()
+        .find(|i| i.dir == dir_path)
+        .map(|i| format!("{:.2}", i.instability))
+        .unwrap_or_else(|| "—".to_string());
+
     // Root-page only: abstractness section (project-wide metric)
     if is_root && !data.abstractness.is_empty() {
         violations_html.push_str("<h2>Abstractness</h2>\n");
@@ -769,6 +782,21 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             violations_html.push_str(&format!(
                 "<tr><td>{}</td><td class=\"center\">{:.2}</td><td class=\"center\">{}</td><td class=\"center\">{}</td></tr>\n",
                 a.dir, a.abstractness, a.abstract_count, a.concrete_count,
+            ));
+        }
+        violations_html.push_str("</table>\n");
+    }
+
+    // Root-page only: Stable Dependencies Principle violations
+    if is_root && !data.stability_violations.is_empty() {
+        violations_html.push_str("<h2>Stability Violations</h2>\n");
+        violations_html.push_str("<p class=\"section-hint\">Martin's Stable Dependencies Principle: a more-stable directory (lower I) should not depend on a less-stable one (higher I). Stability should flow inward.</p>\n");
+        violations_html.push_str("<table>\n");
+        violations_html.push_str("<tr><th>From</th><th class=\"center\">I(from)</th><th>To</th><th class=\"center\">I(to)</th></tr>\n");
+        for v in data.stability_violations.iter().take(20) {
+            violations_html.push_str(&format!(
+                "<tr><td>{}</td><td class=\"center\">{:.2}</td><td>{}</td><td class=\"center\">{:.2}</td></tr>\n",
+                v.from_dir, v.from_instability, v.to_dir, v.to_instability,
             ));
         }
         violations_html.push_str("</table>\n");
@@ -857,6 +885,10 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
         <div class="label">Violations <span class="info-icon">&#9432;</span></div>
         <div class="value">{violations}</div>
     </div>
+    <div class="summary-card" title="Martin's instability I = Ce / (Ca + Ce). 0.0 = fully stable (depended on, doesn't depend), 1.0 = fully unstable (depends on, isn't depended on). '—' when this directory has no edges crossing its boundary.">
+        <div class="label">Instability <span class="info-icon">&#9432;</span></div>
+        <div class="value">{instability}</div>
+    </div>
 </div>
 
 <h2>Contents</h2>
@@ -878,6 +910,7 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
         score = dir.score,
         modules = dir.module_count,
         violations = dir.violations_here.len(),
+        instability = instability_label,
         children_rows = children_rows,
         violations_html = violations_html,
         version = super::VERSION,
@@ -1021,6 +1054,98 @@ mod tests {
     }
 
     #[test]
+    fn html_root_renders_stability_violations_section() {
+        use crate::analyzer::StabilityViolation;
+        let modules = vec![make_module("a", "src/api/mod.rs")];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 1,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/unstable".into(),
+                from_instability: 0.17,
+                to_instability: 0.83,
+            }],
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-sv", dir.path(), &settings).unwrap();
+        let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
+        assert!(html.contains("Stability Violations"), "missing header");
+        assert!(html.contains("src/stable"), "missing from_dir");
+        assert!(html.contains("src/unstable"), "missing to_dir");
+    }
+
+    #[test]
+    fn html_per_directory_renders_instability_summary_card() {
+        use crate::analyzer::InstabilityMetric;
+        let modules = vec![
+            make_module("a", "src/app/main.rs"),
+            make_module("b", "src/core/lib.rs"),
+        ];
+        let result = AuditResult {
+            violations: vec![],
+            score: 100.0,
+            tri: 0.0,
+            total_modules: 2,
+            hotspots: Vec::new(),
+            rule_violations: Vec::new(),
+            layer_violations: Vec::new(),
+            cohesion: Vec::new(),
+            total_xs: 0,
+            independence: Vec::new(),
+            max_depth: 0,
+            critical_path: Vec::new(),
+            violation_age: ViolationAgeSummary::default(),
+            coupling_metrics_count: 0,
+            coupling_metrics: Vec::new(),
+            suppressed_count: 0,
+            gravity_wells: Vec::new(),
+            red_flags: Vec::new(),
+            external_deps: Vec::new(),
+            total_external_imports: 0,
+            abstractness: Vec::new(),
+            instability: vec![InstabilityMetric {
+                dir: "src/app".into(),
+                ca: 0,
+                ce: 1,
+                instability: 1.0,
+            }],
+            stability_violations: Vec::new(),
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let settings = Settings::default();
+        generate_html_report(&modules, &result, "snap-i", dir.path(), &settings).unwrap();
+        let html = std::fs::read_to_string(dir.path().join("app/index.html")).unwrap();
+        assert!(
+            html.contains("Instability"),
+            "missing Instability label: {}",
+            &html[..500.min(html.len())]
+        );
+        assert!(html.contains(">1.00<"), "missing I=1.00 value in card");
+    }
+
+    #[test]
     fn html_root_renders_abstractness_section() {
         use crate::analyzer::AbstractnessMetric;
         let modules = vec![make_module("a", "src/api/mod.rs")];
@@ -1051,6 +1176,8 @@ mod tests {
                 concrete_count: 3,
                 abstractness: 0.4,
             }],
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
         let dir = tempfile::tempdir().unwrap();
         let settings = Settings::default();
@@ -1089,6 +1216,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1123,6 +1252,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1163,6 +1294,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
@@ -1221,6 +1354,8 @@ mod tests {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
 
         let dir = tempfile::tempdir().unwrap();
