@@ -48,6 +48,7 @@ pub struct JsonReport {
     pub instability: Vec<JsonInstability>,
     pub stability_violations: Vec<JsonStabilityViolation>,
     pub distance: Vec<JsonDistance>,
+    pub cohesion: Vec<JsonCohesion>,
 }
 
 #[derive(Serialize)]
@@ -103,6 +104,17 @@ pub struct JsonInstability {
     pub ca: usize,
     pub ce: usize,
     pub instability: f64,
+}
+
+#[derive(Serialize)]
+pub struct JsonCohesion {
+    pub dir: String,
+    /// "Container" or "Package".
+    pub kind: &'static str,
+    pub n_children: usize,
+    pub internal_deps: usize,
+    /// `null` for Containers; numeric for Packages.
+    pub cohesion: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -362,6 +374,20 @@ impl JsonReport {
                         crate::analyzer::Zone::Pain => "zone_of_pain",
                         crate::analyzer::Zone::Uselessness => "zone_of_uselessness",
                     },
+                })
+                .collect(),
+            cohesion: result
+                .cohesion
+                .iter()
+                .map(|c| JsonCohesion {
+                    dir: c.dir.clone(),
+                    kind: match c.kind {
+                        crate::analyzer::DirectoryKind::Container => "Container",
+                        crate::analyzer::DirectoryKind::Package => "Package",
+                    },
+                    n_children: c.n_children,
+                    internal_deps: c.internal_deps,
+                    cohesion: c.cohesion,
                 })
                 .collect(),
         }
@@ -974,19 +1000,21 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
-    // Cohesion (low cohesion directories)
+    // Cohesion (low cohesion directories — Packages only; Containers have
+    // undefined cohesion by design, so they never appear in this section).
     let low_cohesion: Vec<_> = result
         .cohesion
         .iter()
-        .filter(|c| c.cohesion < 0.1 && c.file_count >= 3)
+        .filter_map(|c| c.cohesion.map(|val| (c, val)))
+        .filter(|(c, val)| *val < 0.1 && c.n_children >= 3)
         .take(10)
         .collect();
     if !low_cohesion.is_empty() {
         output.push_str("\nLow Cohesion:\n");
-        for c in &low_cohesion {
+        for (c, val) in &low_cohesion {
             output.push_str(&format!(
                 "  {:.2} {} ({} files, {} internal deps)\n",
-                c.cohesion, c.dir, c.file_count, c.internal_deps
+                val, c.dir, c.n_children, c.internal_deps
             ));
         }
     }
@@ -1806,6 +1834,88 @@ mod tests {
         assert!(text.contains("src/unstable"), "missing to_dir");
         assert!(text.contains("0.17"), "missing from_i");
         assert!(text.contains("0.83"), "missing to_i");
+    }
+
+    #[test]
+    fn json_report_cohesion_array_includes_kind_and_nullable_cohesion() {
+        use crate::analyzer::{CohesionMetrics, DirectoryKind};
+        let modules = vec![];
+        let result = AuditResultBuilder::new()
+            .with_total_modules(2)
+            .with_cohesion(vec![
+                CohesionMetrics {
+                    dir: "src/features".into(),
+                    kind: DirectoryKind::Container,
+                    n_children: 0,
+                    internal_deps: 0,
+                    cohesion: None,
+                },
+                CohesionMetrics {
+                    dir: "src/scanner".into(),
+                    kind: DirectoryKind::Package,
+                    n_children: 3,
+                    internal_deps: 2,
+                    cohesion: Some(0.333),
+                },
+            ])
+            .build();
+
+        let report = JsonReport::from_audit(&modules, &result, "snap-c");
+        let json = report.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let arr = parsed["cohesion"].as_array().expect("cohesion array");
+        assert_eq!(arr.len(), 2);
+
+        let features = arr.iter().find(|e| e["dir"] == "src/features").unwrap();
+        assert_eq!(features["kind"], "Container");
+        assert!(
+            features["cohesion"].is_null(),
+            "container cohesion must be null"
+        );
+
+        let scanner = arr.iter().find(|e| e["dir"] == "src/scanner").unwrap();
+        assert_eq!(scanner["kind"], "Package");
+        assert_eq!(scanner["n_children"], 3);
+        let val = scanner["cohesion"].as_f64().unwrap();
+        assert!((val - 0.333).abs() < 1e-6);
+    }
+
+    #[test]
+    fn text_format_low_cohesion_section_omits_containers() {
+        use crate::analyzer::{CohesionMetrics, DirectoryKind};
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_cohesion(vec![
+                CohesionMetrics {
+                    dir: "src/features".into(),
+                    kind: DirectoryKind::Container,
+                    n_children: 0,
+                    internal_deps: 0,
+                    cohesion: None,
+                },
+                CohesionMetrics {
+                    dir: "src/scanner".into(),
+                    kind: DirectoryKind::Package,
+                    n_children: 5,
+                    internal_deps: 0,
+                    cohesion: Some(0.00),
+                },
+            ])
+            .build();
+
+        let text = format_text(&result);
+
+        assert!(text.contains("Low Cohesion:"), "section must appear");
+        assert!(
+            text.contains("src/scanner"),
+            "package with low cohesion must appear"
+        );
+        assert!(
+            !text.contains("src/features"),
+            "container must not appear in Low Cohesion section: {}",
+            text
+        );
     }
 
     #[test]
