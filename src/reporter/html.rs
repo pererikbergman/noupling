@@ -54,6 +54,7 @@ struct ReportData {
     abstractness: Vec<crate::analyzer::AbstractnessMetric>,
     instability: Vec<crate::analyzer::InstabilityMetric>,
     stability_violations: Vec<crate::analyzer::StabilityViolation>,
+    distance: Vec<crate::analyzer::DistanceMetric>,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -346,6 +347,7 @@ fn build_report_data(
         abstractness: result.abstractness.clone(),
         instability: result.instability.clone(),
         stability_violations: result.stability_violations.clone(),
+        distance: result.distance.clone(),
     }
 }
 
@@ -782,6 +784,27 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
             violations_html.push_str(&format!(
                 "<tr><td>{}</td><td class=\"center\">{:.2}</td><td class=\"center\">{}</td><td class=\"center\">{}</td></tr>\n",
                 a.dir, a.abstractness, a.abstract_count, a.concrete_count,
+            ));
+        }
+        violations_html.push_str("</table>\n");
+    }
+
+    // Root-page only: Distance from main sequence
+    if is_root && !data.distance.is_empty() {
+        use crate::analyzer::Zone;
+        violations_html.push_str("<h2>Distance from Main Sequence</h2>\n");
+        violations_html.push_str("<p class=\"section-hint\">Martin's D = |A + I − 1|. 0.0 = on the main sequence (well-balanced). High D + low I = Zone of Pain (stable + concrete, rigid). High D + high I = Zone of Uselessness (abstract + unstable, speculative).</p>\n");
+        violations_html.push_str("<table>\n");
+        violations_html.push_str("<tr><th>Directory</th><th class=\"center\">D</th><th class=\"center\">A</th><th class=\"center\">I</th><th>Zone</th></tr>\n");
+        for d in data.distance.iter().take(20) {
+            let zone_label = match d.zone {
+                Zone::MainSequence => "main sequence",
+                Zone::Pain => "Zone of Pain",
+                Zone::Uselessness => "Zone of Uselessness",
+            };
+            violations_html.push_str(&format!(
+                "<tr><td>{}</td><td class=\"center\">{:.2}</td><td class=\"center\">{:.2}</td><td class=\"center\">{:.2}</td><td>{}</td></tr>\n",
+                d.dir, d.distance, d.abstractness, d.instability, zone_label,
             ));
         }
         violations_html.push_str("</table>\n");

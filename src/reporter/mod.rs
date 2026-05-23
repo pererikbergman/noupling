@@ -47,6 +47,7 @@ pub struct JsonReport {
     pub abstractness: Vec<JsonAbstractness>,
     pub instability: Vec<JsonInstability>,
     pub stability_violations: Vec<JsonStabilityViolation>,
+    pub distance: Vec<JsonDistance>,
 }
 
 #[derive(Serialize)]
@@ -110,6 +111,15 @@ pub struct JsonStabilityViolation {
     pub to_dir: String,
     pub from_instability: f64,
     pub to_instability: f64,
+}
+
+#[derive(Serialize)]
+pub struct JsonDistance {
+    pub dir: String,
+    pub abstractness: f64,
+    pub instability: f64,
+    pub distance: f64,
+    pub zone: &'static str,
 }
 
 #[derive(Serialize)]
@@ -337,6 +347,21 @@ impl JsonReport {
                     to_dir: v.to_dir.clone(),
                     from_instability: v.from_instability,
                     to_instability: v.to_instability,
+                })
+                .collect(),
+            distance: result
+                .distance
+                .iter()
+                .map(|d| JsonDistance {
+                    dir: d.dir.clone(),
+                    abstractness: d.abstractness,
+                    instability: d.instability,
+                    distance: d.distance,
+                    zone: match d.zone {
+                        crate::analyzer::Zone::MainSequence => "main_sequence",
+                        crate::analyzer::Zone::Pain => "zone_of_pain",
+                        crate::analyzer::Zone::Uselessness => "zone_of_uselessness",
+                    },
                 })
                 .collect(),
         }
@@ -984,6 +1009,23 @@ pub fn format_text(result: &AuditResult) -> String {
             output.push_str(&format!(
                 "  I={:.2} {} (Ca={}, Ce={})\n",
                 i.instability, i.dir, i.ca, i.ce
+            ));
+        }
+    }
+
+    // Distance from main sequence per directory
+    if !result.distance.is_empty() {
+        use crate::analyzer::Zone;
+        output.push_str("\nDistance from Main Sequence:\n");
+        for d in result.distance.iter().take(10) {
+            let zone_tag = match d.zone {
+                Zone::MainSequence => "",
+                Zone::Pain => "  [Zone of Pain]",
+                Zone::Uselessness => "  [Zone of Uselessness]",
+            };
+            output.push_str(&format!(
+                "  D={:.2} {} (A={:.2}, I={:.2}){}\n",
+                d.distance, d.dir, d.abstractness, d.instability, zone_tag
             ));
         }
     }
