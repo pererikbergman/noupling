@@ -6,6 +6,7 @@
 
 - [README](https://github.com/pererikbergman/noupling/blob/main/README.md): Project overview, quickstart, installation, usage examples, configuration reference, and supported languages.
 - [Architecture](https://github.com/pererikbergman/noupling/blob/main/docs/architecture.md): Internal data flow (scan → store → analyze → report), module responsibilities, and key design decisions.
+- [Dependency Graph Foundation](https://github.com/pererikbergman/noupling/blob/main/docs/dependency-graph-foundation.md): Reference-depth walkthrough of the producer pipeline — how raw source files become the `(Vec<Module>, Vec<Dependency>)` graph that every metric and report consumes. Includes the `LanguageParser` trait contract, the edge-decision rules, and an add-a-language walkthrough.
 - [Changelog](https://github.com/pererikbergman/noupling/blob/main/CHANGELOG.md): Released versions, migration notes, and recent architectural changes.
 - [Contributing](https://github.com/pererikbergman/noupling/blob/main/CONTRIBUTING.md): Build instructions, coding standards, branching strategy, and how to add a new language parser.
 

@@ -8,6 +8,8 @@ noupling is a single Rust binary that scans source code, extracts import depende
 scan -> store -> analyze -> report
 ```
 
+For a deep dive into how raw source files become a dependency graph — the foundation every metric and report consumes — see [dependency-graph-foundation.md](dependency-graph-foundation.md).
+
 ## Data Flow
 
 ```
