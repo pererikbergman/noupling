@@ -1,6 +1,6 @@
 # noupling
 
-> noupling is an architecture auditing CLI that scans source code, builds a dependency graph from actual import statements, and quantifies coupling using risk-weighted scoring (RRI/TRI). It detects coupling violations between sibling modules and circular dependencies, then produces a single health score (0-100) you can track over time and enforce in CI. Supports 14 languages via Tree-sitter AST parsing.
+> noupling is an architecture auditing CLI that scans source code, builds a dependency graph from actual import statements, and quantifies coupling using risk-weighted scoring (RRI/TRI). It detects coupling violations between sibling modules and circular dependencies, then produces a single health score (0-100) you can track over time and enforce in CI. Supports 16 languages via Tree-sitter AST parsing.
 
 ## Documentation
 
@@ -21,9 +21,9 @@
 
 ## Supported Languages
 
-14 languages parsed via Tree-sitter AST (no regex):
+16 languages parsed via Tree-sitter AST (no regex):
 
-C#, Dart, Go, Haskell, Java, JavaScript (+ JSX), Kotlin (+ KTS), PHP, Python, Ruby, Rust, Swift, TypeScript (+ TSX), Zig
+C#, Dart, Elixir, Go, Haskell, Java, JavaScript (+ JSX), Kotlin (+ KTS), PHP, Python, Ruby, Rust, Scala, Swift, TypeScript (+ TSX), Zig
 
 ## Commands
 
