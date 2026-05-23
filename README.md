@@ -37,7 +37,7 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 - **Architectural layers**: Define dependency direction, suppress legitimate downward coupling
 - **XS metric**: Quantify refactoring cost per violation, find the weakest link in cycles
 - **Inline suppression**: `// noupling:ignore` to suppress known acceptable coupling
-- **Advanced metrics**: Module independence, blast radius, instability (Martin's I), dependency depth, violation age
+- **Advanced metrics**: Module independence, blast radius, instability (Martin's I), abstractness (Martin's A), dependency depth, violation age
 - **Per-module trends**: `--by-module` flag to track score evolution per directory across snapshots
 - **PR/CI mode**: `--diff-base main` to only flag new violations
 - **Risk-weighted scoring (RRI/TRI)**: Quantify coupling risk by dependency direction and density

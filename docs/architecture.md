@@ -32,9 +32,9 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 **Stage 1: Scan.** Discovers source files, parses them with Tree-sitter, and resolves import paths.
 
 - `discovery.rs` - Recursive file walker. Filters by `source_extensions` and `ignore_patterns` from settings. Produces `Module` structs with relative paths.
-- `parsers/mod.rs` - Defines the `LanguageParser` trait and the `registry()` function. The trait has two pure methods: `parse(source) -> Vec<ImportEntry>` and `resolve(import_path, source_file, known_paths) -> Option<String>`. Adding a new language means dropping one adapter file into `src/scanner/parsers/` and adding one line to `registry()` — no other files change.
-- `parsers/<lang>.rs` - One file per language (14 files: `csharp`, `dart`, `go`, `haskell`, `java`, `javascript`, `kotlin`, `php`, `python`, `ruby`, `rust`, `swift`, `typescript`, `zig`). Each implements `LanguageParser` for its file extension(s).
-- `mod.rs` - Orchestrates: discover files, look up the adapter per extension from `registry()`, parse imports in parallel (Rayon), resolve to dependencies. Unresolved imports are counted as external (third-party) dependencies per module and returned in `ScanResult::external_imports`.
+- `parsers/mod.rs` - Defines the `LanguageParser` trait and the `registry()` function. The trait has three pure methods: `parse(source) -> Vec<ImportEntry>`, `resolve(import_path, source_file, known_paths) -> Option<String>`, and `count_type_declarations(source) -> TypeCounts` (default returns zeros — only languages participating in the abstractness metric override it). Also exports `ends_with_segment(path, candidate)`: the segment-anchored path suffix check used by every resolver to avoid substring-matching stdlib imports onto unrelated project files. Adding a new language means dropping one adapter file into `src/scanner/parsers/` and adding one line to `registry()` — no other files change.
+- `parsers/<lang>.rs` - One file per language (16 files: `csharp`, `dart`, `elixir`, `go`, `haskell`, `java`, `javascript`, `kotlin`, `php`, `python`, `ruby`, `rust`, `scala`, `swift`, `typescript`, `zig`). Each implements `LanguageParser` for its file extension(s).
+- `mod.rs` - Orchestrates: discover files, look up the adapter per extension from `registry()`, parse imports in parallel (Rayon), resolve to dependencies. Unresolved imports are counted as external (third-party) dependencies per module and returned in `ScanResult::external_imports`. A self-edge guard drops any dependency where `from_module_id == to_module_id` as defence in depth against future resolver regressions. Also exports `recompute_type_counts(root, modules)`: re-reads source files and invokes each adapter's `count_type_declarations` to produce the per-module type counts that feed the abstractness metric (used at audit time since type counts are in-memory only and not persisted to SQLite).
 
 ### `src/storage/`
 **Stage 2: Store.** SQLite persistence in `.noupling/history.db`.
@@ -50,12 +50,13 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 ### `src/analyzer/`
 **Stage 3: Analyze.** The core algorithm, split into focused concern files.
 
-- `mod.rs` - Orchestrator. Declares `AuditResult` and re-exports the public API. The canonical entry point for command handlers is `audit_with_settings(modules, deps, &settings)`, which runs the full 5-step pipeline in fixed order: severity filtering → coupling-mode adjustment → risk-weight RRI computation → layer-weight reductions → layer filtering. Command handlers call this function once; the old manual 5-step sequence is no longer repeated by callers.
+- `mod.rs` - Orchestrator. Declares `AuditResult` and re-exports the public API. The canonical entry point for command handlers is `audit_with_settings(modules, deps, type_counts, &settings)`, which runs the full 5-step pipeline in fixed order: severity filtering → coupling-mode adjustment → risk-weight RRI computation → layer-weight reductions → layer filtering. Also populates `AuditResult.abstractness` from the supplied `type_counts`. Command handlers call this function once; the old manual 5-step sequence is no longer repeated by callers.
 - `coupling.rs` - D_acc aggregation and BFS sibling coupling detection.
 - `cycles.rs` - Circular dependency detection at sibling level via Tarjan's SCC algorithm.
 - `direction.rs` - `DependencyDirection` enum (`Downward`, `Sibling`, `Upward`, `External`, `Transitive`, `Circular`) and its risk-weight semantics. Re-exported as `analyzer::DependencyDirection`.
 - `metrics.rs` - Fan-in/fan-out hotspots and external dependency metrics.
 - `cohesion.rs` - Per-directory cohesion metrics.
+- `abstractness.rs` - Per-directory abstractness (Martin's A = abstract / (abstract + concrete)). Consumes per-module type counts produced by the scanner and aggregates them by parent directory.
 - `independence.rs` - Per-module independence scores (internal vs. external dependency ratio).
 - `gravity_wells.rs` - Gravity Well detection: modules whose aggregate RRI exceeds 2× the median.
 - `red_flags.rs` - Architectural anti-pattern detection: *Fused Sibling* and *Trapped Child*.
