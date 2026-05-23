@@ -12,6 +12,7 @@ mod coupling;
 mod critical_path;
 mod cycles;
 mod direction;
+mod distance;
 mod gravity_wells;
 mod independence;
 mod instability;
@@ -31,6 +32,7 @@ pub use actions::TopAction;
 pub use cohesion::{compute_cohesion, CohesionMetrics};
 pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
+pub use distance::{compute_distance, DistanceMetric, Zone};
 pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use independence::{compute_independence, ModuleIndependence};
 pub use instability::{
@@ -98,6 +100,8 @@ pub struct AuditResult {
     /// Stable Dependencies Principle violations: directory pairs where a
     /// more-stable directory depends on a less-stable one.
     pub stability_violations: Vec<StabilityViolation>,
+    /// Per-directory Distance from Main Sequence (Martin's D = |A + I − 1|).
+    pub distance: Vec<DistanceMetric>,
 }
 
 /// Test-only builder for `AuditResult` with sensible defaults.
@@ -139,10 +143,15 @@ impl AuditResultBuilder {
                 abstractness: Vec::new(),
                 instability: Vec::new(),
                 stability_violations: Vec::new(),
+                distance: Vec::new(),
             },
         }
     }
 
+    pub(crate) fn with_distance(mut self, v: Vec<DistanceMetric>) -> Self {
+        self.inner.distance = v;
+        self
+    }
     pub(crate) fn with_score(mut self, score: f64) -> Self {
         self.inner.score = score;
         self
@@ -404,6 +413,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             abstractness: Vec::new(),
             instability: Vec::new(),
             stability_violations: Vec::new(),
+            distance: Vec::new(),
         };
     }
 
@@ -461,6 +471,9 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         abstractness: Vec::new(),
         instability,
         stability_violations,
+        // Distance is computed in audit_with_settings once abstractness is populated.
+        // audit() leaves it empty because it has no type-counts input.
+        distance: Vec::new(),
     }
 }
 
@@ -482,6 +495,9 @@ pub fn audit_with_settings(
 ) -> AuditResult {
     let mut result = audit(modules, dependencies);
     result.abstractness = compute_abstractness(modules, type_counts);
+    // Distance composes A (just populated) with I (populated in audit()).
+    // 0.5 is the conventional cutoff: anything more than halfway off the main sequence.
+    result.distance = compute_distance(&result.abstractness, &result.instability, 0.5);
     result.filter_by_severity(settings.thresholds.minimum_severity);
     result.apply_coupling_mode(settings.effective_coupling_mode());
     result.apply_risk_weights(&settings.risk_weights);
