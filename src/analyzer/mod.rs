@@ -14,6 +14,7 @@ mod cycles;
 mod direction;
 mod gravity_wells;
 mod independence;
+mod instability;
 mod layers;
 mod metrics;
 mod monorepo;
@@ -32,6 +33,10 @@ pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
 pub use gravity_wells::{compute_gravity_wells, GravityWell};
 pub use independence::{compute_independence, ModuleIndependence};
+pub use instability::{
+    compute_directory_instability, compute_stability_violations, InstabilityMetric,
+    StabilityViolation,
+};
 pub use layers::{check_layer_rules, LayerViolation};
 pub use metrics::{compute_hotspots, ExternalDepMetric, ModuleMetrics};
 #[allow(unused_imports)]
@@ -88,6 +93,11 @@ pub struct AuditResult {
     pub total_external_imports: usize,
     /// Per-directory abstractness metric (Martin's A).
     pub abstractness: Vec<AbstractnessMetric>,
+    /// Per-directory instability metric (Martin's I).
+    pub instability: Vec<InstabilityMetric>,
+    /// Stable Dependencies Principle violations: directory pairs where a
+    /// more-stable directory depends on a less-stable one.
+    pub stability_violations: Vec<StabilityViolation>,
 }
 
 impl AuditResult {
@@ -259,6 +269,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             external_deps: Vec::new(),
             total_external_imports: 0,
             abstractness: Vec::new(),
+            instability: Vec::new(),
+            stability_violations: Vec::new(),
         };
     }
 
@@ -289,6 +301,9 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
 
     let (max_depth, critical_path) = compute_critical_path(modules, dependencies);
 
+    let instability = compute_directory_instability(modules, dependencies);
+    let stability_violations = compute_stability_violations(modules, dependencies, &instability);
+
     AuditResult {
         violations,
         score,
@@ -311,6 +326,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         external_deps: Vec::new(),
         total_external_imports: 0,
         abstractness: Vec::new(),
+        instability,
+        stability_violations,
     }
 }
 

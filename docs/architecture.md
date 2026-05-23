@@ -57,6 +57,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 - `metrics.rs` - Fan-in/fan-out hotspots and external dependency metrics.
 - `cohesion.rs` - Per-directory cohesion metrics.
 - `abstractness.rs` - Per-directory abstractness (Martin's A = abstract / (abstract + concrete)). Consumes per-module type counts produced by the scanner and aggregates them by parent directory.
+- `instability.rs` - Per-directory instability (Martin's I = Ce / (Ca + Ce)) computed from cross-directory edges. Also detects Stable Dependencies Principle violations: cross-directory edges where the more-stable directory depends on the less-stable one. Per-file instability (different unit, different audience) lives in `metrics.rs`.
 - `independence.rs` - Per-module independence scores (internal vs. external dependency ratio).
 - `gravity_wells.rs` - Gravity Well detection: modules whose aggregate RRI exceeds 2× the median.
 - `red_flags.rs` - Architectural anti-pattern detection: *Fused Sibling* and *Trapped Child*.

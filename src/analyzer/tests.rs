@@ -451,6 +451,35 @@ fn audit_with_settings_empty_project_scores_100() {
 }
 
 #[test]
+fn audit_populates_per_directory_instability() {
+    let modules = vec![
+        make_module("a", "src/app/main.rs"),
+        make_module("b", "src/core/lib.rs"),
+    ];
+    let deps = vec![make_dep("a", "b", 1)];
+
+    let result = audit(&modules, &deps);
+
+    let app = result
+        .instability
+        .iter()
+        .find(|m| m.dir == "src/app")
+        .expect("src/app instability missing");
+    assert_eq!(app.ce, 1);
+    assert_eq!(app.ca, 0);
+    assert!((app.instability - 1.0).abs() < 1e-9);
+
+    let core = result
+        .instability
+        .iter()
+        .find(|m| m.dir == "src/core")
+        .expect("src/core instability missing");
+    assert_eq!(core.ce, 0);
+    assert_eq!(core.ca, 1);
+    assert!((core.instability - 0.0).abs() < 1e-9);
+}
+
+#[test]
 fn audit_with_settings_populates_abstractness_from_type_counts() {
     use crate::scanner::parsers::TypeCounts;
     use crate::scanner::ModuleTypeCounts;
