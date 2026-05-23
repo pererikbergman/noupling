@@ -52,7 +52,8 @@
     { "name": "scanner", "pattern": "**/scanner/**" },
     { "name": "storage", "pattern": "**/storage/**" },
     { "name": "analyzer", "pattern": "**/analyzer/**" },
-    { "name": "core", "pattern": "**/core/**" }
+    { "name": "core", "pattern": "**/core/**" },
+    { "name": "settings", "pattern": "**/settings.rs" }
   ],
   "allow_inline_suppression": true,
   "modules": []

@@ -90,23 +90,39 @@ pub fn check_layer_rules(
         let from_layer = module_layer.get(dep.from_module_id.as_str());
         let to_layer = module_layer.get(dep.to_module_id.as_str());
 
-        if let (Some((from_idx, _from_name)), Some((to_idx, to_name))) = (from_layer, to_layer) {
-            // Violation: importing from a higher layer (lower index = higher layer)
-            if to_idx < from_idx {
-                let from_path = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"");
-                let to_path = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"");
-                let from_name = module_layer
-                    .get(dep.from_module_id.as_str())
-                    .map(|(_, n)| *n)
-                    .unwrap_or("");
+        let from_path = id_to_path.get(dep.from_module_id.as_str()).unwrap_or(&"");
+        let to_path = id_to_path.get(dep.to_module_id.as_str()).unwrap_or(&"");
+
+        match (from_layer, to_layer) {
+            // Both layered: violation if target is in a higher (lower-index) layer.
+            (Some((from_idx, from_name)), Some((to_idx, to_name))) => {
+                if to_idx < from_idx {
+                    violations.push(LayerViolation {
+                        from_module: from_path.to_string(),
+                        to_module: to_path.to_string(),
+                        line_number: dep.line_number,
+                        from_layer: from_name.to_string(),
+                        to_layer: to_name.to_string(),
+                    });
+                }
+            }
+            // Bug #220: layered source → unlayered target is a deliberate
+            // cross-layer dependency the team should see. Surface it with
+            // to_layer = "<unlayered>" so the team can either add the target
+            // to a layer or record the exception in dependency_rules.
+            (Some((_, from_name)), None) => {
                 violations.push(LayerViolation {
                     from_module: from_path.to_string(),
                     to_module: to_path.to_string(),
                     line_number: dep.line_number,
                     from_layer: from_name.to_string(),
-                    to_layer: to_name.to_string(),
+                    to_layer: "<unlayered>".to_string(),
                 });
             }
+            // Unlayered source → anywhere is fine. Sources outside layers are
+            // typically entrypoints (main.rs, build scripts) and importing
+            // layered code is the normal entry case.
+            (None, _) => {}
         }
     }
 
@@ -172,5 +188,142 @@ impl AuditResult {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::{Module, ModuleType};
+    use crate::settings::Layer;
+
+    fn layer(name: &str, pattern: &str) -> Layer {
+        Layer {
+            name: name.into(),
+            pattern: pattern.into(),
+            allow_sibling: false,
+            max_sibling_density: None,
+            reduced_sibling_weight: 2.5,
+        }
+    }
+
+    fn file_module(id: &str, path: &str) -> Module {
+        Module {
+            id: id.into(),
+            snapshot_id: "snap".into(),
+            parent_id: None,
+            name: std::path::Path::new(path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: 1,
+        }
+    }
+
+    fn dep(from: &str, to: &str, line: i32) -> Dependency {
+        Dependency {
+            from_module_id: from.into(),
+            to_module_id: to.into(),
+            line_number: line,
+        }
+    }
+
+    #[test]
+    fn flags_layered_source_to_unlayered_target_as_violation() {
+        // Bug #220: a file inside a layer importing a top-level / unlayered
+        // file (e.g. scanner/discovery.rs → src/settings.rs) is a deliberate
+        // cross-layer dependency the team should see and decide about. The
+        // old code silently dropped it because the target wasn't in any layer.
+        let layers = vec![layer("scanner", "**/scanner/**")];
+        let modules = vec![
+            file_module("s1", "src/scanner/discovery.rs"),
+            file_module("set1", "src/settings.rs"), // unlayered
+        ];
+        let deps = vec![dep("s1", "set1", 7)];
+
+        let violations = check_layer_rules(&modules, &deps, &layers);
+
+        assert_eq!(violations.len(), 1, "expected one violation");
+        assert_eq!(violations[0].from_module, "src/scanner/discovery.rs");
+        assert_eq!(violations[0].to_module, "src/settings.rs");
+        assert_eq!(violations[0].from_layer, "scanner");
+        assert_eq!(violations[0].to_layer, "<unlayered>");
+    }
+
+    #[test]
+    fn does_not_flag_unlayered_source_to_layered_target() {
+        // Asymmetric: entrypoints like src/main.rs aren't layered and importing
+        // INTO a layer is the normal entry case, not a violation.
+        let layers = vec![layer("scanner", "**/scanner/**")];
+        let modules = vec![
+            file_module("m1", "src/main.rs"), // unlayered
+            file_module("s1", "src/scanner/discovery.rs"),
+        ];
+        let deps = vec![dep("m1", "s1", 1)];
+
+        let violations = check_layer_rules(&modules, &deps, &layers);
+
+        assert!(
+            violations.is_empty(),
+            "unlayered source → layered target is the entrypoint case, not a violation"
+        );
+    }
+
+    #[test]
+    fn flags_upward_layered_to_layered_unchanged() {
+        // Existing behaviour preserved: B in a lower layer importing from a
+        // higher layer is still a violation with the higher layer named in
+        // to_layer.
+        let layers = vec![
+            layer("reporter", "**/reporter/**"), // index 0 = top
+            layer("core", "**/core/**"),         // index 1 = bottom
+        ];
+        let modules = vec![
+            file_module("c1", "src/core/mod.rs"),
+            file_module("r1", "src/reporter/html.rs"),
+        ];
+        let deps = vec![dep("c1", "r1", 3)];
+
+        let violations = check_layer_rules(&modules, &deps, &layers);
+
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].from_layer, "core");
+        assert_eq!(violations[0].to_layer, "reporter");
+    }
+
+    #[test]
+    fn does_not_flag_downward_layered_to_layered() {
+        // Downward (reporter → core, the right direction) stays silent.
+        let layers = vec![
+            layer("reporter", "**/reporter/**"), // index 0
+            layer("core", "**/core/**"),         // index 1
+        ];
+        let modules = vec![
+            file_module("r1", "src/reporter/html.rs"),
+            file_module("c1", "src/core/mod.rs"),
+        ];
+        let deps = vec![dep("r1", "c1", 2)];
+
+        let violations = check_layer_rules(&modules, &deps, &layers);
+
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn does_not_flag_when_layers_config_is_empty() {
+        // Empty layers config means "no layer rules"; nothing should be flagged.
+        let layers: Vec<Layer> = vec![];
+        let modules = vec![
+            file_module("a", "src/scanner/foo.rs"),
+            file_module("b", "src/settings.rs"),
+        ];
+        let deps = vec![dep("a", "b", 1)];
+
+        let violations = check_layer_rules(&modules, &deps, &layers);
+
+        assert!(violations.is_empty());
     }
 }
