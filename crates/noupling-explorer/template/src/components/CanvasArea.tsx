@@ -50,7 +50,21 @@ export function CanvasArea({
   // children, drill again to land on files. The side panel + search row
   // still show counts over the full sub-tree (PRD F3.3).
   const lsmData = useMemo(() => {
-    const visibleNodes = data.nodes.filter((n) => isImmediateChild(n, scope));
+    const childrenByParent = new Map<string | null, NodeEntry[]>();
+    for (const n of data.nodes) {
+      const k = n.parent ?? null;
+      const arr = childrenByParent.get(k);
+      if (arr) arr.push(n);
+      else childrenByParent.set(k, [n]);
+    }
+    const immediate = data.nodes.filter((n) => isImmediateChild(n, scope));
+    // Collapse singleton chains: when an immediate child is a directory
+    // with exactly one directory child (and no files of its own), jump to
+    // that child. Repeat until the displayed node is a fork (>1 child),
+    // a directory that contains a file directly, or a leaf file. The
+    // breadcrumb is still the canonical navigation surface for any
+    // intermediate level you want to jump back to.
+    const visibleNodes = immediate.map((n) => collapseSingletonChain(n, childrenByParent));
     const visibleIds = new Set(visibleNodes.map((n) => n.id));
     return {
       ...data,
@@ -201,6 +215,32 @@ export function CanvasArea({
 function isImmediateChild(node: NodeEntry, scope: string): boolean {
   if (scope === "") return node.parent === null;
   return node.parent === scope;
+}
+
+/**
+ * Walk down a singleton chain — keeps descending as long as the current
+ * directory has exactly one *directory* child and no files of its own.
+ * Stops at the first fork (≥2 children) or the first dir that holds a
+ * file directly, or a leaf file.
+ *
+ * For an Android `app/src/main/java/com/<org>/<app>/cart/...` codebase
+ * the root view collapses `app` straight to the first package with
+ * multiple sub-packages, skipping the seven dead-end intermediate
+ * directories.
+ */
+function collapseSingletonChain(
+  start: NodeEntry,
+  childrenByParent: Map<string | null, NodeEntry[]>,
+): NodeEntry {
+  if (start.kind === "file") return start;
+  let current = start;
+  while (true) {
+    const children = childrenByParent.get(current.id) ?? [];
+    if (children.length !== 1) return current;
+    const only = children[0];
+    if (only.kind === "file") return current;
+    current = only;
+  }
 }
 
 function FilterPill({
