@@ -308,6 +308,8 @@ Each section below details the features within a milestone with acceptance crite
 
 ## 8. v1 — The Interactive Readme
 
+> **v1 ships in two phases.** Task 1 is a behavior-preserving workspace split (see §15.1). It lands on its own — green CI and green `noupling audit`-of-self — before any Explorer feature work begins. The features in §8.2–§8.11 below are Task 2 onward.
+
 ### 8.1 Goal
 
 A developer opens the Explorer and within 30 seconds knows: what kind of codebase this is, what Layers exist, where the gravity is, which Layers are healthy vs strained, and where to start reading.
@@ -768,22 +770,48 @@ Aligned with noupling's existing language.
 
 ---
 
-## 15. Suggested Implementation Order (for the noupling agent)
+## 15. Implementation Order
 
-For tactical sequencing when implementing v1:
+v1 is delivered in two phases. **Task 1** is a standalone, behavior-preserving refactor that lands on its own PR with no functional changes. **Task 2 onward** builds the Explorer on top of the new layout.
 
-1. **Workspace split.** Restructure the repo into the Cargo workspace shape from §5.1 (`crates/noupling-core/`, `crates/noupling-cli/`, empty `crates/noupling-explorer/` shell). Move existing modules with the minimum changes needed to compile. `cargo test --workspace` green before any new feature work. Update `.noupling/settings.json` with the `explorer` layer and the new `dependency_rules`; confirm `noupling audit` on its own repo passes.
-2. **Reporter skeleton.** Implement `noupling-explorer`'s public entry; have `noupling-cli` register `--format explorer` and call into it. Emit a stub HTML containing only the codebase header — verify end-to-end integration before any visualization work.
-3. **Data contract serialization.** Extend whatever noupling already serializes for its `--format json` to produce the Data Contract schema in section 6. Inline as `<script type="application/json">` block.
-4. **LSM rendering.** Implement the layered topological layout algorithm. Render nodes and edges. Tested against the `samples/` fixtures noupling already has.
-5. **Drill-down.** Expand/collapse interaction. Breadcrumb scope.
-6. **Details panel + click-to-source.**
-7. **Search + filters + Layer overlay.**
-8. **Cycle inline surfacing.**
-9. **Persistent UI state via LocalStorage.**
-10. **Polish: accessibility, theming, performance pass.**
+### 15.1 Task 1 — Workspace Split (prerequisite)
 
-v1 ships with all of the above. v2 and v3 begin only after v1 is in active use and pain points are identified.
+Goal: restructure the single-crate `noupling` into the Cargo workspace from §5.1 so that the Explorer crate can be added in Task 2 with compile-time isolation. No feature flags change. No CLI behaviour changes. No `noupling-explorer` code yet — only its empty crate shell.
+
+**Scope (what changes):**
+
+- **Cargo workspace.** Root `Cargo.toml` becomes a workspace manifest. Per-crate manifests live at `crates/noupling-core/Cargo.toml`, `crates/noupling-cli/Cargo.toml`, `crates/noupling-explorer/Cargo.toml`. Use a `[workspace.package]` block to share `version`, `authors`, `license`, `repository`, etc.
+- **Code moves.** Pure-analysis modules (`analyzer/`, `scanner/`, `storage/`, `core/`, `settings.rs`, `diff.rs`, `baseline.rs`, plus shared helpers in `utils/`) move under `crates/noupling-core/src/`. CLI and reporter modules (`main.rs`, `cli.rs`, `commands/`, `reporter/`, `hook.rs`) move under `crates/noupling-cli/src/`. `crates/noupling-explorer/src/lib.rs` is a minimal stub exporting nothing yet.
+- **Binary name preserved.** `noupling-cli`'s manifest declares `[[bin]] name = "noupling"` so the produced binary, `cargo install`, Homebrew tap, and release artifacts all keep the name `noupling`. Published-crate name on crates.io: discuss with maintainer before changing; default is to keep publishing the binary as `noupling` (manifest `[package] name = "noupling"` lives on the cli crate; the workspace coordinates the rest).
+- **CI updated.** `.github/workflows/ci.yml`: `cargo check/fmt/clippy/test` switch to `--workspace`. `release.yml`: `cargo build --release -p noupling` (or whatever the cli crate's package name resolves to) produces the same artifact as before.
+- **Release script.** `scripts/release.sh` reads version from the workspace manifest (or from the cli crate's manifest, whichever holds it after the split). The `release` skill / Homebrew tap update flow keeps working.
+- **`.noupling/settings.json` updated.** Layer patterns currently match `**/reporter/**`, `**/scanner/**`, etc.; they need patterns that survive under the new tree (e.g., `**/crates/noupling-cli/src/reporter/**`, `**/crates/noupling-core/src/scanner/**`, `**/crates/noupling-explorer/**`). Add the `explorer` layer. Add the `dependency_rules` from §5.1.1 that forbid `noupling-core` → reporter/explorer and forbid `noupling-explorer` → cli/reporter.
+- **Public API surface.** `noupling-core`'s `lib.rs` re-exports the types and functions that `noupling-cli` and (later) `noupling-explorer` need: scan result, layer config, metric outputs, audit result. Internal helpers stay `pub(crate)`. No `pub(crate)` workarounds, no leaking implementation modules.
+
+**Acceptance criteria:**
+
+- `cargo build --workspace` and `cargo test --workspace` both green.
+- `cargo build --release -p <cli-package-name>` produces a binary named `noupling` identical in surface behaviour to today's binary (`noupling --help` output unchanged; existing CLI integration tests pass without modification).
+- `noupling audit` run against the noupling repo itself passes, including the new `explorer` layer rules. A deliberately leaked import (e.g., adding `use noupling_cli::reporter::html;` into `noupling-explorer/src/lib.rs`) must trigger *both* a Rust compile error *and* an audit failure.
+- CI workflow passes on the new layout.
+- `scripts/release.sh patch` performs a dry-run successfully against the new manifests (no actual tag).
+- `samples/` fixtures and `tests/` integration tests remain in place and pass.
+
+### 15.2 Task 2 onward — Explorer features
+
+For tactical sequencing of v1's Explorer work, once Task 1 is merged:
+
+1. **Reporter skeleton.** Implement `noupling-explorer`'s public entry; have `noupling-cli` register `--format explorer` and call into it. Emit a stub HTML containing only the codebase header — verify end-to-end integration before any visualization work.
+2. **Data contract serialization.** Extend whatever noupling already serializes for its `--format json` to produce the Data Contract schema in section 6. Inline as `<script type="application/json">` block.
+3. **LSM rendering.** Implement the layered topological layout algorithm. Render nodes and edges. Tested against the `samples/` fixtures noupling already has.
+4. **Drill-down.** Expand/collapse interaction. Breadcrumb scope.
+5. **Details panel + click-to-source.**
+6. **Search + filters + Layer overlay.**
+7. **Cycle inline surfacing.**
+8. **Persistent UI state via LocalStorage.**
+9. **Polish: accessibility, theming, performance pass.**
+
+v1 ships with Task 1 plus all of Task 2 onward. v2 and v3 begin only after v1 is in active use and pain points are identified.
 
 ---
 
