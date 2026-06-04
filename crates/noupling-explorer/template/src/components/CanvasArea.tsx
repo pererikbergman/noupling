@@ -1,7 +1,12 @@
 import type { DataContract } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Breadcrumb } from "./Breadcrumb";
-import { breadcrumbFor, parentDir } from "../state/explorerState";
+import {
+  breadcrumbFor,
+  parentDir,
+  type SpotFilter,
+  shouldHighlightViolations,
+} from "../state/explorerState";
 
 export interface CanvasAreaProps {
   data: DataContract;
@@ -10,6 +15,12 @@ export interface CanvasAreaProps {
   onScope: (scope: string) => void;
   onClearScope: () => void;
   onNodeClick?: (id: string) => void;
+  spotFilter: SpotFilter;
+  onSpotFilter: (f: SpotFilter) => void;
+  layerOverlay: boolean;
+  onToggleLayerOverlay: () => void;
+  cycleHighlight: boolean;
+  onToggleCycleHighlight: () => void;
 }
 
 export function CanvasArea({
@@ -19,6 +30,12 @@ export function CanvasArea({
   onScope,
   onClearScope,
   onNodeClick,
+  spotFilter,
+  onSpotFilter,
+  layerOverlay,
+  onToggleLayerOverlay,
+  cycleHighlight,
+  onToggleCycleHighlight,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
 
@@ -29,15 +46,50 @@ export function CanvasArea({
     }
   }
 
+  const cyclesByNode = new Map<string, number>();
+  for (const c of data.cycles) {
+    for (const id of c.members) {
+      cyclesByNode.set(id, (cyclesByNode.get(id) ?? 0) + 1);
+    }
+  }
+
   return (
     <main id="root-canvas" className="relative overflow-hidden bg-canvas">
-      {/* Spot-filter pills overlay on the canvas */}
+      {/* Spot-filter pills overlay on the canvas (PRD F5.5) */}
       <div className="absolute left-4 top-3 z-10 flex flex-wrap gap-1.5">
-        <Pill active>All</Pill>
-        <Pill>In cycles ({data.summary_counts.cycles})</Pill>
-        <Pill>With violations ({data.summary_counts.violations})</Pill>
-        <Pill>Clean modules</Pill>
-        <Pill>Gravity wells ({data.summary_counts.gravity_wells})</Pill>
+        <FilterPill active={spotFilter === "all"} onClick={() => onSpotFilter("all")}>
+          All
+        </FilterPill>
+        <FilterPill
+          active={spotFilter === "in-cycles"}
+          onClick={() => onSpotFilter("in-cycles")}
+        >
+          In cycles ({data.summary_counts.cycles})
+        </FilterPill>
+        <FilterPill
+          active={spotFilter === "with-violations"}
+          onClick={() => onSpotFilter("with-violations")}
+        >
+          With violations ({data.summary_counts.violations})
+        </FilterPill>
+        <FilterPill
+          active={spotFilter === "clean"}
+          onClick={() => onSpotFilter("clean")}
+        >
+          Clean modules
+        </FilterPill>
+        <FilterPill
+          active={spotFilter === "hide-violations"}
+          onClick={() => onSpotFilter("hide-violations")}
+        >
+          Hide violations
+        </FilterPill>
+        <FilterPill
+          active={spotFilter === "gravity-wells"}
+          onClick={() => onSpotFilter("gravity-wells")}
+        >
+          Gravity wells ({data.summary_counts.gravity_wells})
+        </FilterPill>
       </div>
 
       <Breadcrumb
@@ -48,15 +100,36 @@ export function CanvasArea({
       />
 
       <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-        <LSM data={data} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} />
+        <LSM
+          data={data}
+          onNodeClick={onNodeClick}
+          onNodeDoubleClick={onNodeDoubleClick}
+          highlightViolations={shouldHighlightViolations(spotFilter)}
+          highlightCycles={cycleHighlight}
+          layerOverlay={layerOverlay}
+          cyclesByNode={cyclesByNode}
+        />
       </div>
 
-      {/* Zoom controls (bottom-left) */}
+      {/* Zoom + view-mode controls (bottom-left) */}
       <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-0.5 rounded-sm border border-border bg-card p-0.5">
         <ZoomBtn title="Zoom in (+)">+</ZoomBtn>
         <ZoomBtn title="Zoom out (−)">−</ZoomBtn>
         <ZoomBtn title="Fit view (1)">⛶</ZoomBtn>
-        <ZoomBtn title="Toggle interactivity">⇄</ZoomBtn>
+        <ZoomBtn
+          title={layerOverlay ? "Hide layer overlay" : "Show layer overlay"}
+          active={layerOverlay}
+          onClick={onToggleLayerOverlay}
+        >
+          L
+        </ZoomBtn>
+        <ZoomBtn
+          title={cycleHighlight ? "Hide cycles" : "Show cycles"}
+          active={cycleHighlight}
+          onClick={onToggleCycleHighlight}
+        >
+          ⊚
+        </ZoomBtn>
       </div>
 
       {/* Action-plan strip (bottom-right) */}
@@ -75,9 +148,18 @@ export function CanvasArea({
   );
 }
 
-function Pill({ active, children }: { active?: boolean; children: React.ReactNode }) {
+function FilterPill({
+  active,
+  children,
+  onClick,
+}: {
+  active?: boolean;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
   return (
     <button
+      onClick={onClick}
       className={
         "rounded-full border px-3 py-1 text-[11px] " +
         (active
@@ -93,14 +175,22 @@ function Pill({ active, children }: { active?: boolean; children: React.ReactNod
 function ZoomBtn({
   children,
   title,
+  active,
+  onClick,
 }: {
   children: React.ReactNode;
   title: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       title={title}
-      className="h-6 w-6 rounded-sm text-text hover:bg-pill hover:text-pill-text"
+      onClick={onClick}
+      className={
+        "h-6 w-6 rounded-sm " +
+        (active ? "bg-pill text-pill-text" : "text-text hover:bg-pill hover:text-pill-text")
+      }
     >
       {children}
     </button>
