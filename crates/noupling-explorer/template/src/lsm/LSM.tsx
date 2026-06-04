@@ -237,15 +237,30 @@ function NodeCard({
 }) {
   const stripeColor = layerAccentColor(node.layer);
   const baseOpacity = dimmed ? 0.35 : 1;
+  const ariaLabel = `${node.label} (${node.layer ?? "unlayered"})`;
   return (
     <g
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
       transform={`translate(${node.x},${node.y})`}
       opacity={baseOpacity}
-      style={{ cursor: "pointer", transition: "opacity 120ms" }}
+      style={{ cursor: "pointer", transition: "opacity 120ms", outline: "none" }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onFocus={onMouseEnter}
+      onBlur={onMouseLeave}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        } else if (e.key === "d" || e.key === "D") {
+          e.preventDefault();
+          onDoubleClick();
+        }
+      }}
     >
       <rect
         x={0}

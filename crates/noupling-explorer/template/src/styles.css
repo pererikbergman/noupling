@@ -3,6 +3,18 @@
 @tailwind utilities;
 
 @layer base {
+  /* Visible focus indicator for keyboard nav (PRD §12.5). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent-domain));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* SVG node cards get a focus rect instead of an outline. */
+  g[role="button"]:focus-visible > rect:first-of-type {
+    stroke: rgb(var(--accent-domain));
+    stroke-width: 2;
+  }
+
   :root[data-theme="dark"] {
     --bg: 11 11 12;
     --card: 24 24 28;

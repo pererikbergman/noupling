@@ -113,18 +113,26 @@ export function CanvasArea({
 
       {/* Zoom + view-mode controls (bottom-left) */}
       <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-0.5 rounded-sm border border-border bg-card p-0.5">
-        <ZoomBtn title="Zoom in (+)">+</ZoomBtn>
-        <ZoomBtn title="Zoom out (−)">−</ZoomBtn>
-        <ZoomBtn title="Fit view (1)">⛶</ZoomBtn>
+        <ZoomBtn title="Zoom in (+)" ariaLabel="Zoom in">
+          +
+        </ZoomBtn>
+        <ZoomBtn title="Zoom out (−)" ariaLabel="Zoom out">
+          −
+        </ZoomBtn>
+        <ZoomBtn title="Fit view (1)" ariaLabel="Fit view">
+          ⛶
+        </ZoomBtn>
         <ZoomBtn
           title={layerOverlay ? "Hide layer overlay" : "Show layer overlay"}
+          ariaLabel={layerOverlay ? "Hide layer-identity overlay" : "Show layer-identity overlay"}
           active={layerOverlay}
           onClick={onToggleLayerOverlay}
         >
           L
         </ZoomBtn>
         <ZoomBtn
-          title={cycleHighlight ? "Hide cycles" : "Show cycles"}
+          title={cycleHighlight ? "Hide cycle highlights" : "Show cycle highlights"}
+          ariaLabel={cycleHighlight ? "Hide cycle highlights" : "Show cycle highlights"}
           active={cycleHighlight}
           onClick={onToggleCycleHighlight}
         >
@@ -175,17 +183,21 @@ function FilterPill({
 function ZoomBtn({
   children,
   title,
+  ariaLabel,
   active,
   onClick,
 }: {
   children: React.ReactNode;
   title: string;
+  ariaLabel?: string;
   active?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       title={title}
+      aria-label={ariaLabel ?? title}
+      aria-pressed={active}
       onClick={onClick}
       className={
         "h-6 w-6 rounded-sm " +

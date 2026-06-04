@@ -88,19 +88,39 @@ src/
 ├── main.tsx            Bootstraps React with the loaded Data Contract
 ├── data.ts             Reads <script id="noupling-data"> or falls back to /samples/
 ├── types.ts            TypeScript mirror of the Rust DataContract
+├── sourceLink.ts       Editor URL templates (vscode/jetbrains/sublime/cursor)
 ├── styles.css          Tailwind base + design tokens (dark + light)
-└── components/
-    ├── TopBar.tsx
-    ├── SearchRow.tsx
-    ├── SidePanel.tsx   Tabs: Info / Files / Rules / Plan
-    └── CanvasArea.tsx  LSM placeholder (filled in by #233)
+├── components/
+│   ├── TopBar.tsx
+│   ├── SearchRow.tsx
+│   ├── SidePanel.tsx   Tabs: Info / Files / Rules / Plan
+│   ├── Breadcrumb.tsx  Drill chain shown above the canvas
+│   ├── DetailsPanel.tsx Right-slide panel on node click
+│   └── CanvasArea.tsx  Hosts the LSM + filter pills + toolbar
+├── lsm/
+│   ├── LSM.tsx         SVG renderer (cards, edges, layer bands, badges)
+│   └── layout.ts       Pure Data Contract → SVG geometry
+└── state/
+    └── explorerState.ts  Single owner; LocalStorage-persisted UI state.
 dist/explorer.html      Build artifact — consumed by the Rust crate.
                         Must be regenerated whenever src/ changes.
 ```
 
-## Next slices
+## v1 is complete (#231–#242)
 
-- **#233** — LSM static rendering inside `CanvasArea`.
-- **#234** — multi-level drill-down + breadcrumb.
+What ships in v1:
+- **Codebase header** (#231) — language distribution, module/file/edge counts, health score, stat cards, scan timestamp + noupling version.
+- **Layered Structure Map** (#233) — file nodes in tiers by layer, edges weighted, layer bands tinted by violation rate.
+- **Drill-down + breadcrumb** (#234) — double-click to scope; breadcrumb above canvas, click any segment to jump.
+- **Details panel + click-to-source** (#235) — single-click → right-side panel; "Open in editor" supports vscode/jetbrains/sublime/cursor + custom URL template.
+- **Focus** (#236) — "Focus on this node" button in the details panel locks the view to a sub-tree.
+- **Search** (#237) — substring + regex live filtering.
+- **Spot filters** (#238) — All / In cycles / With violations / Clean / Hide violations / Gravity wells.
+- **Layer overlay** (#239) — "L" toolbar button paints per-layer-name tints.
+- **Cycles inline** (#240) — red edges + per-node cycle-count badge + toolbar toggle.
+- **Persistence** (#241) — every UI toggle persists per Explorer file. ↺ Reset View clears.
+- **Polish** (#242) — keyboard navigation (Tab to focus, Enter to select, D to drill), ARIA labels on icon buttons, visible focus ring, prefers-color-scheme auto theme.
+
+## Next slices
 - **#235** — node click → details in the Info tab (selection mode).
 - **#236–#242** — focus, search, filters, layer overlay, cycles, persistence, polish.

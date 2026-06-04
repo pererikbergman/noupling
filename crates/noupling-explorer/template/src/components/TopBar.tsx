@@ -109,6 +109,7 @@ function IconButton({
   return (
     <button
       title={title}
+      aria-label={title}
       onClick={onClick}
       className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border text-muted hover:text-text"
     >
