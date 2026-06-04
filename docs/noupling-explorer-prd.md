@@ -143,14 +143,21 @@ Compile-time isolation is the primary guarantee; noupling's own audit is the sec
 - `dependency_rules` that forbid any path under `**/crates/noupling-core/**` from importing reporter or Explorer paths, and forbid `**/crates/noupling-explorer/**` from importing `**/crates/noupling-cli/**` or reporter siblings.
 - `noupling audit` on the noupling repo itself must pass with these rules in place. A breach is both a Rust compile error *and* an audit failure — the boundary cannot rot quietly.
 
-### 5.2 Browser side (inside the HTML)
+### 5.2 Browser side (inside the HTML) — the template subproject
 
-The interactive layer is **plain JavaScript** loaded inline. No React, no Vite, no npm. The pattern mirrors noupling's existing interactive HTML reports (which use vanilla JS + D3 where graph rendering is needed).
+The Explorer's interactive layer is its own frontend subproject with its own build pipeline. It lives under `crates/noupling-explorer/template/` and is decoupled from noupling's Rust build. The Rust `noupling-explorer` crate **never runs the template's build** — it consumes a pre-compiled HTML artifact produced by the template subproject and injects scan data into it. (See [`docs/noupling-explorer-design.md`](./noupling-explorer-design.md) for the visual brief that drives the template's look.)
 
-- Inline `<script>` blocks contain all interactivity (event handlers, search, filtering, view switching, drag interactions).
-- Visualization library: if noupling already bundles **D3.js** for the sunburst/dashboard reports, reuse it. If not, use the lightest fit per view (D3 for force-directed and matrix; vanilla SVG/Canvas for LSM and simpler views).
-- Inline `<style>` blocks contain all CSS.
-- Inline `<script type="application/json" id="noupling-data">` block contains the scan data serialized per the data contract below.
+- **Template tech stack** is chosen by the template subproject's maintainers and may use React, Tailwind, shadcn/ui, Vite, etc. — the constraint "no npm in noupling's Rust build" applies only to noupling's Rust build, not to the template subproject.
+- **Single-file output.** The template's production build must emit a single self-contained HTML file (e.g. via `vite-plugin-singlefile` or equivalent). All JS, CSS, fonts, and SVG inline. No external network. Opens via `file://`.
+- **Data injection contract.** The template includes a placeholder `<script id="noupling-data" type="application/json"></script>` element with an empty body. At report-emission time, the Rust `noupling-explorer` crate string-substitutes the serialized Data Contract (per §6) into that element's body. The template reads the JSON at startup and hydrates state from it. This contract is intentionally minimal so the template can be rebuilt freely without breaking the Rust side, and so the Rust side can be reasoned about without knowing the template's framework.
+- **Build artifact handoff.** The template's `pnpm build` (or equivalent) produces `crates/noupling-explorer/template/dist/explorer.html`. That file is committed to git so cargo builds never need npm. The Rust crate embeds it via `include_str!("../template/dist/explorer.html")`.
+- **Visualization library inside the template** is the template subproject's call. v2's WASM module is loaded by the template per §5.3.
+
+### 5.2.1 Template-build cadence
+
+- The template subproject is published (built) by its maintainer when the visual or interaction layer changes. Publishing means: run the build, copy `dist/explorer.html` into the Rust crate's expected path, commit both the source change and the rebuilt artifact in the same PR. The Rust side then automatically picks up the new template at the next `cargo build`.
+- A drift check should run in CI to ensure `template/dist/explorer.html` matches what `pnpm build` would emit from `template/src/`. Out-of-sync template artifact = failed CI.
+- The template subproject has its own README documenting how to develop against a sample Data Contract (so frontend devs don't need to run noupling Rust to iterate).
 
 ### 5.3 WebAssembly (v2+)
 
@@ -160,9 +167,11 @@ For v2's in-memory virtual refactoring with live metric recompute, compile noupl
 
 ### 5.4 Build-system changes
 
-v1's build-side change is **the workspace split itself**: one `Cargo.toml` becomes a workspace manifest plus three crate manifests. No npm, no Vite, no wasm-pack, no new toolchain. `cargo build` still produces the same binary; CI commands are equivalent (`cargo build --workspace`, `cargo test --workspace`). The split is mechanical, not a rewrite — existing modules move under `crates/noupling-core/src/` and `crates/noupling-cli/src/` largely unchanged.
+v1's Rust-side change is **the workspace split itself** (Task 1 of #228, delivered in #229): one `Cargo.toml` becomes a workspace manifest plus three crate manifests. `cargo build` still produces the same binary; CI commands are `cargo {check,test,clippy} --workspace` and `cargo fmt --all --check`.
 
-v2 adds `cargo build --target wasm32-unknown-unknown` for the WASM module; that's the only further build-side addition and it's bounded to v2.
+v1's frontend-side change is the **template subproject** at `crates/noupling-explorer/template/` (see §5.2). It has its own toolchain (npm/pnpm/Vite/etc.) which the Rust workspace never invokes. Cargo treats the template subdir as opaque — it's neither a workspace member nor a cargo target. The built artifact `template/dist/explorer.html` is committed to git and embedded by the Rust crate via `include_str!`.
+
+v2 adds `cargo build --target wasm32-unknown-unknown` for the WASM module; that's the only further Rust-side build addition and it's bounded to v2. The template subproject inlines the WASM (base64) at its own build time per §5.3.
 
 ---
 
@@ -372,7 +381,7 @@ The top of the page shows a concise summary of the scanned codebase.
 The headline view. Modules arranged vertically by topological dependency depth: leaves at the bottom, entry points at the top. Read-only in v1.
 
 - **F2.1** Topological sort: modules with no incoming dependencies sit at level 0 (top); modules they depend on flow down through levels.
-- **F2.2** Each node is a Layer or module, sized by file count (or LOC — pick one, document the choice).
+- **F2.2** Node sizing. Container and aggregate nodes (Layers, Packages, Containers) are sized by **file count** — size encodes "this contains stuff." Leaf nodes (files, `kind: "file"`) are **uniform size** across all views; once the viewer is at the bottom of the tree, size carries no meaning. Rule applies to every view (LSM in v1; matrix and force-directed in v3). See §13.2 for the decision history.
 - **F2.3** Edges drawn between nodes; weight visualized by line thickness.
 - **F2.4** Cyclic edges (those creating cycles) are colored distinctly (red) and use a different arrowhead.
 - **F2.5** Rule violations are highlighted (e.g., red dashed edges).
@@ -774,8 +783,6 @@ Repeated for emphasis. These are explicit non-features:
 
 Decisions to lock down before or during v1 implementation:
 
-- **Q1.** Visualization library for the LSM: D3.js (assumed if already used elsewhere in noupling), or custom SVG/Canvas rendering for tighter control? Decide by reviewing the existing sunburst/dashboard reporter code.
-- **Q2.** Node sizing metric in the LSM: by file count, LOC, or fan-in count? Document and pick one default; consider making it user-toggleable.
 - **Q3.** Click-to-source for languages outside the user's primary editor (e.g., a Rust developer with VSCode looking at a Java codebase) — does the URL scheme just open the file in the configured editor regardless, or does it require per-language editor config?
 
 ### 13.1 Resolved during drafting
@@ -783,6 +790,11 @@ Decisions to lock down before or during v1 implementation:
 - Output path: `.noupling/explorer.html` (matches the artifact convention noupling uses for its other HTML reports).
 - WASM packaging (v2): base64-inlined into the HTML to preserve the single-file invariant.
 - Report-format name: `explorer`.
+
+### 13.2 Resolved after the workspace split (#229)
+
+- **Q1 — Template stack.** The Explorer template is its own frontend subproject under `crates/noupling-explorer/template/` with its own build pipeline (free to use React, shadcn/ui, Vite, etc.). The Rust `noupling-explorer` crate consumes a pre-built single-HTML artifact and only injects the Data Contract. Documented in §5.2 and §5.4. Visualization-library choice now sits inside the template subproject, not in this PRD.
+- **Q2 — Node sizing.** Container/aggregate nodes are sized by **file count** (default). Leaf nodes (files) are uniform size across all views — once the viewer is at the bottom of the tree, size carries no meaning. Rationale: size encodes "this contains stuff"; encoding ends at the leaf. Documented in §8.3 F2.2.
 
 ---
 
