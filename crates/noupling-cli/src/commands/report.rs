@@ -212,12 +212,24 @@ pub fn run(
                 title: explorer_title.map(str::to_string),
                 include_history: !explorer_no_history,
             };
+            // Resolve the codebase root to an absolute path so the template's
+            // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at
+            // a real file on disk. The Snapshot stored at scan-time may carry
+            // a relative path like `.` or `./project`, which is fine for
+            // analysis but produces broken editor links.
+            let abs_root = std::fs::canonicalize(path)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| snapshot.root_path.clone());
+            let resolved_snapshot = noupling_core::core::Snapshot {
+                root_path: abs_root,
+                ..snapshot.clone()
+            };
             let html = noupling_explorer::render(
                 &report_modules,
                 &report_deps,
                 &result,
                 &project_settings,
-                &snapshot,
+                &resolved_snapshot,
                 &options,
             )?;
             let file_path = match explorer_output {
