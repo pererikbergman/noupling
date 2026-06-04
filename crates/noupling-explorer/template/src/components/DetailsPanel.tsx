@@ -7,9 +7,17 @@ export interface DetailsPanelProps {
   selectedId: string | null;
   onClose: () => void;
   onSelect: (id: string | null) => void;
+  /** Focus the whole explorer on this node's sub-tree. Closes the panel. */
+  onFocus: (scope: string) => void;
 }
 
-export function DetailsPanel({ data, selectedId, onClose, onSelect }: DetailsPanelProps) {
+export function DetailsPanel({
+  data,
+  selectedId,
+  onClose,
+  onSelect,
+  onFocus,
+}: DetailsPanelProps) {
   // Esc closes (PRD §8.5 acceptance).
   useEffect(() => {
     if (!selectedId) return;
@@ -141,7 +149,13 @@ export function DetailsPanel({ data, selectedId, onClose, onSelect }: DetailsPan
         />
       </div>
 
-      <footer className="border-t border-border px-4 py-3">
+      <footer className="space-y-2 border-t border-border px-4 py-3">
+        <button
+          onClick={() => onFocus(focusScopeFor(node))}
+          className="block w-full rounded-sm border border-border bg-canvas px-3 py-2 text-center text-[13px] font-semibold text-text hover:bg-pill hover:text-pill-text"
+        >
+          Focus on this node
+        </button>
         <a
           href={url}
           className="block rounded-sm bg-action px-3 py-2 text-center text-[13px] font-semibold text-action-text"
@@ -229,4 +243,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function basename(p: string): string {
   return p.split("/").filter(Boolean).pop() ?? p;
+}
+
+/**
+ * For a file node, focus on the containing directory; for a package or
+ * container, focus on the node itself.
+ */
+function focusScopeFor(node: NodeEntry): string {
+  if (node.kind === "file") {
+    const i = node.id.lastIndexOf("/");
+    return i === -1 ? "" : node.id.slice(0, i);
+  }
+  return node.id;
 }

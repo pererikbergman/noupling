@@ -36,6 +36,8 @@ export interface ExplorerState {
   setLayerOverlay: (b: boolean) => void;
   cycleHighlight: boolean;
   setCycleHighlight: (b: boolean) => void;
+  /** Wipe all persisted state for this Explorer file and return to defaults (PRD F10.2). */
+  resetView: () => void;
 }
 
 export function useExplorerState(data: DataContract): ExplorerState {
@@ -59,6 +61,31 @@ export function useExplorerState(data: DataContract): ExplorerState {
     true,
   );
 
+  function resetView() {
+    setScope("");
+    setSearch("");
+    setSearchMode("substring");
+    setSpotFilter("all");
+    setLayerOverlay(false);
+    setCycleHighlight(true);
+    setSelected(null);
+    try {
+      // Hard-clear in case future setters skip useEffect.
+      for (const suffix of [
+        "::scope",
+        "::search",
+        "::searchMode",
+        "::spotFilter",
+        "::layerOverlay",
+        "::cycleHighlight",
+      ]) {
+        localStorage.removeItem(`${key}${suffix}`);
+      }
+    } catch {
+      /* swallow */
+    }
+  }
+
   return {
     scope,
     setScope,
@@ -74,6 +101,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setLayerOverlay,
     cycleHighlight,
     setCycleHighlight,
+    resetView,
   };
 }
 
