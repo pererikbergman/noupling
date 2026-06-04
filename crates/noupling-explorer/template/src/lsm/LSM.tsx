@@ -5,6 +5,7 @@ import { computeLSMLayout, type LayerBand, type PositionedEdge, type PositionedN
 export interface LSMProps {
   data: DataContract;
   onNodeClick?: (id: string) => void;
+  onNodeDoubleClick?: (id: string) => void;
 }
 
 /**
@@ -16,7 +17,7 @@ export interface LSMProps {
  *
  * v1 of #233: read-only. Drill-down is #234, details panel is #235.
  */
-export function LSM({ data, onNodeClick }: LSMProps) {
+export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -90,6 +91,7 @@ export function LSM({ data, onNodeClick }: LSMProps) {
             onMouseEnter={() => setHovered(n.id)}
             onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
             onClick={() => onNodeClick?.(n.id)}
+            onDoubleClick={() => onNodeDoubleClick?.(n.id)}
           />
         ))}
       </g>
@@ -158,12 +160,14 @@ function NodeCard({
   onMouseEnter,
   onMouseLeave,
   onClick,
+  onDoubleClick,
 }: {
   node: PositionedNode;
   dimmed: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onClick: () => void;
+  onDoubleClick: () => void;
 }) {
   const stripeColor = layerAccentColor(node.layer);
   const baseOpacity = dimmed ? 0.35 : 1;
@@ -175,6 +179,7 @@ function NodeCard({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
     >
       <rect
         x={0}

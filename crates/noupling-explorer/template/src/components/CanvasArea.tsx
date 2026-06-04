@@ -1,7 +1,32 @@
 import type { DataContract } from "../types";
 import { LSM } from "../lsm/LSM";
+import { Breadcrumb } from "./Breadcrumb";
+import { breadcrumbFor, parentDir } from "../state/explorerState";
 
-export function CanvasArea({ data }: { data: DataContract }) {
+export interface CanvasAreaProps {
+  data: DataContract;
+  scope: string;
+  codebaseTitle: string;
+  onScope: (scope: string) => void;
+  onClearScope: () => void;
+}
+
+export function CanvasArea({
+  data,
+  scope,
+  codebaseTitle,
+  onScope,
+  onClearScope,
+}: CanvasAreaProps) {
+  const segments = breadcrumbFor(scope);
+
+  function onNodeDoubleClick(id: string) {
+    const next = parentDir(id);
+    if (next !== "" && next !== scope) {
+      onScope(next);
+    }
+  }
+
   return (
     <main id="root-canvas" className="relative overflow-hidden bg-canvas">
       {/* Spot-filter pills overlay on the canvas */}
@@ -13,8 +38,15 @@ export function CanvasArea({ data }: { data: DataContract }) {
         <Pill>Gravity wells ({data.summary_counts.gravity_wells})</Pill>
       </div>
 
+      <Breadcrumb
+        segments={segments}
+        onSegmentClick={onScope}
+        onClearScope={onClearScope}
+        codebaseTitle={codebaseTitle}
+      />
+
       <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-        <LSM data={data} />
+        <LSM data={data} onNodeDoubleClick={onNodeDoubleClick} />
       </div>
 
       {/* Zoom controls (bottom-left) */}
