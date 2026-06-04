@@ -6,6 +6,14 @@ export interface LSMProps {
   data: DataContract;
   onNodeClick?: (id: string) => void;
   onNodeDoubleClick?: (id: string) => void;
+  /** When false, violation edges render in the regular muted style. */
+  highlightViolations?: boolean;
+  /** When false, cycle edges + node cycle badges hide. */
+  highlightCycles?: boolean;
+  /** When true, render an extra layer-identity tint behind the bands. */
+  layerOverlay?: boolean;
+  /** Per-node cycle membership count, for the badge. */
+  cyclesByNode?: Map<string, number>;
 }
 
 /**
@@ -17,7 +25,15 @@ export interface LSMProps {
  *
  * v1 of #233: read-only. Drill-down is #234, details panel is #235.
  */
-export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
+export function LSM({
+  data,
+  onNodeClick,
+  onNodeDoubleClick,
+  highlightViolations = true,
+  highlightCycles = true,
+  layerOverlay = false,
+  cyclesByNode,
+}: LSMProps) {
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -67,7 +83,12 @@ export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
 
       {/* Layer health bands */}
       {layout.bands.map((band) => (
-        <LayerBandRect key={`band-${band.index}-${band.name}`} band={band} width={layout.width} />
+        <LayerBandRect
+          key={`band-${band.index}-${band.name}`}
+          band={band}
+          width={layout.width}
+          overlay={layerOverlay}
+        />
       ))}
 
       {/* Edges */}
@@ -77,6 +98,8 @@ export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
             key={`${e.from}->${e.to}`}
             edge={e}
             dimmed={directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))}
+            highlightViolations={highlightViolations}
+            highlightCycles={highlightCycles}
           />
         ))}
       </g>
@@ -88,6 +111,9 @@ export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
             key={n.id}
             node={n}
             dimmed={directDeps !== null && !directDeps.has(n.id)}
+            cycleBadgeCount={
+              highlightCycles ? (cyclesByNode?.get(n.id) ?? 0) : 0
+            }
             onMouseEnter={() => setHovered(n.id)}
             onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
             onClick={() => onNodeClick?.(n.id)}
@@ -99,15 +125,27 @@ export function LSM({ data, onNodeClick, onNodeDoubleClick }: LSMProps) {
   );
 }
 
-function LayerBandRect({ band, width }: { band: LayerBand; width: number }) {
+function LayerBandRect({
+  band,
+  width,
+  overlay,
+}: {
+  band: LayerBand;
+  width: number;
+  overlay: boolean;
+}) {
   // Cool blue/green for clean layers, warming toward red as violation rate climbs.
   // Stays inside the WCAG-AA palette declared in styles.css.
   const cleanFill = "rgba(20, 184, 166, 0.07)";
   const warmFill = `rgba(255, 69, 58, ${Math.min(0.16, 0.06 + band.violationRate * 0.16)})`;
-  const fill = band.violationRate > 0 ? warmFill : cleanFill;
+  const healthFill = band.violationRate > 0 ? warmFill : cleanFill;
+  const identityFill = overlay ? layerOverlayTint(band.name) : "none";
   return (
     <g>
-      <rect x={0} y={band.y} width={width} height={band.height} fill={fill} />
+      {overlay && (
+        <rect x={0} y={band.y} width={width} height={band.height} fill={identityFill} />
+      )}
+      <rect x={0} y={band.y} width={width} height={band.height} fill={healthFill} />
       <text
         x={20}
         y={band.y + 22}
@@ -119,22 +157,48 @@ function LayerBandRect({ band, width }: { band: LayerBand; width: number }) {
       >
         {band.name.toUpperCase()} · {band.fileCount}f{" "}
         {band.violationRate > 0 ? "· violations" : "· clean"}
-        {band.instability !== null
-          ? ` · I=${band.instability.toFixed(2)}`
-          : ""}
+        {band.instability !== null ? ` · I=${band.instability.toFixed(2)}` : ""}
       </text>
     </g>
   );
 }
 
-function EdgePath({ edge, dimmed }: { edge: PositionedEdge; dimmed: boolean }) {
-  const stroke = edge.isViolation
+function layerOverlayTint(name: string): string {
+  // Pick a deterministic muted tint per layer name so user can tell tiers
+  // apart on the overlay view independent of health.
+  const palette = [
+    "rgba(167, 139, 250, 0.10)",
+    "rgba(20, 184, 166, 0.10)",
+    "rgba(249, 115, 22, 0.10)",
+    "rgba(96, 165, 250, 0.10)",
+    "rgba(248, 113, 113, 0.10)",
+    "rgba(244, 114, 182, 0.10)",
+  ];
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+
+function EdgePath({
+  edge,
+  dimmed,
+  highlightViolations,
+  highlightCycles,
+}: {
+  edge: PositionedEdge;
+  dimmed: boolean;
+  highlightViolations: boolean;
+  highlightCycles: boolean;
+}) {
+  const showViolation = edge.isViolation && highlightViolations;
+  const showCycle = edge.isCycle && highlightCycles;
+  const stroke = showViolation
     ? "rgb(var(--edge-violation))"
-    : edge.isCycle
+    : showCycle
       ? "rgb(var(--edge-cycle))"
       : "rgb(var(--text-muted))";
-  const dash = edge.isViolation ? "6 4" : "0";
-  const opacity = dimmed ? 0.18 : edge.isCycle || edge.isViolation ? 0.95 : 0.55;
+  const dash = showViolation ? "6 4" : "0";
+  const opacity = dimmed ? 0.18 : showCycle || showViolation ? 0.95 : 0.55;
   const strokeWidth = 1 + Math.min(edge.weight, 4) * 0.4;
   const midY = (edge.y1 + edge.y2) / 2;
   return (
@@ -145,7 +209,7 @@ function EdgePath({ edge, dimmed }: { edge: PositionedEdge; dimmed: boolean }) {
       strokeWidth={strokeWidth}
       strokeDasharray={dash}
       opacity={opacity}
-      markerEnd={`url(#${edge.isCycle ? "lsm-arrow-cycle" : "lsm-arrow"})`}
+      markerEnd={`url(#${showCycle ? "lsm-arrow-cycle" : "lsm-arrow"})`}
     >
       {edge.isViolation && edge.violationMessage ? (
         <title>{edge.violationMessage}</title>
@@ -157,6 +221,7 @@ function EdgePath({ edge, dimmed }: { edge: PositionedEdge; dimmed: boolean }) {
 function NodeCard({
   node,
   dimmed,
+  cycleBadgeCount,
   onMouseEnter,
   onMouseLeave,
   onClick,
@@ -164,6 +229,7 @@ function NodeCard({
 }: {
   node: PositionedNode;
   dimmed: boolean;
+  cycleBadgeCount: number;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onClick: () => void;
@@ -219,6 +285,28 @@ function NodeCard({
       <text x={14} y={64} fill="rgb(var(--text-muted))" fontSize={11}>
         {truncate(node.sublabel, 28)}
       </text>
+      {cycleBadgeCount > 0 && (
+        <g>
+          <circle
+            cx={node.width - 12}
+            cy={node.height - 12}
+            r={9}
+            fill="rgb(var(--edge-cycle))"
+            opacity={0.85}
+          />
+          <text
+            x={node.width - 12}
+            y={node.height - 9}
+            textAnchor="middle"
+            fill="#fff"
+            fontSize={9}
+            fontWeight={700}
+            fontFamily="ui-monospace, monospace"
+          >
+            {cycleBadgeCount}
+          </text>
+        </g>
+      )}
     </g>
   );
 }
