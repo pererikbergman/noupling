@@ -18,6 +18,7 @@ pub(crate) struct DataContract {
     pub format_version: u32,
     pub noupling_version: String,
     pub generated_at: String,
+    pub report_options: ReportOptions,
     pub codebase: Codebase,
     pub health_score: f64,
     pub summary_counts: SummaryCounts,
@@ -116,6 +117,16 @@ pub(crate) struct SummaryCounts {
 }
 
 #[derive(Debug, Serialize)]
+pub(crate) struct ReportOptions {
+    /// Editor URL scheme (`vscode`/`jetbrains`/`sublime`/`cursor`) or a
+    /// custom template like `myeditor://x/{path}:{line}`. `None` means
+    /// the template falls back to the OS default for `file://` links.
+    pub editor: Option<String>,
+    /// Override for the codebase title shown in the header.
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub(crate) struct Codebase {
     pub path: String,
     pub module_count: usize,
@@ -142,6 +153,10 @@ pub(crate) fn build(
         format_version: 1,
         noupling_version: env!("CARGO_PKG_VERSION").to_string(),
         generated_at: snapshot.timestamp.clone(),
+        report_options: ReportOptions {
+            editor: options.editor.clone(),
+            title: options.title.clone(),
+        },
         codebase: build_codebase(modules, dependencies, audit_result, snapshot),
         health_score: audit_result.score,
         summary_counts: SummaryCounts {

@@ -4,6 +4,7 @@ import { TopBar } from "./components/TopBar";
 import { SearchRow } from "./components/SearchRow";
 import { SidePanel } from "./components/SidePanel";
 import { CanvasArea } from "./components/CanvasArea";
+import { DetailsPanel } from "./components/DetailsPanel";
 import { useExplorerState, inScope } from "./state/explorerState";
 
 export interface AppProps {
@@ -38,6 +39,13 @@ export function App({ data }: AppProps) {
         codebaseTitle={codebaseTitleOf(data)}
         onScope={state.setScope}
         onClearScope={() => state.setScope("")}
+        onNodeClick={state.setSelected}
+      />
+      <DetailsPanel
+        data={scopedData}
+        selectedId={state.selected}
+        onClose={() => state.setSelected(null)}
+        onSelect={state.setSelected}
       />
     </div>
   );

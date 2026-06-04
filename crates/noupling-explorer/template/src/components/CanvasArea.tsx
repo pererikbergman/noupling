@@ -9,6 +9,7 @@ export interface CanvasAreaProps {
   codebaseTitle: string;
   onScope: (scope: string) => void;
   onClearScope: () => void;
+  onNodeClick?: (id: string) => void;
 }
 
 export function CanvasArea({
@@ -17,6 +18,7 @@ export function CanvasArea({
   codebaseTitle,
   onScope,
   onClearScope,
+  onNodeClick,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
 
@@ -46,7 +48,7 @@ export function CanvasArea({
       />
 
       <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-        <LSM data={data} onNodeDoubleClick={onNodeDoubleClick} />
+        <LSM data={data} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} />
       </div>
 
       {/* Zoom controls (bottom-left) */}
