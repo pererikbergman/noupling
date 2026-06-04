@@ -4,9 +4,10 @@ export interface TopBarProps {
   data: DataContract;
   theme: "dark" | "light";
   onToggleTheme: () => void;
+  onResetView: () => void;
 }
 
-export function TopBar({ data, theme, onToggleTheme }: TopBarProps) {
+export function TopBar({ data, theme, onToggleTheme, onResetView }: TopBarProps) {
   const codebaseTitle = basename(data.codebase.path);
   return (
     <div className="col-span-2 flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-2.5">
@@ -38,6 +39,9 @@ export function TopBar({ data, theme, onToggleTheme }: TopBarProps) {
       <IconButton title="Cut cycles (suggest min-cut)">⌀</IconButton>
       <IconButton title="Filter graph (F)">▼</IconButton>
       <IconButton title="Export (E)">↗</IconButton>
+      <IconButton title="Reset view to defaults" onClick={onResetView}>
+        ↺
+      </IconButton>
       <IconButton title="Toggle theme" onClick={onToggleTheme}>
         {theme === "dark" ? "☾" : "☼"}
       </IconButton>

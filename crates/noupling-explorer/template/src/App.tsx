@@ -33,7 +33,12 @@ export function App({ data }: AppProps) {
 
   return (
     <div className="grid h-screen w-screen grid-cols-[380px_1fr] grid-rows-[auto_auto_1fr]">
-      <TopBar data={data} theme={theme} onToggleTheme={toggleTheme} />
+      <TopBar
+        data={data}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onResetView={state.resetView}
+      />
       <SearchRow
         data={visibleData}
         search={state.search}
@@ -61,6 +66,10 @@ export function App({ data }: AppProps) {
         selectedId={state.selected}
         onClose={() => state.setSelected(null)}
         onSelect={state.setSelected}
+        onFocus={(scope) => {
+          state.setScope(scope);
+          state.setSelected(null);
+        }}
       />
     </div>
   );
