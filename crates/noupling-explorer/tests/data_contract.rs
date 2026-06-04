@@ -28,7 +28,11 @@ fn violation(from: &str, to: &str, circular: bool) -> CouplingViolation {
         direction: DependencyDirection::Sibling,
         rri: 1.0,
         is_circular: circular,
-        cycle_path: if circular { vec![from.into(), to.into()] } else { vec![] },
+        cycle_path: if circular {
+            vec![from.into(), to.into()]
+        } else {
+            vec![]
+        },
         cycle_hop_files: vec![],
         cycle_order: if circular { 2 } else { 0 },
         cycle_hop_counts: vec![],
@@ -80,12 +84,61 @@ fn default_inputs() -> (Settings, Snapshot) {
 }
 
 #[test]
+fn template_html_contains_codebase_header_skeleton_with_data_bindings() {
+    let (settings, snapshot) = default_inputs();
+    let audit = AuditResultBuilder::new().build();
+
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
+
+    // The template must declare the Codebase Header region. The values
+    // themselves are injected at runtime by the inline JS reading the
+    // noupling-data script tag — we assert structure, not hardcoded values.
+    assert!(
+        html.contains(r#"id="codebase-header""#),
+        "header region present"
+    );
+    assert!(
+        html.contains(r#"data-bind="codebase.path""#),
+        "root path bound to data"
+    );
+    assert!(html.contains(r#"data-bind="codebase.module_count""#));
+    assert!(html.contains(r#"data-bind="codebase.file_count""#));
+    assert!(html.contains(r#"data-bind="codebase.edge_count""#));
+    assert!(html.contains(r#"data-bind="health_score""#));
+    assert!(html.contains(r#"data-bind="summary_counts.violations""#));
+    assert!(html.contains(r#"data-bind="summary_counts.cycles""#));
+    assert!(html.contains(r#"data-bind="noupling_version""#));
+    // Hydration script must exist and read the injected data
+    assert!(html.contains("noupling-data"));
+    assert!(
+        html.contains("getElementById('noupling-data')")
+            || html.contains("getElementById(\"noupling-data\")"),
+        "template hydrates from the injected data block"
+    );
+}
+
+#[test]
 fn render_embeds_data_contract_with_format_version_1() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
 
     let contract = extract_data_contract(&html);
     assert_eq!(contract["format_version"], 1);
@@ -101,8 +154,15 @@ fn nodes_emit_one_per_file_plus_package_and_container_aggregates() {
         file("c.rs", "src/domain/cart/c.rs"),
     ];
 
-    let html = render(&modules, &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &modules,
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
     let nodes = contract["nodes"].as_array().unwrap();
 
@@ -113,7 +173,10 @@ fn nodes_emit_one_per_file_plus_package_and_container_aggregates() {
 
     // Files
     assert_eq!(by_id["src/domain/payment/a.rs"]["kind"], "file");
-    assert_eq!(by_id["src/domain/payment/a.rs"]["parent"], "src/domain/payment");
+    assert_eq!(
+        by_id["src/domain/payment/a.rs"]["parent"],
+        "src/domain/payment"
+    );
     // Packages (directories with direct files)
     assert_eq!(by_id["src/domain/payment"]["kind"], "package");
     assert_eq!(by_id["src/domain/cart"]["kind"], "package");
@@ -132,18 +195,26 @@ fn nodes_emit_one_per_file_plus_package_and_container_aggregates() {
 fn edges_emit_one_per_dependency_with_weight_and_violates_rule_field() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
-    let modules = vec![
-        file("a.rs", "src/a.rs"),
-        file("b.rs", "src/b.rs"),
-    ];
+    let modules = vec![file("a.rs", "src/a.rs"), file("b.rs", "src/b.rs")];
     let deps = vec![dep("a.rs", "b.rs"), dep("a.rs", "b.rs")];
 
-    let html = render(&modules, &deps, &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &modules,
+        &deps,
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
     let edges = contract["edges"].as_array().unwrap();
 
-    assert_eq!(edges.len(), 1, "duplicate deps coalesce into one weighted edge");
+    assert_eq!(
+        edges.len(),
+        1,
+        "duplicate deps coalesce into one weighted edge"
+    );
     assert_eq!(edges[0]["from"], "src/a.rs");
     assert_eq!(edges[0]["to"], "src/b.rs");
     assert_eq!(edges[0]["weight"], 2);
@@ -163,8 +234,15 @@ fn cycles_emit_from_circular_violations_with_id_and_members() {
         }])
         .build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
     let cycles = contract["cycles"].as_array().unwrap();
 
@@ -186,8 +264,15 @@ fn violations_emit_from_audit_with_severity_and_edge_info() {
         }])
         .build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
     let violations = contract["violations"].as_array().unwrap();
 
@@ -202,10 +287,20 @@ fn history_defaults_to_empty_array() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
-    assert!(contract["history"].is_array(), "history field must be present");
+    assert!(
+        contract["history"].is_array(),
+        "history field must be present"
+    );
     assert_eq!(contract["history"].as_array().unwrap().len(), 0);
 }
 
@@ -218,8 +313,8 @@ fn no_history_option_omits_history_block_content() {
         ..Default::default()
     };
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &options)
-        .expect("render must succeed");
+    let html =
+        render(&[], &[], &audit, &settings, &snapshot, &options).expect("render must succeed");
     let contract = extract_data_contract(&html);
     assert!(contract["history"].is_array());
     assert_eq!(contract["history"].as_array().unwrap().len(), 0);
@@ -244,8 +339,15 @@ fn dependency_rules_and_effective_rules_carry_source_chip() {
     let settings: Settings = serde_json::from_str(settings_json).unwrap();
     let audit = AuditResultBuilder::new().build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
     let contract = extract_data_contract(&html);
 
     // dependency_rules echoes the settings entries verbatim
@@ -365,10 +467,7 @@ fn health_score_and_summary_counts_come_from_audit() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new()
         .with_score(82.0)
-        .with_violations(vec![
-            violation("a", "b", false),
-            violation("x", "y", true),
-        ])
+        .with_violations(vec![violation("a", "b", false), violation("x", "y", true)])
         .with_gravity_wells(vec![GravityWell {
             module_path: "infra/db".into(),
             total_rri: 12.0,
@@ -387,13 +486,23 @@ fn health_score_and_summary_counts_come_from_audit() {
         }])
         .build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
 
     let contract = extract_data_contract(&html);
     assert_eq!(contract["health_score"], 82.0);
     assert_eq!(contract["summary_counts"]["violations"], 2);
-    assert_eq!(contract["summary_counts"]["cycles"], 1, "circular violations counted as cycles");
+    assert_eq!(
+        contract["summary_counts"]["cycles"], 1,
+        "circular violations counted as cycles"
+    );
     assert_eq!(contract["summary_counts"]["gravity_wells"], 1);
     assert_eq!(contract["summary_counts"]["red_flags"], 1);
 }
@@ -420,9 +529,18 @@ fn codebase_counts_module_file_edge_from_inputs() {
     .expect("render must succeed");
 
     let contract = extract_data_contract(&html);
-    assert_eq!(contract["codebase"]["module_count"], 3, "module_count from audit.total_modules");
-    assert_eq!(contract["codebase"]["file_count"], 3, "file_count from modules len");
-    assert_eq!(contract["codebase"]["edge_count"], 2, "edge_count from dependencies len");
+    assert_eq!(
+        contract["codebase"]["module_count"], 3,
+        "module_count from audit.total_modules"
+    );
+    assert_eq!(
+        contract["codebase"]["file_count"], 3,
+        "file_count from modules len"
+    );
+    assert_eq!(
+        contract["codebase"]["edge_count"], 2,
+        "edge_count from dependencies len"
+    );
 }
 
 #[test]
@@ -467,8 +585,15 @@ fn codebase_path_comes_from_snapshot_root() {
     };
     let audit = AuditResultBuilder::new().build();
 
-    let html = render(&[], &[], &audit, &settings, &snapshot, &RenderOptions::default())
-        .expect("render must succeed");
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
 
     let contract = extract_data_contract(&html);
     assert_eq!(contract["codebase"]["path"], "/Users/me/code/acme");

@@ -16,6 +16,8 @@ use crate::RenderOptions;
 #[derive(Debug, Serialize)]
 pub(crate) struct DataContract {
     pub format_version: u32,
+    pub noupling_version: String,
+    pub generated_at: String,
     pub codebase: Codebase,
     pub health_score: f64,
     pub summary_counts: SummaryCounts,
@@ -138,22 +140,38 @@ pub(crate) fn build(
 ) -> DataContract {
     DataContract {
         format_version: 1,
+        noupling_version: env!("CARGO_PKG_VERSION").to_string(),
+        generated_at: snapshot.timestamp.clone(),
         codebase: build_codebase(modules, dependencies, audit_result, snapshot),
         health_score: audit_result.score,
         summary_counts: SummaryCounts {
             violations: audit_result.violations.len(),
-            cycles: audit_result.violations.iter().filter(|v| v.is_circular).count(),
+            cycles: audit_result
+                .violations
+                .iter()
+                .filter(|v| v.is_circular)
+                .count(),
             gravity_wells: audit_result.gravity_wells.len(),
             red_flags: audit_result.red_flags.len(),
         },
         layers: build_layers(&settings.layers, modules, dependencies),
         dependency_rules: build_dependency_rules(&settings.dependency_rules),
-        effective_rules: build_effective_rules(&settings.layers, &settings.dependency_rules, audit_result),
+        effective_rules: build_effective_rules(
+            &settings.layers,
+            &settings.dependency_rules,
+            audit_result,
+        ),
         nodes: build_nodes(&settings.layers, modules, audit_result),
         edges: build_edges(modules, dependencies, audit_result),
         cycles: build_cycles(audit_result),
         violations: build_violations(audit_result),
-        history: if options.include_history { Vec::new() } else { Vec::new() },
+        // `include_history` is plumbed for future use; for now the
+        // history block is always empty because we don't yet read prior
+        // snapshots from storage here. Wired in a later slice.
+        history: {
+            let _ = options.include_history;
+            Vec::new()
+        },
     }
 }
 
@@ -163,16 +181,19 @@ fn build_nodes(layers: &[Layer], modules: &[Module], audit_result: &AuditResult)
         .map(|l| Glob::new(&l.pattern).ok().map(|g| g.compile_matcher()))
         .collect();
     let layer_of = |path: &str| -> Option<String> {
-        compiled
-            .iter()
-            .enumerate()
-            .find_map(|(i, m)| m.as_ref().and_then(|mm| mm.is_match(path).then(|| layers[i].name.clone())))
+        compiled.iter().enumerate().find_map(|(i, m)| {
+            m.as_ref()
+                .and_then(|mm| mm.is_match(path).then(|| layers[i].name.clone()))
+        })
     };
 
     let mut nodes: Vec<NodeEntry> = Vec::new();
 
     // File nodes
-    for m in modules.iter().filter(|m| matches!(m.module_type, ModuleType::File)) {
+    for m in modules
+        .iter()
+        .filter(|m| matches!(m.module_type, ModuleType::File))
+    {
         let parent = parent_dir(&m.path).map(str::to_string);
         nodes.push(NodeEntry {
             id: m.path.clone(),
@@ -190,7 +211,10 @@ fn build_nodes(layers: &[Layer], modules: &[Module], audit_result: &AuditResult)
 
     // Directory nodes: package (has direct files) or container (only subdirs).
     let mut dirs: BTreeMap<String, DirInfo> = BTreeMap::new();
-    for m in modules.iter().filter(|m| matches!(m.module_type, ModuleType::File)) {
+    for m in modules
+        .iter()
+        .filter(|m| matches!(m.module_type, ModuleType::File))
+    {
         let mut p = parent_dir(&m.path).map(str::to_string);
         let mut first = true;
         while let Some(dir) = p {
@@ -207,7 +231,11 @@ fn build_nodes(layers: &[Layer], modules: &[Module], audit_result: &AuditResult)
         }
     }
     for (path, info) in &dirs {
-        let kind = if info.has_files { "package" } else { "container" };
+        let kind = if info.has_files {
+            "package"
+        } else {
+            "container"
+        };
         let parent = parent_dir(path).map(str::to_string);
 
         // Pull cohesion from the audit when this is a Package.
@@ -426,8 +454,12 @@ fn build_layers(layers: &[Layer], modules: &[Module], deps: &[Dependency]) -> Ve
     let mut afferent = vec![0usize; layers.len()];
     let mut efferent = vec![0usize; layers.len()];
     for d in deps {
-        let from = id_to_path.get(d.from_module_id.as_str()).and_then(|p| layer_of(p));
-        let to = id_to_path.get(d.to_module_id.as_str()).and_then(|p| layer_of(p));
+        let from = id_to_path
+            .get(d.from_module_id.as_str())
+            .and_then(|p| layer_of(p));
+        let to = id_to_path
+            .get(d.to_module_id.as_str())
+            .and_then(|p| layer_of(p));
         if let (Some(f), Some(t)) = (from, to) {
             if f != t {
                 efferent[f] += 1;
@@ -480,7 +512,10 @@ fn build_codebase(
     }
     let mut language_distribution: Vec<LanguageEntry> = buckets
         .into_iter()
-        .map(|(language, file_count)| LanguageEntry { language, file_count })
+        .map(|(language, file_count)| LanguageEntry {
+            language,
+            file_count,
+        })
         .collect();
     language_distribution.sort_by(|a, b| {
         b.file_count

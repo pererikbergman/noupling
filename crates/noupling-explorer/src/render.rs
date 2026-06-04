@@ -6,8 +6,7 @@
 //! is filled at emit time with the serialized Data Contract.
 
 const TEMPLATE: &str = include_str!("../assets/placeholder.html");
-const PLACEHOLDER: &str =
-    "<script id=\"noupling-data\" type=\"application/json\"></script>";
+const PLACEHOLDER: &str = "<script id=\"noupling-data\" type=\"application/json\"></script>";
 
 /// Embed the serialized Data Contract into the template's placeholder script tag.
 pub(crate) fn embed_data(json: &str) -> String {

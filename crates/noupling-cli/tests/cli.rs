@@ -197,3 +197,95 @@ fn report_format_all_emits_files_for_each_format() {
         );
     }
 }
+
+/// `report --format explorer` emits `.noupling/explorer.html` containing the
+/// inlined Data Contract block.
+#[test]
+fn report_explorer_emits_self_contained_html() {
+    let fixture = create_clean_fixture();
+    let project = fixture.path();
+
+    scan(project);
+
+    let out = run_noupling(&["report", project.to_str().unwrap(), "--format", "explorer"]);
+    assert!(
+        out.status.success(),
+        "report --format explorer failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let explorer = project.join(".noupling").join("explorer.html");
+    assert!(explorer.exists(), "expected {}", explorer.display());
+
+    let html = std::fs::read_to_string(&explorer).expect("read explorer.html");
+    assert!(
+        html.contains(r#"<script id="noupling-data" type="application/json">"#),
+        "data block must be present"
+    );
+    assert!(
+        html.contains(r#""format_version":1"#),
+        "Data Contract must declare format_version: 1"
+    );
+    // Header skeleton (real values are injected by the browser at runtime).
+    assert!(
+        html.contains(r#"id="codebase-header""#),
+        "header region must be present"
+    );
+}
+
+/// `--output <path>` redirects the explorer file away from the default
+/// `.noupling/explorer.html`.
+#[test]
+fn report_explorer_honors_output_flag() {
+    let fixture = create_clean_fixture();
+    let project = fixture.path();
+    let custom = project.join("out").join("custom.html");
+
+    scan(project);
+
+    let out = run_noupling(&[
+        "report",
+        project.to_str().unwrap(),
+        "--format",
+        "explorer",
+        "--output",
+        custom.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "report --format explorer --output failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    assert!(
+        custom.exists(),
+        "expected custom output at {}",
+        custom.display()
+    );
+    assert!(
+        !project.join(".noupling").join("explorer.html").exists(),
+        "default path must NOT also be written"
+    );
+}
+
+/// `--no-history` produces a Data Contract with an empty history array.
+#[test]
+fn report_explorer_no_history_strips_history_block() {
+    let fixture = create_clean_fixture();
+    let project = fixture.path();
+
+    scan(project);
+
+    let out = run_noupling(&[
+        "report",
+        project.to_str().unwrap(),
+        "--format",
+        "explorer",
+        "--no-history",
+    ]);
+    assert!(out.status.success());
+
+    let html =
+        std::fs::read_to_string(project.join(".noupling").join("explorer.html")).expect("read");
+    assert!(html.contains(r#""history":[]"#));
+}
