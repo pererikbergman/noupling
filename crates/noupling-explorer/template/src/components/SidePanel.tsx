@@ -71,8 +71,10 @@ function WelcomeCard({ data }: { data: DataContract }) {
       <p className="m-0 text-[12px] leading-relaxed text-muted">
         {data.codebase.module_count} modules across {data.layers.length} layers.
         Health{" "}
-        <strong className="text-accent-domain">{data.health_score}/100</strong>.
-        Five-minute tour walks through the architecture.
+        <strong className="text-accent-domain">
+          {formatScore(data.health_score)}/100
+        </strong>
+        . Five-minute tour walks through the architecture.
       </p>
       <button className="mt-3 w-full rounded-sm bg-action px-3 py-2 text-[13px] font-semibold text-action-text">
         Start tour
@@ -120,7 +122,7 @@ function Stats({ data }: { data: DataContract }) {
     <div className="flex flex-col gap-1.5">
       <StatRow label="Health">
         <strong className="text-accent-domain">
-          <span data-bind="health_score">{data.health_score}</span>/100
+          <span data-bind="health_score">{formatScore(data.health_score)}</span>/100
         </strong>
       </StatRow>
       <StatRow label="Violations">
@@ -229,6 +231,12 @@ function PlanTab() {
       experience. Queue moves, splits, and merges; export as JSON or Markdown.
     </p>
   );
+}
+
+function formatScore(n: number): string {
+  // Round to 1 decimal; trim trailing zero so 100.0 → 100.
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
 
 function layerAccent(layer: string | null): string {
