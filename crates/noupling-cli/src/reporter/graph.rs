@@ -2,9 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analyzer::{AuditResult, CouplingViolation};
-use crate::core::Module;
 use crate::reporter::VERSION;
+use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::core::Module;
 
 /// Build a directory-level dependency graph from modules and violations.
 struct EdgeInfo {
@@ -234,8 +234,8 @@ fn sanitize(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::AuditResultBuilder;
-    use crate::core::ModuleType;
+    use noupling_core::analyzer::AuditResultBuilder;
+    use noupling_core::core::ModuleType;
 
     fn make_module(path: &str) -> Module {
         Module {
@@ -263,7 +263,7 @@ mod tests {
             depth: 1,
             weight: 1,
             severity: 0.5,
-            direction: crate::analyzer::DependencyDirection::Sibling,
+            direction: noupling_core::analyzer::DependencyDirection::Sibling,
             rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),

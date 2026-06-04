@@ -1,0 +1,50 @@
+[package]
+name = "noupling-core"
+description = "Pure analysis library for noupling: scanner, analyzer, storage, layer rules."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+# Exposes test-only constructors (e.g. `analyzer::AuditResultBuilder`) so
+# downstream crates can use them in their own tests. Enable via a
+# `dev-dependencies` entry; never enable for production builds.
+test-utils = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-kotlin-ng = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-swift = { workspace = true }
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-dart = { workspace = true }
+tree-sitter-go = { workspace = true }
+tree-sitter-haskell = { workspace = true }
+tree-sitter-java = { workspace = true }
+tree-sitter-javascript = { workspace = true }
+tree-sitter-php = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-ruby = { workspace = true }
+tree-sitter-zig = { workspace = true }
+tree-sitter-elixir = { workspace = true }
+tree-sitter-scala = { workspace = true }
+rusqlite = { workspace = true }
+rayon = { workspace = true }
+fxhash = { workspace = true }
+globset = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

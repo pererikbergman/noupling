@@ -8,7 +8,7 @@ pub mod trend;
 
 use std::path::Path;
 
-pub(crate) fn find_db(project_path: &str) -> anyhow::Result<crate::storage::Database> {
+pub(crate) fn find_db(project_path: &str) -> anyhow::Result<noupling_core::storage::Database> {
     let db_path = Path::new(project_path).join(".noupling").join("history.db");
     if !db_path.exists() {
         anyhow::bail!(
@@ -16,5 +16,5 @@ pub(crate) fn find_db(project_path: &str) -> anyhow::Result<crate::storage::Data
             db_path.display()
         );
     }
-    crate::storage::Database::open(&db_path)
+    noupling_core::storage::Database::open(&db_path)
 }

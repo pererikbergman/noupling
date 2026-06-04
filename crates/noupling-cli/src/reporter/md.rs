@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::analyzer::{AuditResult, CouplingViolation};
-use crate::core::Module;
+use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::core::Module;
 
 use super::JsonReport;
 
@@ -288,12 +288,12 @@ fn render_dir_page(
                     .and_then(|f| f.to_str())
                     .unwrap_or(&v.to_module);
                 let dir_symbol = match v.direction {
-                    crate::analyzer::DependencyDirection::Downward => "↓",
-                    crate::analyzer::DependencyDirection::Sibling => "↔",
-                    crate::analyzer::DependencyDirection::Upward => "↑",
-                    crate::analyzer::DependencyDirection::External => "↗",
-                    crate::analyzer::DependencyDirection::Transitive => "⇝",
-                    crate::analyzer::DependencyDirection::Circular => "↻",
+                    noupling_core::analyzer::DependencyDirection::Downward => "↓",
+                    noupling_core::analyzer::DependencyDirection::Sibling => "↔",
+                    noupling_core::analyzer::DependencyDirection::Upward => "↑",
+                    noupling_core::analyzer::DependencyDirection::External => "↗",
+                    noupling_core::analyzer::DependencyDirection::Transitive => "⇝",
+                    noupling_core::analyzer::DependencyDirection::Circular => "↻",
                 };
                 md.push_str(&format!(
                     "| {:.2} | {:.0} | {} | `{}` | `{}` |\n",

@@ -1,9 +1,11 @@
 //! Executive strategy report: multi-snapshot trends and trajectory.
 
-use crate::analyzer::{audit, AuditResult};
-use crate::core::{Dependency, Module, Snapshot};
-use crate::settings::Settings;
-use crate::storage::repository::{DependencyRepository, ModuleRepository, SnapshotRepository};
+use noupling_core::analyzer::{audit, AuditResult};
+use noupling_core::core::{Dependency, Module, Snapshot};
+use noupling_core::settings::Settings;
+use noupling_core::storage::repository::{
+    DependencyRepository, ModuleRepository, SnapshotRepository,
+};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -271,14 +273,14 @@ fn compute_risk_concentration(snapshot_results: &[SnapshotResult]) -> Vec<RiskMo
         Some(s) => s,
         None => return Vec::new(),
     };
-    let mut top: Vec<&crate::analyzer::ModuleMetrics> = last
+    let mut top: Vec<&noupling_core::analyzer::ModuleMetrics> = last
         .2
         .hotspots
         .iter()
         .filter(|h| h.blast_radius > 0)
         .collect();
     top.sort_by_key(|h| std::cmp::Reverse(h.blast_radius));
-    let top: Vec<&crate::analyzer::ModuleMetrics> = top.into_iter().take(5).collect();
+    let top: Vec<&noupling_core::analyzer::ModuleMetrics> = top.into_iter().take(5).collect();
 
     let prev_blast: BTreeMap<String, usize> = if snapshot_results.len() >= 2 {
         let prev = &snapshot_results[snapshot_results.len() - 2];

@@ -1,7 +1,7 @@
 //! Interactive Technical Leader Dashboard.
 
-use crate::analyzer::AuditResult;
-use crate::core::{Dependency, Module};
+use noupling_core::analyzer::AuditResult;
+use noupling_core::core::{Dependency, Module};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 
@@ -353,7 +353,7 @@ fn build_dashboard_data(
     let dashboard_xs: usize = modules_table.iter().map(|m| m.xs).sum();
 
     // Top Actions — what to do
-    let top_actions_raw = crate::analyzer::compute_top_actions(result, 5);
+    let top_actions_raw = noupling_core::analyzer::compute_top_actions(result, 5);
     let top_actions: Vec<DashboardAction> = top_actions_raw
         .iter()
         .map(|a| DashboardAction {

@@ -46,14 +46,35 @@
     "rb",
     "zig"
   ],
-  "dependency_rules": [],
+  "dependency_rules": [
+    {
+      "from": "**/crates/noupling-core/**",
+      "to": "**/crates/noupling-cli/**",
+      "allow": false,
+      "message": "noupling-core is the pure analysis library; it must not depend on the cli/reporter side."
+    },
+    {
+      "from": "**/crates/noupling-core/**",
+      "to": "**/crates/noupling-explorer/**",
+      "allow": false,
+      "message": "noupling-core must not depend on noupling-explorer."
+    },
+    {
+      "from": "**/crates/noupling-explorer/**",
+      "to": "**/crates/noupling-cli/**",
+      "allow": false,
+      "message": "noupling-explorer depends only on noupling-core, never on the cli or reporter siblings."
+    }
+  ],
   "layers": [
-    { "name": "reporter", "pattern": "**/reporter/**" },
-    { "name": "scanner", "pattern": "**/scanner/**" },
-    { "name": "storage", "pattern": "**/storage/**" },
-    { "name": "analyzer", "pattern": "**/analyzer/**" },
-    { "name": "core", "pattern": "**/core/**" },
-    { "name": "settings", "pattern": "**/settings.rs" }
+    { "name": "explorer", "pattern": "**/crates/noupling-explorer/**" },
+    { "name": "reporter", "pattern": "**/crates/noupling-cli/src/reporter/**" },
+    { "name": "commands", "pattern": "**/crates/noupling-cli/src/commands/**" },
+    { "name": "scanner", "pattern": "**/crates/noupling-core/src/scanner/**" },
+    { "name": "storage", "pattern": "**/crates/noupling-core/src/storage/**" },
+    { "name": "analyzer", "pattern": "**/crates/noupling-core/src/analyzer/**" },
+    { "name": "core", "pattern": "**/crates/noupling-core/src/core/**" },
+    { "name": "settings", "pattern": "**/crates/noupling-core/src/settings.rs" }
   ],
   "allow_inline_suppression": true,
   "modules": []

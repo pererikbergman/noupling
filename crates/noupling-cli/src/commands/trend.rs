@@ -2,11 +2,11 @@ use std::path::Path;
 
 pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
     let db = super::find_db(path)?;
-    let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
-    let module_repo = crate::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = crate::storage::repository::DependencyRepository::new(&db.conn);
+    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
+    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
-    let project_settings = crate::settings::Settings::load(Path::new(path))?;
+    let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
     let snapshots = snap_repo.get_all()?;
 
     if snapshots.is_empty() {
@@ -44,8 +44,12 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
 
         // Historical snapshot — type counts can't be recomputed reliably from
         // current source, so abstractness is intentionally empty in trend output.
-        let result =
-            crate::analyzer::audit_with_settings(&modules, &dependencies, &[], &project_settings);
+        let result = noupling_core::analyzer::audit_with_settings(
+            &modules,
+            &dependencies,
+            &[],
+            &project_settings,
+        );
 
         let delta = match prev_score {
             Some(prev) => {
@@ -90,10 +94,10 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
 }
 
 fn run_by_module(
-    snapshots: &[crate::core::Snapshot],
-    module_repo: &crate::storage::repository::ModuleRepository,
-    dep_repo: &crate::storage::repository::DependencyRepository,
-    settings: &crate::settings::Settings,
+    snapshots: &[noupling_core::core::Snapshot],
+    module_repo: &noupling_core::storage::repository::ModuleRepository,
+    dep_repo: &noupling_core::storage::repository::DependencyRepository,
+    settings: &noupling_core::settings::Settings,
     total_snapshots: usize,
 ) -> anyhow::Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
@@ -105,7 +109,8 @@ fn run_by_module(
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
 
-        let result = crate::analyzer::audit_with_settings(&modules, &dependencies, &[], settings);
+        let result =
+            noupling_core::analyzer::audit_with_settings(&modules, &dependencies, &[], settings);
 
         let mut dir_severity: BTreeMap<String, f64> = BTreeMap::new();
         let mut dir_modules: BTreeMap<String, usize> = BTreeMap::new();

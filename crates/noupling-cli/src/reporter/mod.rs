@@ -8,8 +8,8 @@ mod strategy;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-use crate::analyzer::{AuditResult, CouplingViolation};
-use crate::core::Module;
+use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::core::Module;
 
 pub use bundle::generate_bundle_report;
 pub use dashboard::generate_dashboard;
@@ -370,9 +370,9 @@ impl JsonReport {
                     instability: d.instability,
                     distance: d.distance,
                     zone: match d.zone {
-                        crate::analyzer::Zone::MainSequence => "main_sequence",
-                        crate::analyzer::Zone::Pain => "zone_of_pain",
-                        crate::analyzer::Zone::Uselessness => "zone_of_uselessness",
+                        noupling_core::analyzer::Zone::MainSequence => "main_sequence",
+                        noupling_core::analyzer::Zone::Pain => "zone_of_pain",
+                        noupling_core::analyzer::Zone::Uselessness => "zone_of_uselessness",
                     },
                 })
                 .collect(),
@@ -382,8 +382,8 @@ impl JsonReport {
                 .map(|c| JsonCohesion {
                     dir: c.dir.clone(),
                     kind: match c.kind {
-                        crate::analyzer::DirectoryKind::Container => "Container",
-                        crate::analyzer::DirectoryKind::Package => "Package",
+                        noupling_core::analyzer::DirectoryKind::Container => "Container",
+                        noupling_core::analyzer::DirectoryKind::Package => "Package",
                     },
                     n_children: c.n_children,
                     internal_deps: c.internal_deps,
@@ -866,7 +866,7 @@ pub fn format_text(result: &AuditResult) -> String {
     }
 
     // Top Actions — what to do
-    let top_actions = crate::analyzer::compute_top_actions(result, 5);
+    let top_actions = noupling_core::analyzer::compute_top_actions(result, 5);
     if !top_actions.is_empty() {
         output.push_str("\nTop Actions:\n");
         for (i, action) in top_actions.iter().enumerate() {
@@ -890,12 +890,12 @@ pub fn format_text(result: &AuditResult) -> String {
         output.push('\n');
         for v in &result.violations {
             let dir_label = match v.direction {
-                crate::analyzer::DependencyDirection::Downward => "\u{2193}",
-                crate::analyzer::DependencyDirection::Sibling => "\u{2194}",
-                crate::analyzer::DependencyDirection::Upward => "\u{2191}",
-                crate::analyzer::DependencyDirection::External => "\u{2197}",
-                crate::analyzer::DependencyDirection::Transitive => "\u{21dd}",
-                crate::analyzer::DependencyDirection::Circular => "\u{21bb}",
+                noupling_core::analyzer::DependencyDirection::Downward => "\u{2193}",
+                noupling_core::analyzer::DependencyDirection::Sibling => "\u{2194}",
+                noupling_core::analyzer::DependencyDirection::Upward => "\u{2191}",
+                noupling_core::analyzer::DependencyDirection::External => "\u{2197}",
+                noupling_core::analyzer::DependencyDirection::Transitive => "\u{21dd}",
+                noupling_core::analyzer::DependencyDirection::Circular => "\u{21bb}",
             };
             let rri_label = if v.rri > 0.0 {
                 format!(" RRI:{:.0}", v.rri)
@@ -1043,7 +1043,7 @@ pub fn format_text(result: &AuditResult) -> String {
 
     // Distance from main sequence per directory
     if !result.distance.is_empty() {
-        use crate::analyzer::Zone;
+        use noupling_core::analyzer::Zone;
         output.push_str("\nDistance from Main Sequence:\n");
         for d in result.distance.iter().take(10) {
             let zone_tag = match d.zone {
@@ -1142,8 +1142,8 @@ pub fn format_text(result: &AuditResult) -> String {
         output.push_str(&format!("\nRed Flags ({}):\n", result.red_flags.len()));
         for f in result.red_flags.iter().take(10) {
             let flag_icon = match f.flag_type {
-                crate::analyzer::RedFlagType::FusedSibling => "\u{26a0}",
-                crate::analyzer::RedFlagType::TrappedChild => "\u{26d4}",
+                noupling_core::analyzer::RedFlagType::FusedSibling => "\u{26a0}",
+                noupling_core::analyzer::RedFlagType::TrappedChild => "\u{26d4}",
             };
             output.push_str(&format!("  {} {}\n", flag_icon, f.recommendation));
         }
@@ -1233,7 +1233,7 @@ pub fn format_pr(
     out.push('\n');
 
     // Top actions
-    let actions = crate::analyzer::compute_top_actions(result, 3);
+    let actions = noupling_core::analyzer::compute_top_actions(result, 3);
     if !actions.is_empty() {
         out.push_str("### Action items\n\n");
         for (i, a) in actions.iter().enumerate() {
@@ -1286,7 +1286,7 @@ pub fn format_briefing(result: &AuditResult) -> String {
         years, month, day
     ));
 
-    let actions = crate::analyzer::compute_top_actions(result, 10);
+    let actions = noupling_core::analyzer::compute_top_actions(result, 10);
 
     // Projected score after fixing top 3
     let actionable_severity: f64 = actions
@@ -1398,7 +1398,7 @@ fn effort_estimate(cost: usize) -> &'static str {
     }
 }
 
-pub fn format_monorepo_text(monorepo: &crate::analyzer::MonorepoResult) -> String {
+pub fn format_monorepo_text(monorepo: &noupling_core::analyzer::MonorepoResult) -> String {
     let mut output = String::new();
 
     output.push_str(&format!(
@@ -1634,7 +1634,7 @@ fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::AuditResultBuilder;
+    use noupling_core::analyzer::AuditResultBuilder;
 
     fn make_violation(from: &str, to: &str, severity: f64, depth: i32) -> CouplingViolation {
         CouplingViolation {
@@ -1644,7 +1644,7 @@ mod tests {
             to_module: to.to_string(),
             depth,
             severity,
-            direction: crate::analyzer::DependencyDirection::Sibling,
+            direction: noupling_core::analyzer::DependencyDirection::Sibling,
             rri: 0.0,
             is_circular: false,
             cycle_path: Vec::new(),
@@ -1736,7 +1736,7 @@ mod tests {
 
     #[test]
     fn json_report_includes_stability_violations() {
-        use crate::analyzer::StabilityViolation;
+        use noupling_core::analyzer::StabilityViolation;
         let modules = vec![];
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
@@ -1760,7 +1760,7 @@ mod tests {
 
     #[test]
     fn json_report_includes_instability() {
-        use crate::analyzer::InstabilityMetric;
+        use noupling_core::analyzer::InstabilityMetric;
         let modules = vec![];
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
@@ -1786,7 +1786,7 @@ mod tests {
 
     #[test]
     fn json_report_includes_abstractness() {
-        use crate::analyzer::AbstractnessMetric;
+        use noupling_core::analyzer::AbstractnessMetric;
         let modules = vec![];
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
@@ -1814,7 +1814,7 @@ mod tests {
 
     #[test]
     fn text_format_includes_stability_violations() {
-        use crate::analyzer::StabilityViolation;
+        use noupling_core::analyzer::StabilityViolation;
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
             .with_stability_violations(vec![StabilityViolation {
@@ -1838,7 +1838,7 @@ mod tests {
 
     #[test]
     fn json_report_cohesion_array_includes_kind_and_nullable_cohesion() {
-        use crate::analyzer::{CohesionMetrics, DirectoryKind};
+        use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};
         let modules = vec![];
         let result = AuditResultBuilder::new()
             .with_total_modules(2)
@@ -1883,7 +1883,7 @@ mod tests {
 
     #[test]
     fn text_format_low_cohesion_section_omits_containers() {
-        use crate::analyzer::{CohesionMetrics, DirectoryKind};
+        use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
             .with_cohesion(vec![
@@ -1920,7 +1920,7 @@ mod tests {
 
     #[test]
     fn text_format_includes_instability_section() {
-        use crate::analyzer::InstabilityMetric;
+        use noupling_core::analyzer::InstabilityMetric;
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
             .with_instability(vec![
@@ -1950,7 +1950,7 @@ mod tests {
 
     #[test]
     fn text_format_includes_abstractness_section() {
-        use crate::analyzer::AbstractnessMetric;
+        use noupling_core::analyzer::AbstractnessMetric;
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
             .with_abstractness(vec![AbstractnessMetric {
