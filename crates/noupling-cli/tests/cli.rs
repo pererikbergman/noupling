@@ -226,10 +226,10 @@ fn report_explorer_emits_self_contained_html() {
         html.contains(r#""format_version":1"#),
         "Data Contract must declare format_version: 1"
     );
-    // Header skeleton (real values are injected by the browser at runtime).
+    // React mount point (the template renders into it from the injected data).
     assert!(
-        html.contains(r#"id="codebase-header""#),
-        "header region must be present"
+        html.contains(r#"id="root""#),
+        "React mount point must be present"
     );
 }
 
