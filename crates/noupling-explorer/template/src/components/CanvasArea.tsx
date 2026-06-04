@@ -1,10 +1,9 @@
-import { useState } from "react";
-import type { DataContract } from "../types";
+import { useMemo, useState } from "react";
+import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Breadcrumb } from "./Breadcrumb";
 import {
   breadcrumbFor,
-  parentDir,
   type SpotFilter,
   shouldHighlightViolations,
 } from "../state/explorerState";
@@ -45,11 +44,28 @@ export function CanvasArea({
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
 
+  // Filter the data passed to the LSM down to *immediate children* of the
+  // current scope so the canvas reads as a Structure101-style composition
+  // diagram: at root you see top-level packages, drill in to see their
+  // children, drill again to land on files. The side panel + search row
+  // still show counts over the full sub-tree (PRD F3.3).
+  const lsmData = useMemo(() => {
+    const visibleNodes = data.nodes.filter((n) => isImmediateChild(n, scope));
+    const visibleIds = new Set(visibleNodes.map((n) => n.id));
+    return {
+      ...data,
+      nodes: visibleNodes,
+      edges: data.edges.filter(
+        (e) => visibleIds.has(e.from) && visibleIds.has(e.to),
+      ),
+    };
+  }, [data, scope]);
+
   function onNodeDoubleClick(id: string) {
-    const next = parentDir(id);
-    if (next !== "" && next !== scope) {
-      onScope(next);
-    }
+    const node = data.nodes.find((n) => n.id === id);
+    if (!node) return;
+    if (node.kind === "file") return; // leaves don't drill
+    onScope(node.id);
   }
 
   const cyclesByNode = new Map<string, number>();
@@ -112,7 +128,7 @@ export function CanvasArea({
           }}
         >
           <LSM
-            data={data}
+            data={lsmData}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             highlightViolations={shouldHighlightViolations(spotFilter)}
@@ -180,6 +196,11 @@ export function CanvasArea({
       </div>
     </main>
   );
+}
+
+function isImmediateChild(node: NodeEntry, scope: string): boolean {
+  if (scope === "") return node.parent === null;
+  return node.parent === scope;
 }
 
 function FilterPill({

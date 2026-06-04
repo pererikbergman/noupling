@@ -262,6 +262,9 @@ function NodeCard({
         }
       }}
     >
+      {/* Non-file kinds get a thicker stripe, slightly darker card fill,
+          and a more prominent kind badge so drillable nodes stand out
+          from leaf files. */}
       <rect
         x={0}
         y={0}
@@ -269,10 +272,19 @@ function NodeCard({
         height={node.height}
         rx={12}
         ry={12}
-        fill="rgb(var(--card))"
+        fill={node.kind === "file" ? "rgb(var(--card))" : "rgb(var(--card-header))"}
         stroke="rgb(var(--border))"
+        strokeWidth={node.kind === "file" ? 1 : 1.5}
       />
-      <rect x={0} y={0} width={4} height={node.height} fill={stripeColor} rx={2} ry={2} />
+      <rect
+        x={0}
+        y={0}
+        width={node.kind === "file" ? 4 : 6}
+        height={node.height}
+        fill={stripeColor}
+        rx={2}
+        ry={2}
+      />
       <text
         x={14}
         y={22}
@@ -292,7 +304,11 @@ function NodeCard({
         fontSize={9}
         fontFamily="ui-monospace, monospace"
       >
-        {node.kind === "package" ? `${node.fileCount} files` : "file"}
+        {node.kind === "file"
+          ? "file"
+          : node.kind === "package"
+            ? `▸ ${node.fileCount} files`
+            : `▸ container`}
       </text>
       <text x={14} y={46} fill="rgb(var(--text))" fontSize={14} fontWeight={600}>
         {truncate(node.label, 22)}
