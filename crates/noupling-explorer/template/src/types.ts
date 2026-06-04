@@ -7,6 +7,7 @@ export interface DataContract {
   format_version: 1;
   noupling_version: string;
   generated_at: string;
+  report_options: ReportOptions;
   codebase: Codebase;
   health_score: number;
   summary_counts: SummaryCounts;
@@ -18,6 +19,11 @@ export interface DataContract {
   cycles: CycleEntry[];
   violations: ViolationEntry[];
   history: HistoryEntry[];
+}
+
+export interface ReportOptions {
+  editor: string | null;
+  title: string | null;
 }
 
 export interface Codebase {
