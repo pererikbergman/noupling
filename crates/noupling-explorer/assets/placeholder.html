@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>noupling Explorer</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      font-size: 14px;
+      background: #0B0B0C;
+      color: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: #F5F5F7; color: #1C1C1E; }
+      .card { background: #fff !important; border-color: #E5E5EA !important; }
+      .muted { color: #636366 !important; }
+    }
+    #codebase-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid #2A2A2E;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+    }
+    .header-left { display: flex; flex-direction: column; gap: 4px; }
+    .header-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+    .header-path { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+    .muted { color: #8E8E93; }
+    .stat-grid { display: flex; gap: 18px; flex-wrap: wrap; }
+    .stat { display: flex; flex-direction: column; gap: 2px; min-width: 60px; }
+    .stat-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; }
+    .stat-value { font-size: 18px; font-weight: 600; }
+    .stat-value-lg { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+    .lang-row { display: inline-flex; gap: 10px; font-size: 12px; }
+    main { padding: 24px; }
+  </style>
+</head>
+<body>
+  <header id="codebase-header">
+    <div class="header-left">
+      <div class="header-title" data-bind="codebase.path">…</div>
+      <div class="header-path muted">
+        <span data-bind="codebase.path">…</span>
+        &nbsp;·&nbsp;
+        <span class="lang-row" data-bind-langs></span>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px">
+        Scanned <span data-bind="generated_at">…</span>
+        &nbsp;·&nbsp;
+        <span data-bind="noupling_version">noupling …</span>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat">
+        <span class="stat-label">Health</span>
+        <span class="stat-value-lg" data-bind="health_score">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Violations</span>
+        <span class="stat-value" data-bind="summary_counts.violations">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Cycles</span>
+        <span class="stat-value" data-bind="summary_counts.cycles">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Gravity wells</span>
+        <span class="stat-value" data-bind="summary_counts.gravity_wells">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Modules</span>
+        <span class="stat-value" data-bind="codebase.module_count">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Files</span>
+        <span class="stat-value" data-bind="codebase.file_count">…</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Edges</span>
+        <span class="stat-value" data-bind="codebase.edge_count">…</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="root">
+    <p class="muted" style="text-align:center;padding:80px 20px">
+      Placeholder Explorer template. The real interactive view lands in <strong>#232</strong>
+      (template subproject bootstrap). The Data Contract powering the header above is
+      inlined below — open the browser console and run
+      <code>JSON.parse(document.getElementById('noupling-data').textContent)</code>.
+    </p>
+  </main>
+
+  <script id="noupling-data" type="application/json"></script>
+
+  <script>
+    (function () {
+      var dataEl = document.getElementById('noupling-data');
+      if (!dataEl || !dataEl.textContent) return;
+      var data = JSON.parse(dataEl.textContent);
+
+      // Resolve dotted paths like "codebase.path" against the data object.
+      function resolve(path) {
+        return path.split('.').reduce(function (acc, key) {
+          return acc == null ? acc : acc[key];
+        }, data);
+      }
+
+      document.querySelectorAll('[data-bind]').forEach(function (el) {
+        var key = el.getAttribute('data-bind');
+        var val = resolve(key);
+        if (val === null || val === undefined) return;
+        if (key === 'noupling_version') {
+          el.textContent = 'noupling v' + val;
+        } else if (typeof val === 'number') {
+          el.textContent = String(val);
+        } else {
+          el.textContent = String(val);
+        }
+      });
+
+      // Render language distribution chips
+      var langEl = document.querySelector('[data-bind-langs]');
+      if (langEl && data.codebase && Array.isArray(data.codebase.language_distribution)) {
+        langEl.textContent = data.codebase.language_distribution
+          .map(function (l) { return l.language + ' · ' + l.file_count; })
+          .join(' · ');
+      }
+
+      // Use the codebase root path's basename as the page title
+      if (data.codebase && data.codebase.path) {
+        var basename = data.codebase.path.split('/').filter(Boolean).pop() || data.codebase.path;
+        var titleEls = document.querySelectorAll('[data-bind="codebase.path"]');
+        if (titleEls.length > 0) titleEls[0].textContent = basename;
+      }
+    })();
+  </script>
+</body>
+</html>

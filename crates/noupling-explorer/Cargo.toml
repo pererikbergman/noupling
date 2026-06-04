@@ -1,6 +1,6 @@
 [package]
 name = "noupling-explorer"
-description = "Explorer report format for noupling (stub — populated by Task 2 of #228)."
+description = "Explorer report format for noupling."
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -13,3 +13,10 @@ path = "src/lib.rs"
 
 [dependencies]
 noupling-core = { path = "../noupling-core", version = "0.7.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+globset = { workspace = true }
+
+[dev-dependencies]
+noupling-core = { path = "../noupling-core", version = "0.7.0", features = ["test-utils"] }

@@ -1,10 +1,15 @@
 use std::path::Path;
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     path: &str,
     format: &str,
     module_filter: Option<&str>,
     last: usize,
+    explorer_output: Option<&str>,
+    explorer_editor: Option<&str>,
+    explorer_title: Option<&str>,
+    explorer_no_history: bool,
 ) -> anyhow::Result<()> {
     let db = super::find_db(path)?;
     let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
@@ -201,6 +206,30 @@ pub fn run(
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
+        "explorer" => {
+            let options = noupling_explorer::RenderOptions {
+                editor: explorer_editor.map(str::to_string),
+                title: explorer_title.map(str::to_string),
+                include_history: !explorer_no_history,
+            };
+            let html = noupling_explorer::render(
+                &report_modules,
+                &report_deps,
+                &result,
+                &project_settings,
+                &snapshot,
+                &options,
+            )?;
+            let file_path = match explorer_output {
+                Some(p) => Path::new(p).to_path_buf(),
+                None => report_dir.join("explorer.html"),
+            };
+            if let Some(parent) = file_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&file_path, html)?;
+            println!("Report saved to {}", file_path.display());
+        }
         "strategy" => {
             let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
             let file_path = report_dir.join("strategy.html");
@@ -280,7 +309,7 @@ pub fn run(
         }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', 'strategy', or 'all'.",
+                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', 'strategy', 'explorer', or 'all'.",
                 format
             );
         }

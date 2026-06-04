@@ -55,7 +55,20 @@ fn main() {
             format,
             module,
             last,
-        } => commands::report::run(&path, &format, module.as_deref(), last),
+            output,
+            editor,
+            title,
+            no_history,
+        } => commands::report::run(
+            &path,
+            &format,
+            module.as_deref(),
+            last,
+            output.as_deref(),
+            editor.as_deref(),
+            title.as_deref(),
+            no_history,
+        ),
     };
 
     if let Err(e) = result {
