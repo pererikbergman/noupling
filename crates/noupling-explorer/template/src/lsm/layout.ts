@@ -71,35 +71,8 @@ const UNLAYERED_LABEL = "(unlayered)";
  * layer tier when there are file nodes below them.
  */
 export function computeLSMLayout(data: DataContract): LSMLayout {
-  // 1. Group file-kind nodes by layer. Containers and packages are
-  // navigation surfaces for drill-down (#234), not atoms of the LSM —
-  // showing them here would clutter the tier with parent-of-parent
-  // groupings that aren't reachable in v1 anyway.
-  const layeredNodes = new Map<number, NodeEntry[]>();
-  const unlayered: NodeEntry[] = [];
-  for (const n of data.nodes) {
-    if (n.kind !== "file") continue;
-    const layerIdx = findLayerIndex(n.layer, data.layers);
-    if (layerIdx === -1) {
-      unlayered.push(n);
-    } else {
-      if (!layeredNodes.has(layerIdx)) layeredNodes.set(layerIdx, []);
-      layeredNodes.get(layerIdx)!.push(n);
-    }
-  }
-
-  // 2. Build the tier list (top to bottom by index).
-  const sortedLayers = [...data.layers].sort((a, b) => a.index - b.index);
-  const tiers: Array<{ layer: LayerEntry | null; nodes: NodeEntry[] }> = sortedLayers.map((l) => ({
-    layer: l,
-    nodes: (layeredNodes.get(l.index) ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
-  }));
-  if (unlayered.length > 0) {
-    tiers.push({
-      layer: null,
-      nodes: unlayered.slice().sort((a, b) => a.id.localeCompare(b.id)),
-    });
-  }
+  const files = data.nodes.filter((n) => n.kind === "file");
+  const tiers = buildTiers(files, data.layers);
 
   // 3. Compute SVG width: widest tier.
   const widestTier = Math.max(
@@ -116,7 +89,7 @@ export function computeLSMLayout(data: DataContract): LSMLayout {
     const y0 = tierIdx * TIER_HEIGHT;
     const layer = tier.layer;
     bands.push({
-      name: layer?.name ?? UNLAYERED_LABEL,
+      name: layer?.name ?? tier.syntheticName ?? UNLAYERED_LABEL,
       index: layer?.index ?? -1,
       y: y0,
       height: TIER_HEIGHT,
@@ -179,6 +152,105 @@ function findLayerIndex(layer: string | null, layers: LayerEntry[]): number {
   if (!layer) return -1;
   const found = layers.find((l) => l.name === layer);
   return found?.index ?? -1;
+}
+
+interface Tier {
+  layer: LayerEntry | null;
+  /** Synthetic tier label when `layer` is null (e.g. derived from a path segment). */
+  syntheticName?: string;
+  nodes: NodeEntry[];
+}
+
+/**
+ * Build the ordered tier list the LSM renders.
+ *
+ * Three cases:
+ *  1. **Layered codebase** — `data.layers` is non-empty AND at least one
+ *     file node matches a layer. Group nodes by layer index; unlayered
+ *     remainder lands in a trailing tier.
+ *  2. **Fully unlayered** — no `data.layers` entries, OR no file matches
+ *     any layer (the user shipped a settings.json whose patterns don't
+ *     fit this codebase). Derive synthetic tiers from each file's last
+ *     directory segment (`a/b/c/file.kt` → tier `c`). Sorted alpha so
+ *     siblings cluster.
+ *  3. **Mixed** — some layered, some not. Layered tiers first, then a
+ *     trailing tier per directory segment for the rest.
+ */
+function buildTiers(files: NodeEntry[], layers: LayerEntry[]): Tier[] {
+  const layeredByIndex = new Map<number, NodeEntry[]>();
+  const unlayered: NodeEntry[] = [];
+  for (const n of files) {
+    const i = findLayerIndex(n.layer, layers);
+    if (i === -1) unlayered.push(n);
+    else {
+      if (!layeredByIndex.has(i)) layeredByIndex.set(i, []);
+      layeredByIndex.get(i)!.push(n);
+    }
+  }
+
+  const tiers: Tier[] = [];
+  const sortedLayers = [...layers].sort((a, b) => a.index - b.index);
+  for (const l of sortedLayers) {
+    const ns = layeredByIndex.get(l.index) ?? [];
+    if (ns.length === 0) continue; // skip empty configured layers — they add visual noise
+    tiers.push({ layer: l, nodes: ns.slice().sort((a, b) => a.id.localeCompare(b.id)) });
+  }
+
+  // Synthetic tiers from the unlayered remainder, grouped by last dir segment.
+  // Falls back to a single "(unlayered)" tier when the synthetic grouping
+  // doesn't help (1 group, or every file in the same dir as its only sibling).
+  if (unlayered.length > 0) {
+    const bySegment = new Map<string, NodeEntry[]>();
+    for (const n of unlayered) {
+      const seg = lastDirSegment(n.id) || UNLAYERED_LABEL;
+      if (!bySegment.has(seg)) bySegment.set(seg, []);
+      bySegment.get(seg)!.push(n);
+    }
+    const useSynthetic = bySegment.size >= 2;
+    if (useSynthetic) {
+      const segmentNames = [...bySegment.keys()].sort();
+      for (const seg of segmentNames) {
+        tiers.push({
+          layer: null,
+          syntheticName: seg,
+          nodes: bySegment
+            .get(seg)!
+            .slice()
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        });
+      }
+    } else {
+      tiers.push({
+        layer: null,
+        syntheticName: UNLAYERED_LABEL,
+        nodes: unlayered.slice().sort((a, b) => a.id.localeCompare(b.id)),
+      });
+    }
+  }
+
+  // Hard cap — beyond this the LSM is hard to read; better to bucket
+  // overflow into one trailing tier than render 60 thin rows.
+  const MAX_TIERS = 16;
+  if (tiers.length > MAX_TIERS) {
+    const kept = tiers.slice(0, MAX_TIERS - 1);
+    const overflowNodes = tiers
+      .slice(MAX_TIERS - 1)
+      .flatMap((t) => t.nodes)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    kept.push({
+      layer: null,
+      syntheticName: `… +${tiers.length - MAX_TIERS + 1} more`,
+      nodes: overflowNodes,
+    });
+    return kept;
+  }
+  return tiers;
+}
+
+function lastDirSegment(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length < 2) return "";
+  return parts[parts.length - 2];
 }
 
 /**
