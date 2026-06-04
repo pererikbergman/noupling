@@ -9,7 +9,8 @@ use noupling_core::analyzer::AuditResult;
 use noupling_core::core::{Dependency, Module, ModuleType, Snapshot};
 use noupling_core::settings::{DependencyRule, Layer, Settings};
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::path::Path;
 
 use crate::RenderOptions;
 
@@ -176,7 +177,13 @@ pub(crate) fn build(
             &settings.dependency_rules,
             audit_result,
         ),
-        nodes: build_nodes(&settings.layers, modules, dependencies, audit_result),
+        nodes: build_nodes(
+            &settings.layers,
+            modules,
+            dependencies,
+            audit_result,
+            &snapshot.root_path,
+        ),
         edges: build_edges(modules, dependencies, audit_result),
         cycles: build_cycles(audit_result),
         violations: build_violations(audit_result),
@@ -195,6 +202,7 @@ fn build_nodes(
     modules: &[Module],
     dependencies: &[Dependency],
     audit_result: &AuditResult,
+    codebase_root: &str,
 ) -> Vec<NodeEntry> {
     let compiled: Vec<Option<globset::GlobMatcher>> = layers
         .iter()
@@ -227,11 +235,58 @@ fn build_nodes(
         }
     }
 
-    // File nodes
-    for m in modules
+    // Blast-radius BFS adjacency (file-path keyed).
+    let mut downstream_adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut upstream_adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    for d in dependencies {
+        let from = id_to_path.get(d.from_module_id.as_str()).copied();
+        let to = id_to_path.get(d.to_module_id.as_str()).copied();
+        if let (Some(f), Some(t)) = (from, to) {
+            if f != t {
+                downstream_adj.entry(f).or_default().push(t);
+                upstream_adj.entry(t).or_default().push(f);
+            }
+        }
+    }
+    let blast_radius_for = |start: &str, adj: &HashMap<&str, Vec<&str>>| -> usize {
+        let mut visited: HashSet<&str> = HashSet::new();
+        let mut q: VecDeque<&str> = VecDeque::new();
+        q.push_back(start);
+        visited.insert(start);
+        while let Some(cur) = q.pop_front() {
+            if let Some(neighbors) = adj.get(cur) {
+                for n in neighbors {
+                    if visited.insert(n) {
+                        q.push_back(n);
+                    }
+                }
+            }
+        }
+        // Exclude the start node from the count — blast radius is the
+        // number of *other* modules reachable.
+        visited.len().saturating_sub(1)
+    };
+
+    // Pre-build dir → contained file set so package metrics + layer
+    // inheritance can be computed without re-walking the module list.
+    let mut files_in_dir: HashMap<String, HashSet<String>> = HashMap::new();
+    let files: Vec<&Module> = modules
         .iter()
         .filter(|m| matches!(m.module_type, ModuleType::File))
-    {
+        .collect();
+    for m in &files {
+        let mut p = parent_dir(&m.path).map(str::to_string);
+        while let Some(dir) = p.clone() {
+            files_in_dir
+                .entry(dir.clone())
+                .or_default()
+                .insert(m.path.clone());
+            p = parent_dir(&dir).map(str::to_string);
+        }
+    }
+
+    // File nodes
+    for m in &files {
         let parent = parent_dir(&m.path).map(str::to_string);
         let ca = afferent_by_path.get(&m.path).copied().unwrap_or(0);
         let ce = efferent_by_path.get(&m.path).copied().unwrap_or(0);
@@ -240,6 +295,9 @@ fn build_nodes(
         } else {
             serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0)
         };
+        let loc = count_lines(codebase_root, &m.path);
+        let blast_up = blast_radius_for(m.path.as_str(), &upstream_adj);
+        let blast_down = blast_radius_for(m.path.as_str(), &downstream_adj);
         nodes.push(NodeEntry {
             id: m.path.clone(),
             kind: "file",
@@ -249,17 +307,16 @@ fn build_nodes(
                 "afferent": ca,
                 "efferent": ce,
                 "instability": instability,
-                "loc": 0,
+                "loc": loc,
+                "blast_radius_upstream": blast_up,
+                "blast_radius_downstream": blast_down,
             }),
         });
     }
 
     // Directory nodes: package (has direct files) or container (only subdirs).
     let mut dirs: BTreeMap<String, DirInfo> = BTreeMap::new();
-    for m in modules
-        .iter()
-        .filter(|m| matches!(m.module_type, ModuleType::File))
-    {
+    for m in &files {
         let mut p = parent_dir(&m.path).map(str::to_string);
         let mut first = true;
         while let Some(dir) = p {
@@ -283,7 +340,7 @@ fn build_nodes(
         };
         let parent = parent_dir(path).map(str::to_string);
 
-        // Pull cohesion from the audit when this is a Package.
+        // Cohesion from the audit (Packages only).
         let cohesion = if info.has_files {
             audit_result
                 .cohesion
@@ -296,15 +353,59 @@ fn build_nodes(
             serde_json::Value::Null
         };
 
+        // Package layer: prefer the configured layer pattern (`layer_of`),
+        // but fall back to inheriting from any contained file when the
+        // directory itself doesn't match a layer pattern. This is what
+        // makes the LSM put packages on the right tier when settings.json
+        // patterns target file-inside-dir but not the dir itself.
+        let layer = layer_of(path).or_else(|| {
+            files_in_dir
+                .get(path)
+                .and_then(|fs| fs.iter().find_map(|f| layer_of(f)))
+        });
+
+        // Ca/Ce per directory: count edges crossing the directory boundary.
+        let inside = files_in_dir.get(path);
+        let (ca, ce) = if let Some(inside) = inside {
+            let mut ca = 0usize;
+            let mut ce = 0usize;
+            for d in dependencies {
+                let f = id_to_path
+                    .get(d.from_module_id.as_str())
+                    .copied()
+                    .unwrap_or("");
+                let t = id_to_path
+                    .get(d.to_module_id.as_str())
+                    .copied()
+                    .unwrap_or("");
+                let f_in = inside.contains(f);
+                let t_in = inside.contains(t);
+                if f_in && !t_in {
+                    ce += 1;
+                }
+                if !f_in && t_in {
+                    ca += 1;
+                }
+            }
+            (ca, ce)
+        } else {
+            (0, 0)
+        };
+        let instability = if ca + ce == 0 {
+            serde_json::Value::Null
+        } else {
+            serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0)
+        };
+
         nodes.push(NodeEntry {
             id: path.clone(),
             kind,
             parent,
-            layer: layer_of(path),
+            layer,
             metrics: serde_json::json!({
-                "afferent": 0,
-                "efferent": 0,
-                "instability": null,
+                "afferent": ca,
+                "efferent": ce,
+                "instability": instability,
                 "abstractness": null,
                 "distance_from_main_sequence": null,
                 "cohesion": cohesion,
@@ -315,6 +416,20 @@ fn build_nodes(
     }
 
     nodes
+}
+
+/// Count newlines in a source file. Falls back to 0 when the file can't be
+/// read (deleted between scan and emit, permission denied, etc.) so the
+/// Data Contract stays serialisable regardless.
+fn count_lines(codebase_root: &str, rel_path: &str) -> usize {
+    let full = if Path::new(rel_path).is_absolute() {
+        Path::new(rel_path).to_path_buf()
+    } else {
+        Path::new(codebase_root).join(rel_path)
+    };
+    std::fs::read_to_string(&full)
+        .map(|s| s.lines().count())
+        .unwrap_or(0)
 }
 
 struct DirInfo {

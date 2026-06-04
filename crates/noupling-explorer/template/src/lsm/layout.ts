@@ -71,8 +71,10 @@ const UNLAYERED_LABEL = "(unlayered)";
  * layer tier when there are file nodes below them.
  */
 export function computeLSMLayout(data: DataContract): LSMLayout {
-  const files = data.nodes.filter((n) => n.kind === "file");
-  const tiers = buildTiers(files, data.layers);
+  // Render every node kind — files, packages, containers. The caller is
+  // responsible for narrowing `data.nodes` to whatever should be on the
+  // canvas at the current scope (#255).
+  const tiers = buildTiers(data.nodes, data.layers);
 
   // 3. Compute SVG width: widest tier.
   const widestTier = Math.max(
@@ -176,10 +178,10 @@ interface Tier {
  *  3. **Mixed** — some layered, some not. Layered tiers first, then a
  *     trailing tier per directory segment for the rest.
  */
-function buildTiers(files: NodeEntry[], layers: LayerEntry[]): Tier[] {
+function buildTiers(nodes: NodeEntry[], layers: LayerEntry[]): Tier[] {
   const layeredByIndex = new Map<number, NodeEntry[]>();
   const unlayered: NodeEntry[] = [];
-  for (const n of files) {
+  for (const n of nodes) {
     const i = findLayerIndex(n.layer, layers);
     if (i === -1) unlayered.push(n);
     else {
