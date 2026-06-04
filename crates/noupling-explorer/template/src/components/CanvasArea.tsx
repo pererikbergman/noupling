@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { DataContract } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Breadcrumb } from "./Breadcrumb";
@@ -23,6 +24,10 @@ export interface CanvasAreaProps {
   onToggleCycleHighlight: () => void;
 }
 
+const ZOOM_STEP = 1.2;
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 3;
+
 export function CanvasArea({
   data,
   scope,
@@ -38,6 +43,7 @@ export function CanvasArea({
   onToggleCycleHighlight,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
+  const [zoom, setZoom] = useState(1);
 
   function onNodeDoubleClick(id: string) {
     const next = parentDir(id);
@@ -72,10 +78,7 @@ export function CanvasArea({
         >
           With violations ({data.summary_counts.violations})
         </FilterPill>
-        <FilterPill
-          active={spotFilter === "clean"}
-          onClick={() => onSpotFilter("clean")}
-        >
+        <FilterPill active={spotFilter === "clean"} onClick={() => onSpotFilter("clean")}>
           Clean modules
         </FilterPill>
         <FilterPill
@@ -100,26 +103,47 @@ export function CanvasArea({
       />
 
       <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-        <LSM
-          data={data}
-          onNodeClick={onNodeClick}
-          onNodeDoubleClick={onNodeDoubleClick}
-          highlightViolations={shouldHighlightViolations(spotFilter)}
-          highlightCycles={cycleHighlight}
-          layerOverlay={layerOverlay}
-          cyclesByNode={cyclesByNode}
-        />
+        <div
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "top left",
+            display: "inline-block",
+            minWidth: "100%",
+          }}
+        >
+          <LSM
+            data={data}
+            onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            highlightViolations={shouldHighlightViolations(spotFilter)}
+            highlightCycles={cycleHighlight}
+            layerOverlay={layerOverlay}
+            cyclesByNode={cyclesByNode}
+          />
+        </div>
       </div>
 
       {/* Zoom + view-mode controls (bottom-left) */}
       <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-0.5 rounded-sm border border-border bg-card p-0.5">
-        <ZoomBtn title="Zoom in (+)" ariaLabel="Zoom in">
+        <ZoomBtn
+          title={`Zoom in (currently ${Math.round(zoom * 100)}%)`}
+          ariaLabel="Zoom in"
+          onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * ZOOM_STEP))}
+        >
           +
         </ZoomBtn>
-        <ZoomBtn title="Zoom out (−)" ariaLabel="Zoom out">
+        <ZoomBtn
+          title={`Zoom out (currently ${Math.round(zoom * 100)}%)`}
+          ariaLabel="Zoom out"
+          onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / ZOOM_STEP))}
+        >
           −
         </ZoomBtn>
-        <ZoomBtn title="Fit view (1)" ariaLabel="Fit view">
+        <ZoomBtn
+          title="Reset zoom to 100%"
+          ariaLabel="Reset zoom"
+          onClick={() => setZoom(1)}
+        >
           ⛶
         </ZoomBtn>
         <ZoomBtn
@@ -140,17 +164,19 @@ export function CanvasArea({
         </ZoomBtn>
       </div>
 
-      {/* Action-plan strip (bottom-right) */}
-      <div className="absolute bottom-3 right-4 z-10 flex items-center gap-3 rounded-md border border-border bg-card px-3.5 py-2.5 text-[12px] text-muted">
-        <span className="rounded-full bg-text/85 px-2 py-0.5 text-[10px] font-bold text-canvas">
+      {/* PLAN strip — v2 placeholder, visibly disabled so it can't be
+          mistaken for a wired affordance (#254). */}
+      <div
+        className="absolute bottom-3 right-4 z-10 flex cursor-not-allowed items-center gap-3 rounded-md border border-dashed border-border bg-card/60 px-3.5 py-2.5 text-[12px] text-muted opacity-60"
+        title="Action plan ships in v2 (#228 §9)"
+        aria-disabled="true"
+      >
+        <span className="rounded-full bg-text/40 px-2 py-0.5 text-[10px] font-bold text-canvas">
           PLAN
         </span>
         <span>
-          <strong className="text-text">0</strong> queued
+          Refactor sandbox · <strong className="text-muted">v2</strong>
         </span>
-        <button className="rounded-sm border border-border px-2.5 py-1 text-[11px] hover:text-text">
-          Open
-        </button>
       </div>
     </main>
   );

@@ -74,10 +74,17 @@ function WelcomeCard({ data }: { data: DataContract }) {
         <strong className="text-accent-domain">
           {formatScore(data.health_score)}/100
         </strong>
-        . Five-minute tour walks through the architecture.
+        .{" "}
+        <span className="text-muted/80">
+          Double-click any node to drill in; click for details.
+        </span>
       </p>
-      <button className="mt-3 w-full rounded-sm bg-action px-3 py-2 text-[13px] font-semibold text-action-text">
-        Start tour
+      <button
+        title="Guided tour ships in v2 (PRD §9.x)"
+        aria-disabled
+        className="mt-3 w-full cursor-not-allowed rounded-sm border border-dashed border-border bg-canvas px-3 py-2 text-[13px] font-semibold text-muted/70"
+      >
+        Start tour · v2
       </button>
     </div>
   );
@@ -98,14 +105,15 @@ const STEPS = [
 
 function Steps() {
   return (
-    <ol className="m-0 mt-0 list-none p-0">
+    <ol
+      title="Guided tour ships in v2 (PRD §9.x) — these steps are the planned narrative."
+      aria-disabled
+      className="m-0 mt-0 list-none cursor-not-allowed p-0 opacity-60"
+    >
       {STEPS.map((s, i) => (
         <li
           key={s}
-          className={
-            "flex cursor-pointer items-baseline gap-2.5 rounded-sm px-1.5 py-2 text-[13px] " +
-            (i === 0 ? "bg-canvas text-text" : "text-muted hover:bg-canvas hover:text-text")
-          }
+          className="flex items-baseline gap-2.5 rounded-sm px-1.5 py-2 text-[13px] text-muted"
         >
           <span className="font-mono text-[10px] text-muted">
             {String(i + 1).padStart(2, "0")}
