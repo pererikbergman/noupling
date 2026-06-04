@@ -18,12 +18,21 @@ export interface SourceTarget {
   line?: number;
 }
 
+// vscode/cursor want `vscode://file/<absolute-path>:<line>` — for POSIX
+// paths whose absolute form starts with `/`, this works out to TWO slashes
+// between the scheme host (`file`) and the path. The leading `/` on the
+// abs path supplies the second.
+//
+// sublime wants `subl://open?url=file:///<absolute-path>:<line>` — the
+// path inside the `file:` URL needs its own leading-slash run; templates
+// here add the two extra so the result is `file:///<path>` after
+// substitution.
 const TEMPLATES: Record<string, string> = {
-  vscode: "vscode://file{path}:{line}",
+  vscode: "vscode://file/{path}:{line}",
   jetbrains:
     "jetbrains://idea/navigate/reference?project={projectName}&path={relPath}:{line}",
-  sublime: "subl://open?url=file:{path}:{line}",
-  cursor: "cursor://file{path}:{line}",
+  sublime: "subl://open?url=file://{path}:{line}",
+  cursor: "cursor://file/{path}:{line}",
 };
 
 export function buildSourceUrl(editor: string | null, target: SourceTarget): string {
@@ -47,7 +56,14 @@ export function buildSourceUrl(editor: string | null, target: SourceTarget): str
 
 function joinPath(root: string, rel: string): string {
   const r = root.endsWith("/") ? root.slice(0, -1) : root;
-  return rel.startsWith("/") ? rel : `${r}/${rel}`;
+  if (rel.startsWith("/")) return rel;
+  // Special-case `.` or `./` — `codebase.path` is often the literal `.`
+  // when the user runs `noupling report .` from inside the repo. The CLI
+  // resolves it on emit, but if it lands here unresolved, joining yields
+  // `./crates/...` which is useless for an editor URL. Fall back to the
+  // relative path alone; the OS or editor association will figure it out.
+  if (r === "." || r === "" || r === "./") return rel;
+  return `${r}/${rel}`;
 }
 
 function basename(p: string): string {

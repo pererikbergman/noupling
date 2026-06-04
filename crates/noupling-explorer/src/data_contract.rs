@@ -176,7 +176,7 @@ pub(crate) fn build(
             &settings.dependency_rules,
             audit_result,
         ),
-        nodes: build_nodes(&settings.layers, modules, audit_result),
+        nodes: build_nodes(&settings.layers, modules, dependencies, audit_result),
         edges: build_edges(modules, dependencies, audit_result),
         cycles: build_cycles(audit_result),
         violations: build_violations(audit_result),
@@ -190,7 +190,12 @@ pub(crate) fn build(
     }
 }
 
-fn build_nodes(layers: &[Layer], modules: &[Module], audit_result: &AuditResult) -> Vec<NodeEntry> {
+fn build_nodes(
+    layers: &[Layer],
+    modules: &[Module],
+    dependencies: &[Dependency],
+    audit_result: &AuditResult,
+) -> Vec<NodeEntry> {
     let compiled: Vec<Option<globset::GlobMatcher>> = layers
         .iter()
         .map(|l| Glob::new(&l.pattern).ok().map(|g| g.compile_matcher()))
@@ -204,21 +209,46 @@ fn build_nodes(layers: &[Layer], modules: &[Module], audit_result: &AuditResult)
 
     let mut nodes: Vec<NodeEntry> = Vec::new();
 
+    // Per-file Ca/Ce: walk dependencies once and bucket by from/to module path.
+    let id_to_path: HashMap<&str, &str> = modules
+        .iter()
+        .map(|m| (m.id.as_str(), m.path.as_str()))
+        .collect();
+    let mut afferent_by_path: HashMap<String, usize> = HashMap::new();
+    let mut efferent_by_path: HashMap<String, usize> = HashMap::new();
+    for d in dependencies {
+        let from = id_to_path.get(d.from_module_id.as_str());
+        let to = id_to_path.get(d.to_module_id.as_str());
+        if let (Some(f), Some(t)) = (from, to) {
+            if f != t {
+                *efferent_by_path.entry((*f).to_string()).or_insert(0) += 1;
+                *afferent_by_path.entry((*t).to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
     // File nodes
     for m in modules
         .iter()
         .filter(|m| matches!(m.module_type, ModuleType::File))
     {
         let parent = parent_dir(&m.path).map(str::to_string);
+        let ca = afferent_by_path.get(&m.path).copied().unwrap_or(0);
+        let ce = efferent_by_path.get(&m.path).copied().unwrap_or(0);
+        let instability = if ca + ce == 0 {
+            serde_json::Value::Null
+        } else {
+            serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0)
+        };
         nodes.push(NodeEntry {
             id: m.path.clone(),
             kind: "file",
             parent,
             layer: layer_of(&m.path),
             metrics: serde_json::json!({
-                "afferent": 0,
-                "efferent": 0,
-                "instability": null,
+                "afferent": ca,
+                "efferent": ce,
+                "instability": instability,
                 "loc": 0,
             }),
         });
