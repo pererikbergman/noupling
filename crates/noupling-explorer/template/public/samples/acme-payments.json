@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "noupling_version": "0.7.0",
+  "generated_at": "2026-06-04T14:55:42Z",
+  "codebase": {
+    "path": "/Users/dev/code/acme-payments",
+    "module_count": 23,
+    "file_count": 220,
+    "edge_count": 481,
+    "language_distribution": [
+      { "language": "rs", "file_count": 142 },
+      { "language": "ts", "file_count": 78 }
+    ]
+  },
+  "health_score": 82,
+  "summary_counts": { "violations": 7, "cycles": 2, "gravity_wells": 1, "red_flags": 3 },
+  "layers": [
+    { "name": "ui",     "pattern": "**/ui/**",     "allow_sibling": false, "index": 0, "file_count": 24, "afferent": 0, "efferent": 41, "instability": 1.0 },
+    { "name": "domain", "pattern": "**/domain/**", "allow_sibling": true,  "index": 1, "file_count": 67, "afferent": 31, "efferent": 18, "instability": 0.37 },
+    { "name": "infra",  "pattern": "**/infra/**",  "allow_sibling": false, "index": 2, "file_count": 18, "afferent": 42, "efferent": 4, "instability": 0.09 }
+  ],
+  "dependency_rules": [
+    { "from": "**/ui/**", "to": "**/infra/**", "allow": false, "message": "UI must not reach infrastructure directly. Use a domain service." }
+  ],
+  "effective_rules": [
+    { "from": "**/ui/**", "to": "**/infra/**", "allow": false, "message": "UI must not reach infrastructure directly. Use a domain service.", "source": "dependency_rule", "current_violation_count": 1 },
+    { "from": "**/domain/**", "to": "**/ui/**", "allow": false, "message": "Layer 'domain' (index 1) may not depend on layer 'ui' (index 0) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 },
+    { "from": "**/infra/**", "to": "**/ui/**", "allow": false, "message": "Layer 'infra' (index 2) may not depend on layer 'ui' (index 0) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 },
+    { "from": "**/infra/**", "to": "**/domain/**", "allow": false, "message": "Layer 'infra' (index 2) may not depend on layer 'domain' (index 1) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 }
+  ],
+  "nodes": [
+    { "id": "src/ui/CheckoutForm.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 0, "efferent": 4, "instability": 1.0, "loc": 142 } },
+    { "id": "src/ui/CartView.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 1, "efferent": 2, "instability": 0.67, "loc": 92 } },
+    { "id": "src/ui", "kind": "package", "parent": "src", "layer": "ui", "metrics": { "file_count": 24, "cohesion": 0.42 } },
+    { "id": "src/domain/payment.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 6, "efferent": 3, "instability": 0.33, "loc": 612 } },
+    { "id": "src/domain/cart.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 2, "efferent": 2, "instability": 0.5, "loc": 248 } },
+    { "id": "src/domain/user.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 1, "efferent": 1, "instability": 0.5, "loc": 160 } },
+    { "id": "src/domain", "kind": "package", "parent": "src", "layer": "domain", "metrics": { "file_count": 67, "cohesion": 0.71 } },
+    { "id": "src/infra/db.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 12, "efferent": 0, "instability": 0.0, "loc": 320 } },
+    { "id": "src/infra/stripe.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 2, "efferent": 0, "instability": 0.0, "loc": 80 } },
+    { "id": "src/infra/email.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 1, "efferent": 1, "instability": 0.5, "loc": 110 } },
+    { "id": "src/infra", "kind": "package", "parent": "src", "layer": "infra", "metrics": { "file_count": 18, "cohesion": 0.31 } },
+    { "id": "src", "kind": "container", "parent": null, "layer": null, "metrics": { "file_count": 220, "cohesion": null } }
+  ],
+  "edges": [
+    { "from": "src/ui/CheckoutForm.tsx", "to": "src/domain/payment.rs", "weight": 4, "violates_rule": null },
+    { "from": "src/ui/CheckoutForm.tsx", "to": "src/domain/cart.rs", "weight": 2, "violates_rule": null },
+    { "from": "src/ui/CheckoutForm.tsx", "to": "src/infra/db.rs", "weight": 1, "violates_rule": "UI must not reach infrastructure directly. Use a domain service." },
+    { "from": "src/ui/CartView.tsx", "to": "src/domain/cart.rs", "weight": 3, "violates_rule": null },
+    { "from": "src/domain/payment.rs", "to": "src/infra/db.rs", "weight": 2, "violates_rule": null },
+    { "from": "src/domain/payment.rs", "to": "src/infra/stripe.rs", "weight": 5, "violates_rule": null },
+    { "from": "src/domain/cart.rs", "to": "src/infra/db.rs", "weight": 1, "violates_rule": null },
+    { "from": "src/domain/user.rs", "to": "src/infra/db.rs", "weight": 3, "violates_rule": null },
+    { "from": "src/infra/email.rs", "to": "src/domain/user.rs", "weight": 1, "violates_rule": null }
+  ],
+  "cycles": [
+    {
+      "id": "cycle-1",
+      "size": 2,
+      "members": ["src/infra/email.rs", "src/domain/user.rs"],
+      "minimum_cut": [{ "from": "src/infra/email.rs", "to": "src/domain/user.rs" }]
+    }
+  ],
+  "violations": [
+    { "rule": { "from": "**/ui/**", "to": "**/infra/**" }, "edge": { "from": "src/ui/CheckoutForm.tsx", "to": "src/infra/db.rs" }, "severity": "high", "introduced_in": "2026-05-30" }
+  ],
+  "history": [
+    { "snapshot_id": "snap-001", "taken_at": "2026-05-30T12:00:00Z", "health_score": 78 },
+    { "snapshot_id": "snap-002", "taken_at": "2026-06-04T14:55:42Z", "health_score": 82 }
+  ]
+}

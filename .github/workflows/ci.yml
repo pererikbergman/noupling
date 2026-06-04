@@ -54,3 +54,30 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
+
+  template-drift:
+    name: Explorer template drift
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/noupling-explorer/template
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: crates/noupling-explorer/template/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Verify dist/ matches source
+        run: |
+          if ! git diff --quiet -- dist; then
+            echo "::error::Explorer template dist/ is out of sync with src/."
+            echo "Run 'cd crates/noupling-explorer/template && pnpm build' and commit the rebuilt dist/explorer.html."
+            git diff -- dist
+            exit 1
+          fi

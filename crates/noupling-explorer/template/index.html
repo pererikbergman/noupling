@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>noupling Explorer</title>
+    <script>
+      // Honor prefers-color-scheme on first load. The React app's theme
+      // toggle takes over after mount.
+      (function () {
+        try {
+          var prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+          document.documentElement.setAttribute("data-theme", prefersLight ? "light" : "dark");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-canvas text-text font-sans antialiased">
+    <div id="root"></div>
+    <!-- Data Contract injection point. Filled at report-emission time by the
+         noupling-explorer Rust crate via string substitution. During dev,
+         loaded from /samples/<name>.json — see src/data.ts. -->
+    <script id="noupling-data" type="application/json"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

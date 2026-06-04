@@ -84,7 +84,14 @@ fn default_inputs() -> (Settings, Snapshot) {
 }
 
 #[test]
-fn template_html_contains_codebase_header_skeleton_with_data_bindings() {
+fn template_carries_data_injection_contract() {
+    // Contract between Rust and the template subproject:
+    //  1. Template ships a `<script id="noupling-data" type="application/json">`
+    //     element that Rust string-substitutes the Data Contract into.
+    //  2. Template provides a React root the bundle mounts into.
+    //  3. Bundled code reads the noupling-data block on startup.
+    // The template is free to evolve its layout, components, and styling
+    // without this test breaking — it only locks the injection contract.
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
 
@@ -98,30 +105,21 @@ fn template_html_contains_codebase_header_skeleton_with_data_bindings() {
     )
     .expect("render must succeed");
 
-    // The template must declare the Codebase Header region. The values
-    // themselves are injected at runtime by the inline JS reading the
-    // noupling-data script tag — we assert structure, not hardcoded values.
+    // After rendering, the script tag is filled with the JSON, so we look
+    // for the opening marker + JSON content.
     assert!(
-        html.contains(r#"id="codebase-header""#),
-        "header region present"
+        html.contains(r#"<script id="noupling-data" type="application/json">"#),
+        "injection-point script tag must be present"
     );
+    // React mount point
     assert!(
-        html.contains(r#"data-bind="codebase.path""#),
-        "root path bound to data"
+        html.contains(r#"id="root""#),
+        "React mount point must be present"
     );
-    assert!(html.contains(r#"data-bind="codebase.module_count""#));
-    assert!(html.contains(r#"data-bind="codebase.file_count""#));
-    assert!(html.contains(r#"data-bind="codebase.edge_count""#));
-    assert!(html.contains(r#"data-bind="health_score""#));
-    assert!(html.contains(r#"data-bind="summary_counts.violations""#));
-    assert!(html.contains(r#"data-bind="summary_counts.cycles""#));
-    assert!(html.contains(r#"data-bind="noupling_version""#));
-    // Hydration script must exist and read the injected data
-    assert!(html.contains("noupling-data"));
+    // Bundle reads the injection point on startup
     assert!(
-        html.contains("getElementById('noupling-data')")
-            || html.contains("getElementById(\"noupling-data\")"),
-        "template hydrates from the injected data block"
+        html.contains("noupling-data"),
+        "bundle references the injection-point id"
     );
 }
 

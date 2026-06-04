@@ -1,0 +1,5 @@
+node_modules
+.DS_Store
+*.tsbuildinfo
+# dist/ is NOT ignored — it's the committed build artifact the Rust
+# crate consumes via include_str!. CI drift-checks it against source.
