@@ -1,4 +1,5 @@
 import type { DataContract } from "../types";
+import { LSM } from "../lsm/LSM";
 
 export function CanvasArea({ data }: { data: DataContract }) {
   return (
@@ -12,20 +13,8 @@ export function CanvasArea({ data }: { data: DataContract }) {
         <Pill>Gravity wells ({data.summary_counts.gravity_wells})</Pill>
       </div>
 
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <p className="m-0 text-[12px] text-muted">
-            Layered Structure Map renders here.
-          </p>
-          <p className="mx-auto mt-1 max-w-md text-[11px] text-muted/70">
-            Placeholder for slice #233. The Data Contract powering this view is
-            inlined in the page — run{" "}
-            <code className="font-mono">
-              JSON.parse(document.getElementById('noupling-data').textContent)
-            </code>{" "}
-            in devtools.
-          </p>
-        </div>
+      <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
+        <LSM data={data} />
       </div>
 
       {/* Zoom controls (bottom-left) */}
