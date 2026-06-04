@@ -170,6 +170,8 @@ v2 adds `cargo build --target wasm32-unknown-unknown` for the WASM module; that'
 
 The Explorer consumes a JSON document inlined into the HTML at generation time. The shape is a superset of what noupling already serializes for its other reports and is versioned for forward compatibility.
 
+Vertex/edge semantics, node kinds (`file` / `package` / `container`), and the metrics carried below — `instability` (`I`), `abstractness` (`A`), `distance_from_main_sequence` (`D`), `cohesion`, and ply — are defined in [`docs/dependency-graph.md`](./dependency-graph.md). That document is the source of truth; this Data Contract is the wire format. Where the two disagree, the dependency-graph spec wins.
+
 ```json
 {
   "format_version": 1,
@@ -254,6 +256,42 @@ The Explorer consumes a JSON document inlined into the HTML at generation time. 
         "blast_radius_upstream": 0,
         "blast_radius_downstream": 12
       }
+    },
+    {
+      "id": "src/domain/payment",
+      "kind": "package",
+      "parent": "src/domain",
+      "layer": "domain",
+      "metrics": {
+        "afferent": 6,
+        "efferent": 3,
+        "instability": 0.33,
+        "abstractness": 0.45,
+        "distance_from_main_sequence": 0.22,
+        "cohesion": 0.71,
+        "file_count": 8,
+        "loc": 612,
+        "blast_radius_upstream": 6,
+        "blast_radius_downstream": 14
+      }
+    },
+    {
+      "id": "src/domain",
+      "kind": "container",
+      "parent": "src",
+      "layer": "domain",
+      "metrics": {
+        "afferent": 9,
+        "efferent": 4,
+        "instability": 0.31,
+        "abstractness": 0.40,
+        "distance_from_main_sequence": 0.29,
+        "cohesion": null,
+        "file_count": 27,
+        "loc": 2104,
+        "blast_radius_upstream": 9,
+        "blast_radius_downstream": 31
+      }
     }
   ],
   "edges": [
@@ -322,7 +360,7 @@ The top of the page shows a concise summary of the scanned codebase.
 - **F1.2** Language distribution (visual chart + file counts)
 - **F1.3** Total module / file / edge counts
 - **F1.4** Health score (large prominent number, 0–100, color-coded green/amber/red)
-- **F1.5** Stat cards pair issue counts with their clean counterparts: `violations`, `cycles`, `gravity wells`, `red flags` on one row; **`Layers: X / N clean`** and **`Packages: X / N violation-free`** on the row alongside. Healthy state is as visible as broken state (satisfies G7).
+- **F1.5** Stat cards pair issue counts with their clean counterparts: `violations`, `cycles`, `gravity wells`, `red flags` on one row; **`Layers: X / N clean`** and **`Packages: X / N violation-free`** on the row alongside. "Packages" here means nodes with `kind: "package"` *and* nodes with `kind: "container"` (per the dependency-graph spec) — the count covers every multi-file grouping in the codebase, since both contribute to architectural health. Healthy state is as visible as broken state (satisfies G7).
 - **F1.6** Scan timestamp + noupling version
 
 **Acceptance criteria:**
@@ -393,7 +431,7 @@ A top-bar search input that instantly filters the LSM.
   - "Show only clean modules" (no violations, no cycle membership, no Red Flag)
   - "Hide violations" (mute issue highlights so structure reads clearly)
   - "Show only Layer: <name>" (one chip per declared Layer)
-  - "Show only nodes touched in last <N> snapshots" (uses history data if present)
+  - (v3 only — defers with the snapshot history scrubber) "Show only nodes touched in last <N> snapshots" requires per-node touch data on the `history[]` block, which v1's Data Contract does not carry.
 
 **Acceptance criteria:**
 - Search updates as the user types (no submit button).
@@ -750,12 +788,15 @@ Decisions to lock down before or during v1 implementation:
 
 ## 14. Glossary (Domain Vocabulary)
 
-Aligned with noupling's existing language.
+Aligned with noupling's existing language. Graph-level terms (vertex/edge semantics, node kinds, metrics) follow [`docs/dependency-graph.md`](./dependency-graph.md), which is the source of truth.
 
 | Term | Meaning |
 |---|---|
 | **Codebase** | The directory of source files noupling scanned. The thing the Explorer is about. |
-| **Module** | A logical grouping of files. Maps to a noupling module — typically a directory or package. |
+| **File** | A single source file. The atomic vertex in the dependency graph. Node `kind: "file"` in the Data Contract. |
+| **Package** | A directory that directly contains files. Cohesion is computed for Packages. Node `kind: "package"` in the Data Contract. |
+| **Container** | A directory that contains only other directories (no direct files of its own). Cohesion is `null` for Containers because there are no in-Container imports to measure. Node `kind: "container"` in the Data Contract. |
+| **Module** | Umbrella term for any non-File grouping — both Packages and Containers. Used in prose where the Package/Container distinction is not load-bearing. |
 | **Layer** | A named, path-glob-defined group of modules from `.noupling/settings.json`. Layers express intended architecture; rules constrain dependencies between them. |
 | **Rule** | A constraint on which dependencies are allowed. Two sources: explicit `dependency_rules` entries in `.noupling/settings.json` (glob-pattern `from`/`to`, `allow: bool`, `message`), and implicit layer-order rules (a Layer at index `i` may not depend on a Layer at index `j < i`). The Explorer surfaces both via the derived `effective_rules` array in the Data Contract. |
 | **Violation** | A code edge that breaks a Rule. |
@@ -802,7 +843,7 @@ Goal: restructure the single-crate `noupling` into the Cargo workspace from §5.
 For tactical sequencing of v1's Explorer work, once Task 1 is merged:
 
 1. **Reporter skeleton.** Implement `noupling-explorer`'s public entry; have `noupling-cli` register `--format explorer` and call into it. Emit a stub HTML containing only the codebase header — verify end-to-end integration before any visualization work.
-2. **Data contract serialization.** Extend whatever noupling already serializes for its `--format json` to produce the Data Contract schema in section 6. Inline as `<script type="application/json">` block.
+2. **Data contract serialization.** Extend whatever noupling already serializes for its `--format json` to produce the Data Contract schema in section 6, following [`docs/dependency-graph.md`](./dependency-graph.md) for vertex/edge semantics and metric definitions. Inline as `<script type="application/json">` block.
 3. **LSM rendering.** Implement the layered topological layout algorithm. Render nodes and edges. Tested against the `samples/` fixtures noupling already has.
 4. **Drill-down.** Expand/collapse interaction. Breadcrumb scope.
 5. **Details panel + click-to-source.**
