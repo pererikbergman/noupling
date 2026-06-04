@@ -8,7 +8,7 @@ pub fn run(
     module_filter: Option<&str>,
 ) -> anyhow::Result<()> {
     let db = super::find_db(path)?;
-    let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
+    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = match snapshot_id {
         Some(id) => snap_repo
@@ -19,18 +19,21 @@ pub fn run(
             .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?,
     };
 
-    let module_repo = crate::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = crate::storage::repository::DependencyRepository::new(&db.conn);
+    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
-    let project_settings = crate::settings::Settings::load(Path::new(path))?;
+    let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
 
     // Monorepo mode: multiple configured modules
     if !project_settings.modules.is_empty() {
-        let monorepo =
-            crate::analyzer::audit_modules(&modules, &dependencies, &project_settings.modules);
+        let monorepo = noupling_core::analyzer::audit_modules(
+            &modules,
+            &dependencies,
+            &project_settings.modules,
+        );
 
         if let Some(name) = module_filter {
             // Single module output
@@ -78,20 +81,24 @@ pub fn run(
     }
 
     // Single-project mode (existing behavior)
-    let type_counts = crate::scanner::recompute_type_counts(std::path::Path::new(path), &modules);
-    let mut result = crate::analyzer::audit_with_settings(
+    let type_counts =
+        noupling_core::scanner::recompute_type_counts(std::path::Path::new(path), &modules);
+    let mut result = noupling_core::analyzer::audit_with_settings(
         &modules,
         &dependencies,
         &type_counts,
         &project_settings,
     );
-    result.rule_violations = crate::analyzer::check_dependency_rules(
+    result.rule_violations = noupling_core::analyzer::check_dependency_rules(
         &modules,
         &dependencies,
         &project_settings.dependency_rules,
     );
-    result.layer_violations =
-        crate::analyzer::check_layer_rules(&modules, &dependencies, &project_settings.layers);
+    result.layer_violations = noupling_core::analyzer::check_layer_rules(
+        &modules,
+        &dependencies,
+        &project_settings.layers,
+    );
 
     // Load scan-time metadata from SQLite
     let scan_meta = snap_repo.get_meta(&snapshot.id)?;
@@ -99,7 +106,7 @@ pub fn run(
     result.external_deps = scan_meta
         .external_deps
         .iter()
-        .map(|e| crate::analyzer::ExternalDepMetric {
+        .map(|e| noupling_core::analyzer::ExternalDepMetric {
             module_path: e.module_path.clone(),
             count: e.count,
         })
@@ -115,7 +122,7 @@ pub fn run(
         }
         let s_mods = module_repo.get_by_snapshot(&s.id)?;
         let s_deps = dep_repo.get_by_snapshot(&s.id)?;
-        let s_result = crate::analyzer::audit(&s_mods, &s_deps);
+        let s_result = noupling_core::analyzer::audit(&s_mods, &s_deps);
         let fingerprints: Vec<(String, String)> = s_result
             .violations
             .iter()
@@ -123,7 +130,8 @@ pub fn run(
             .collect();
         historical.push(fingerprints);
     }
-    result.violation_age = crate::analyzer::compute_violation_age(&result.violations, &historical);
+    result.violation_age =
+        noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
 
     // Apply diff filter if a diff scan was performed
     if let Some(ref changed_files) = scan_meta.diff_changed_files {
@@ -138,7 +146,7 @@ pub fn run(
     // Apply baseline filter
     let baseline_info = if use_baseline {
         let (new_count, resolved_count) =
-            crate::baseline::compare_baseline(Path::new(path), &mut result)?;
+            noupling_core::baseline::compare_baseline(Path::new(path), &mut result)?;
         Some((new_count, resolved_count))
     } else {
         None

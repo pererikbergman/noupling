@@ -1,0 +1,27 @@
+[package]
+name = "noupling"
+description = "Architecture auditing CLI that detects coupling violations and circular dependencies"
+keywords = ["architecture", "coupling", "dependencies", "lint", "static-analysis"]
+categories = ["development-tools", "command-line-utilities"]
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "noupling"
+path = "src/main.rs"
+
+[dependencies]
+noupling-core = { path = "../noupling-core", version = "0.7.0" }
+noupling-explorer = { path = "../noupling-explorer", version = "0.7.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+noupling-core = { path = "../noupling-core", version = "0.7.0", features = ["test-utils"] }
+tempfile = { workspace = true }

@@ -7,19 +7,19 @@ pub fn run(
     last: usize,
 ) -> anyhow::Result<()> {
     let db = super::find_db(path)?;
-    let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
+    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
 
     let snapshot = snap_repo
         .get_latest()?
         .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?;
 
-    let module_repo = crate::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = crate::storage::repository::DependencyRepository::new(&db.conn);
+    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
 
-    let project_settings = crate::settings::Settings::load(Path::new(path))?;
+    let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
 
     // If --module specified with monorepo config, filter to that module's files
     let (report_modules, report_deps) = if let Some(name) = module_filter {
@@ -49,20 +49,24 @@ pub fn run(
         (modules, dependencies)
     };
 
-    let type_counts = crate::scanner::recompute_type_counts(Path::new(path), &report_modules);
-    let mut result = crate::analyzer::audit_with_settings(
+    let type_counts =
+        noupling_core::scanner::recompute_type_counts(Path::new(path), &report_modules);
+    let mut result = noupling_core::analyzer::audit_with_settings(
         &report_modules,
         &report_deps,
         &type_counts,
         &project_settings,
     );
-    result.rule_violations = crate::analyzer::check_dependency_rules(
+    result.rule_violations = noupling_core::analyzer::check_dependency_rules(
         &report_modules,
         &report_deps,
         &project_settings.dependency_rules,
     );
-    result.layer_violations =
-        crate::analyzer::check_layer_rules(&report_modules, &report_deps, &project_settings.layers);
+    result.layer_violations = noupling_core::analyzer::check_layer_rules(
+        &report_modules,
+        &report_deps,
+        &project_settings.layers,
+    );
 
     // Load scan-time metadata from SQLite
     let scan_meta = snap_repo.get_meta(&snapshot.id)?;
@@ -70,7 +74,7 @@ pub fn run(
     result.external_deps = scan_meta
         .external_deps
         .iter()
-        .map(|e| crate::analyzer::ExternalDepMetric {
+        .map(|e| noupling_core::analyzer::ExternalDepMetric {
             module_path: e.module_path.clone(),
             count: e.count,
         })
@@ -169,13 +173,13 @@ pub fn run(
         }
         "pr" => {
             // Compute deltas from previous snapshot if available
-            let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
+            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
             let all = snap_repo.get_all()?;
             let prev = all.iter().rfind(|s| s.id != snapshot.id).cloned();
             let (prev_score, prev_count) = if let Some(prev_snap) = prev {
                 let prev_modules = module_repo.get_by_snapshot(&prev_snap.id)?;
                 let prev_deps = dep_repo.get_by_snapshot(&prev_snap.id)?;
-                let prev_result = crate::analyzer::audit_with_settings(
+                let prev_result = noupling_core::analyzer::audit_with_settings(
                     &prev_modules,
                     &prev_deps,
                     &[],
@@ -198,7 +202,7 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "strategy" => {
-            let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
+            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
             let file_path = report_dir.join("strategy.html");
             crate::reporter::generate_strategy_report(
                 &snap_repo,
@@ -245,7 +249,7 @@ pub fn run(
                 }
             }
             // Strategy needs snapshot history — handle separately
-            let snap_repo = crate::storage::repository::SnapshotRepository::new(&db.conn);
+            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
             let strategy_path = report_dir.join("strategy.html");
             match crate::reporter::generate_strategy_report(
                 &snap_repo,
@@ -289,11 +293,11 @@ pub fn run(
 fn generate_single_format(
     format: &str,
     report_dir: &Path,
-    modules: &[crate::core::Module],
-    deps: &[crate::core::Dependency],
-    result: &crate::analyzer::AuditResult,
+    modules: &[noupling_core::core::Module],
+    deps: &[noupling_core::core::Dependency],
+    result: &noupling_core::analyzer::AuditResult,
     snapshot_id: &str,
-    settings: &crate::settings::Settings,
+    settings: &noupling_core::settings::Settings,
 ) -> anyhow::Result<()> {
     match format {
         "json" => {

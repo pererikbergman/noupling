@@ -60,9 +60,9 @@ grep '^version = ' Cargo.toml | head -1
 # Run checks
 echo ""
 echo "Running checks..."
-cargo test --quiet
-cargo clippy --quiet -- -D warnings
-cargo fmt --check
+cargo test --workspace --quiet
+cargo clippy --workspace --quiet -- -D warnings
+cargo fmt --all --check
 echo "All checks passed."
 
 # Commit, tag, and push

@@ -1,7 +1,7 @@
 //! Zoomable sunburst with aggregated dependency edges.
 
-use crate::analyzer::AuditResult;
-use crate::core::{Dependency, Module};
+use noupling_core::analyzer::AuditResult;
+use noupling_core::core::{Dependency, Module};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 

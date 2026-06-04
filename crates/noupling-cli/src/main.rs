@@ -1,18 +1,11 @@
-mod analyzer;
-mod baseline;
 mod cli;
 mod commands;
-mod core;
-mod diff;
 mod hook;
 mod reporter;
-mod scanner;
-pub mod settings;
-mod storage;
-mod utils;
 
 use clap::Parser;
 use cli::{Cli, Commands};
+use noupling_core::settings;
 use std::path::Path;
 
 fn main() {

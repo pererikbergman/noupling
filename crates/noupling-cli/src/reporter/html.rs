@@ -2,9 +2,9 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::analyzer::AuditResult;
-use crate::core::Module;
-use crate::settings::Settings;
+use noupling_core::analyzer::AuditResult;
+use noupling_core::core::Module;
+use noupling_core::settings::Settings;
 
 /// A node in the directory tree used for HTML navigation.
 #[derive(Debug)]
@@ -27,7 +27,7 @@ struct ViolationInfo {
     to_module: String,
     severity: f64,
     rri: f64,
-    direction: crate::analyzer::DependencyDirection,
+    direction: noupling_core::analyzer::DependencyDirection,
     #[allow(dead_code)]
     weight: usize,
     is_circular: bool,
@@ -51,10 +51,10 @@ struct ReportData {
     score_green: f64,
     score_yellow: f64,
     critical_severity: f64,
-    abstractness: Vec<crate::analyzer::AbstractnessMetric>,
-    instability: Vec<crate::analyzer::InstabilityMetric>,
-    stability_violations: Vec<crate::analyzer::StabilityViolation>,
-    distance: Vec<crate::analyzer::DistanceMetric>,
+    abstractness: Vec<noupling_core::analyzer::AbstractnessMetric>,
+    instability: Vec<noupling_core::analyzer::InstabilityMetric>,
+    stability_violations: Vec<noupling_core::analyzer::StabilityViolation>,
+    distance: Vec<noupling_core::analyzer::DistanceMetric>,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -471,24 +471,24 @@ fn module_label(path: &str, current_dir: &str) -> String {
     }
 }
 
-fn direction_badge(dir: &crate::analyzer::DependencyDirection) -> &'static str {
+fn direction_badge(dir: &noupling_core::analyzer::DependencyDirection) -> &'static str {
     match dir {
-        crate::analyzer::DependencyDirection::Downward => {
+        noupling_core::analyzer::DependencyDirection::Downward => {
             "<span title=\"Downward dependency\" style=\"color:#22c55e\">\u{2193}</span>"
         }
-        crate::analyzer::DependencyDirection::Sibling => {
+        noupling_core::analyzer::DependencyDirection::Sibling => {
             "<span title=\"Sibling dependency\" style=\"color:#eab308\">\u{2194}</span>"
         }
-        crate::analyzer::DependencyDirection::Upward => {
+        noupling_core::analyzer::DependencyDirection::Upward => {
             "<span title=\"Upward dependency\" style=\"color:#ef4444\">\u{2191}</span>"
         }
-        crate::analyzer::DependencyDirection::External => {
+        noupling_core::analyzer::DependencyDirection::External => {
             "<span title=\"External dependency\" style=\"color:#f97316\">\u{2197}</span>"
         }
-        crate::analyzer::DependencyDirection::Transitive => {
+        noupling_core::analyzer::DependencyDirection::Transitive => {
             "<span title=\"Transitive dependency\" style=\"color:#a855f7\">\u{21dd}</span>"
         }
-        crate::analyzer::DependencyDirection::Circular => {
+        noupling_core::analyzer::DependencyDirection::Circular => {
             "<span title=\"Circular dependency\" style=\"color:#dc2626\">\u{21bb}</span>"
         }
     }
@@ -791,7 +791,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
 
     // Root-page only: Distance from main sequence
     if is_root && !data.distance.is_empty() {
-        use crate::analyzer::Zone;
+        use noupling_core::analyzer::Zone;
         violations_html.push_str("<h2>Distance from Main Sequence</h2>\n");
         violations_html.push_str("<p class=\"section-hint\">Martin's D = |A + I − 1|. 0.0 = on the main sequence (well-balanced). High D + low I = Zone of Pain (stable + concrete, rigid). High D + high I = Zone of Uselessness (abstract + unstable, speculative).</p>\n");
         violations_html.push_str("<table>\n");
@@ -1056,9 +1056,9 @@ fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyzer::AuditResultBuilder;
-    use crate::analyzer::CouplingViolation;
-    use crate::core::ModuleType;
+    use noupling_core::analyzer::AuditResultBuilder;
+    use noupling_core::analyzer::CouplingViolation;
+    use noupling_core::core::ModuleType;
 
     fn make_module(id: &str, path: &str) -> Module {
         Module {
@@ -1078,7 +1078,7 @@ mod tests {
 
     #[test]
     fn html_root_renders_stability_violations_section() {
-        use crate::analyzer::StabilityViolation;
+        use noupling_core::analyzer::StabilityViolation;
         let modules = vec![make_module("a", "src/api/mod.rs")];
         let result = AuditResultBuilder::new()
             .with_total_modules(1)
@@ -1100,7 +1100,7 @@ mod tests {
 
     #[test]
     fn html_per_directory_renders_instability_summary_card() {
-        use crate::analyzer::InstabilityMetric;
+        use noupling_core::analyzer::InstabilityMetric;
         let modules = vec![
             make_module("a", "src/app/main.rs"),
             make_module("b", "src/core/lib.rs"),
@@ -1128,7 +1128,7 @@ mod tests {
 
     #[test]
     fn html_root_renders_abstractness_section() {
-        use crate::analyzer::AbstractnessMetric;
+        use noupling_core::analyzer::AbstractnessMetric;
         let modules = vec![make_module("a", "src/api/mod.rs")];
         let result = AuditResultBuilder::new()
             .with_total_modules(1)
@@ -1213,7 +1213,7 @@ mod tests {
                 to_module: "src/storage/mod.rs".to_string(),
                 depth: 1,
                 severity: 0.5,
-                direction: crate::analyzer::DependencyDirection::Sibling,
+                direction: noupling_core::analyzer::DependencyDirection::Sibling,
                 rri: 0.0,
                 is_circular: false,
                 cycle_path: Vec::new(),
