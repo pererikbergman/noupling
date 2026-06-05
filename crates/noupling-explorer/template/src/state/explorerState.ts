@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 
 /**
@@ -40,188 +40,224 @@ export type PathFinder =
   | { mode: "pick-to"; from: string }
   | { mode: "done"; from: string; to: string };
 
-export interface ExplorerState {
+/** Field values the store carries. */
+export interface ExplorerStateValues {
   scope: string;
-  setScope: (s: string) => void;
   selected: string | null;
-  setSelected: (s: string | null) => void;
   selectedEdge: EdgeSelection | null;
-  setSelectedEdge: (e: EdgeSelection | null) => void;
   search: string;
-  setSearch: (s: string) => void;
   searchMode: SearchMode;
-  setSearchMode: (m: SearchMode) => void;
   spotFilter: SpotFilter;
-  setSpotFilter: (f: SpotFilter) => void;
   layerOverlay: boolean;
-  setLayerOverlay: (b: boolean) => void;
   cycleHighlight: boolean;
-  setCycleHighlight: (b: boolean) => void;
   viewMode: ViewMode;
-  setViewMode: (m: ViewMode) => void;
   pathFinder: PathFinder;
-  setPathFinder: (p: PathFinder) => void;
   minCutShown: boolean;
-  setMinCutShown: (b: boolean) => void;
   /** Files tab folder-only filter (#273). */
   foldersOnly: boolean;
-  setFoldersOnly: (b: boolean) => void;
-  /** Wipe all persisted state for this Explorer file and return to defaults (PRD F10.2). */
-  resetView: () => void;
 }
 
-export function useExplorerState(data: DataContract): ExplorerState {
-  const key = storageKey(data);
-  const [scope, setScope] = usePersistedString(`${key}::scope`, "");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<EdgeSelection | null>(null);
-  const [search, setSearch] = usePersistedString(`${key}::search`, "");
-  const [searchMode, setSearchMode] = usePersistedEnum<SearchMode>(
-    `${key}::searchMode`,
-    "substring",
-    ["substring", "regex"],
-  );
-  const [spotFilter, setSpotFilter] = usePersistedEnum<SpotFilter>(
-    `${key}::spotFilter`,
-    "all",
-    ["all", "in-cycles", "with-violations", "clean", "hide-violations", "gravity-wells"],
-  );
-  const [layerOverlay, setLayerOverlay] = usePersistedBool(`${key}::layerOverlay`, false);
-  const [cycleHighlight, setCycleHighlight] = usePersistedBool(
-    `${key}::cycleHighlight`,
-    true,
-  );
-  const [viewMode, setViewMode] = usePersistedEnum<ViewMode>(
-    `${key}::viewMode`,
-    "lsm",
-    ["lsm", "matrix", "force", "composition"],
-  );
-  // Path finder + min-cut are transient UI state — they reset whenever
-  // the user reloads the page. Not persisted.
-  const [pathFinder, setPathFinder] = useState<PathFinder>({ mode: "idle" });
-  const [minCutShown, setMinCutShown] = useState(false);
-  const [foldersOnly, setFoldersOnly] = usePersistedBool(
-    `${key}::foldersOnly`,
-    false,
-  );
+/** Store-as-deep-module (#302). One setState; one reset; values
+ *  surfaced as fields. Adding a new field is a config entry, not
+ *  five edits (state slot + setter + persistence hook + setter in
+ *  reset + key suffix in reset). */
+export interface ExplorerStore extends ExplorerStateValues {
+  setState: (patch: Partial<ExplorerStateValues>) => void;
+  /** Wipe all persisted state for this Explorer file and return to defaults (PRD F10.2). */
+  reset: () => void;
+}
 
-  function resetView() {
-    setScope("");
-    setSearch("");
-    setSearchMode("substring");
-    setSpotFilter("all");
-    setLayerOverlay(false);
-    setCycleHighlight(true);
-    setSelected(null);
-    setSelectedEdge(null);
-    setViewMode("lsm");
-    setPathFinder({ mode: "idle" });
-    setMinCutShown(false);
-    setFoldersOnly(false);
+// Backwards-compatible alias — old code that imports `ExplorerState`
+// keeps compiling against the new shape. Setter properties (`setScope`,
+// `setSelected`, …) are deliberately gone: deepening the interface
+// is the whole point of #302.
+export type ExplorerState = ExplorerStore;
+
+/**
+ * Field config: how each value is persisted (or not), what default it
+ * takes, and — for enums — which strings are allowed. One entry per
+ * field; the hook reads this once and derives the React state slots,
+ * the persistence side-effects, and the reset behaviour.
+ *
+ * Adding a new field = one entry here. No setter, no manual reset
+ * line, no key-suffix string to add elsewhere.
+ */
+type PersistKind =
+  | { kind: "transient" }
+  | { kind: "string"; suffix: string }
+  | { kind: "bool"; suffix: string }
+  | { kind: "enum"; suffix: string; allowed: readonly string[] };
+
+interface FieldSpec<K extends keyof ExplorerStateValues> {
+  default: ExplorerStateValues[K];
+  persist: PersistKind;
+}
+
+const FIELDS: { [K in keyof ExplorerStateValues]: FieldSpec<K> } = {
+  scope: { default: "", persist: { kind: "string", suffix: "::scope" } },
+  selected: { default: null, persist: { kind: "transient" } },
+  selectedEdge: { default: null, persist: { kind: "transient" } },
+  search: { default: "", persist: { kind: "string", suffix: "::search" } },
+  searchMode: {
+    default: "substring",
+    persist: {
+      kind: "enum",
+      suffix: "::searchMode",
+      allowed: ["substring", "regex"],
+    },
+  },
+  spotFilter: {
+    default: "all",
+    persist: {
+      kind: "enum",
+      suffix: "::spotFilter",
+      allowed: [
+        "all",
+        "in-cycles",
+        "with-violations",
+        "clean",
+        "hide-violations",
+        "gravity-wells",
+      ],
+    },
+  },
+  layerOverlay: {
+    default: false,
+    persist: { kind: "bool", suffix: "::layerOverlay" },
+  },
+  cycleHighlight: {
+    default: true,
+    persist: { kind: "bool", suffix: "::cycleHighlight" },
+  },
+  viewMode: {
+    default: "lsm",
+    persist: {
+      kind: "enum",
+      suffix: "::viewMode",
+      allowed: ["lsm", "matrix", "force", "composition"],
+    },
+  },
+  pathFinder: { default: { mode: "idle" }, persist: { kind: "transient" } },
+  minCutShown: { default: false, persist: { kind: "transient" } },
+  foldersOnly: {
+    default: false,
+    persist: { kind: "bool", suffix: "::foldersOnly" },
+  },
+};
+
+function loadInitial<K extends keyof ExplorerStateValues>(
+  key: string,
+  spec: FieldSpec<K>,
+): ExplorerStateValues[K] {
+  const fallback = spec.default;
+  try {
+    const raw = localStorage.getItem(`${key}${persistSuffix(spec.persist) ?? ""}`);
+    if (raw === null) return fallback;
+    switch (spec.persist.kind) {
+      case "string":
+        return raw as ExplorerStateValues[K];
+      case "bool":
+        return (raw === "1" || raw === "true") as ExplorerStateValues[K];
+      case "enum":
+        return spec.persist.allowed.includes(raw)
+          ? (raw as ExplorerStateValues[K])
+          : fallback;
+      case "transient":
+        return fallback;
+    }
+  } catch {
+    return fallback;
+  }
+}
+
+function persistSuffix(p: PersistKind): string | null {
+  return p.kind === "transient" ? null : p.suffix;
+}
+
+function persistValue<K extends keyof ExplorerStateValues>(
+  key: string,
+  spec: FieldSpec<K>,
+  value: ExplorerStateValues[K],
+): void {
+  if (spec.persist.kind === "transient") return;
+  try {
+    let raw: string;
+    if (spec.persist.kind === "bool") raw = value ? "1" : "0";
+    else raw = String(value);
+    localStorage.setItem(`${key}${spec.persist.suffix}`, raw);
+  } catch {
+    /* swallow per PRD §8.11 */
+  }
+}
+
+const FIELD_KEYS = Object.keys(FIELDS) as Array<keyof ExplorerStateValues>;
+
+export function useExplorerStore(data: DataContract): ExplorerStore {
+  const key = storageKey(data);
+  // One React state slot per field. The initial value reads through
+  // the persistence config, so a new field with `persist: { kind: ... }`
+  // automatically gets loaded.
+  const [values, setValues] = useState<ExplorerStateValues>(() => {
+    const v = {} as ExplorerStateValues;
+    for (const k of FIELD_KEYS) {
+      // TS narrows the spec per key but the loop is dynamic — cast.
+      (v as unknown as Record<string, unknown>)[k] = loadInitial(
+        key,
+        FIELDS[k] as FieldSpec<typeof k>,
+      );
+    }
+    return v;
+  });
+
+  function setState(patch: Partial<ExplorerStateValues>) {
+    setValues((prev) => {
+      const next = { ...prev, ...patch };
+      // Side-effect: persist every patched field that has a non-
+      // transient strategy. Iterating the patch (not all fields) keeps
+      // writes minimal.
+      for (const k of Object.keys(patch) as Array<keyof ExplorerStateValues>) {
+        const spec = FIELDS[k] as FieldSpec<typeof k>;
+        persistValue(
+          key,
+          spec,
+          (next as unknown as Record<string, unknown>)[
+            k
+          ] as ExplorerStateValues[typeof k],
+        );
+      }
+      return next;
+    });
+  }
+
+  function reset() {
+    const defaults = {} as ExplorerStateValues;
+    for (const k of FIELD_KEYS) {
+      (defaults as unknown as Record<string, unknown>)[k] = (
+        FIELDS[k] as FieldSpec<typeof k>
+      ).default;
+    }
+    setValues(defaults);
     try {
-      for (const suffix of [
-        "::scope",
-        "::search",
-        "::searchMode",
-        "::spotFilter",
-        "::layerOverlay",
-        "::cycleHighlight",
-        "::viewMode",
-        "::foldersOnly",
-      ]) {
-        localStorage.removeItem(`${key}${suffix}`);
+      for (const k of FIELD_KEYS) {
+        const spec = FIELDS[k] as FieldSpec<typeof k>;
+        const suffix = persistSuffix(spec.persist);
+        if (suffix) localStorage.removeItem(`${key}${suffix}`);
       }
     } catch {
       /* swallow */
     }
   }
 
-  return {
-    scope,
-    setScope,
-    selected,
-    setSelected,
-    selectedEdge,
-    setSelectedEdge,
-    search,
-    setSearch,
-    searchMode,
-    setSearchMode,
-    spotFilter,
-    setSpotFilter,
-    layerOverlay,
-    setLayerOverlay,
-    cycleHighlight,
-    setCycleHighlight,
-    viewMode,
-    setViewMode,
-    pathFinder,
-    setPathFinder,
-    minCutShown,
-    setMinCutShown,
-    foldersOnly,
-    setFoldersOnly,
-    resetView,
-  };
+  return { ...values, setState, reset };
 }
 
-function usePersistedString(key: string, initial: string) {
-  const [v, setV] = useState<string>(() => {
-    try {
-      return localStorage.getItem(key) ?? initial;
-    } catch {
-      return initial;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, v);
-    } catch {
-      /* swallow per PRD §8.11 */
-    }
-  }, [key, v]);
-  return [v, setV] as const;
-}
+/**
+ * @deprecated Use `useExplorerStore` (#302). Kept as a thin alias so
+ * any old import paths still compile. The shape returned is the new
+ * `ExplorerStore`.
+ */
+export const useExplorerState = useExplorerStore;
 
-function usePersistedBool(key: string, initial: boolean) {
-  const [v, setV] = useState<boolean>(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw === null) return initial;
-      return raw === "1" || raw === "true";
-    } catch {
-      return initial;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, v ? "1" : "0");
-    } catch {
-      /* swallow */
-    }
-  }, [key, v]);
-  return [v, setV] as const;
-}
-
-function usePersistedEnum<T extends string>(key: string, initial: T, allowed: T[]) {
-  const [v, setV] = useState<T>(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw && (allowed as readonly string[]).includes(raw)) return raw as T;
-    } catch {
-      /* swallow */
-    }
-    return initial;
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, v);
-    } catch {
-      /* swallow */
-    }
-  }, [key, v]);
-  return [v, setV] as const;
-}
 
 function storageKey(data: DataContract): string {
   return `noupling-explorer::${data.codebase.path}::${data.generated_at}`;
