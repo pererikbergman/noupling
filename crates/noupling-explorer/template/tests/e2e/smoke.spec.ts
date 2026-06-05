@@ -179,6 +179,44 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("Issues tab: hover not near-black, sticky selected, focus mode banner (#275)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    const firstCard = page.locator("#side-panel ul li button").first();
+    // Click activates focus mode.
+    await firstCard.click();
+    // aria-pressed = "true" on the selected card (sticky).
+    await expect(firstCard).toHaveAttribute("aria-pressed", "true");
+    // Focus banner is on the canvas.
+    await expect(
+      page.locator("text=Issue focused").first(),
+    ).toBeVisible();
+    // Esc clears the focus mode + sticky selected state.
+    await page.keyboard.press("Escape");
+    await expect(
+      page.locator("text=Issue focused").first(),
+    ).not.toBeVisible();
+  });
+
+  test("Levels tab: containers only, double-click drills shared scope (#274)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Levels')").click();
+    // At root scope sample has one container (src). Rows are buttons
+    // inside the side-panel ul.
+    const rows = page.locator("#side-panel ul li button");
+    expect(await rows.count()).toBeGreaterThanOrEqual(1);
+    // Double-click drills.
+    await rows.first().dblclick();
+    // Breadcrumb up button appears.
+    await expect(
+      page.locator("#side-panel button[aria-label*='Up to']").first(),
+    ).toBeVisible();
+    // Levels tab now shows the next level's containers (ui, domain, etc).
+    expect(await rows.count()).toBeGreaterThan(0);
+  });
+
   test("Files tab: double-click drills, in-tab breadcrumb navigates back, Hide files persists (#273)", async ({
     page,
     context,

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { DrillBreadcrumb } from "./DrillBreadcrumb";
 
-type Tab = "Info" | "Files" | "Issues" | "Rules";
+type Tab = "Info" | "Files" | "Levels" | "Issues" | "Rules";
 
 export interface SidePanelProps {
   data: DataContract;
@@ -15,6 +15,12 @@ export interface SidePanelProps {
   onScoreClick?: () => void;
   foldersOnly?: boolean;
   onFoldersOnly?: (b: boolean) => void;
+  /** Current selected issue key (`${kind}-${index}`) — drives the
+   *  sticky selected state on the Issues tab card. Null = nothing. */
+  activeIssueKey?: string | null;
+  /** Called when the user clicks an issue card. The receiver wires
+   *  this into the canvas focus mode (#275). */
+  onIssueFocus?: (issue: Issue | null, key: string | null) => void;
 }
 
 export function SidePanel({
@@ -26,6 +32,8 @@ export function SidePanel({
   onScoreClick,
   foldersOnly,
   onFoldersOnly,
+  activeIssueKey,
+  onIssueFocus,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   const issuesCount =
@@ -51,12 +59,22 @@ export function SidePanel({
             onFoldersOnly={onFoldersOnly}
           />
         )}
+        {tab === "Levels" && (
+          <LevelsTab
+            data={data}
+            scope={scope}
+            onScope={onScope}
+            onSelect={onSelect}
+          />
+        )}
         {tab === "Issues" && (
           <IssuesTab
             data={data}
             onScope={onScope}
             onSelect={onSelect}
             onSpotFilter={onSpotFilter}
+            activeIssueKey={activeIssueKey ?? null}
+            onIssueFocus={onIssueFocus}
           />
         )}
         {tab === "Rules" && (
@@ -80,7 +98,7 @@ function Tabs({
   onChange: (t: Tab) => void;
   issuesCount: number;
 }) {
-  const tabs: Tab[] = ["Info", "Files", "Issues", "Rules"];
+  const tabs: Tab[] = ["Info", "Files", "Levels", "Issues", "Rules"];
   return (
     <div className="flex border-b border-border">
       {tabs.map((t) => (
@@ -535,6 +553,115 @@ function FilesTab({
   );
 }
 
+/**
+ * #274 — Finder-style one-level-at-a-time drill-down. Shows the
+ * immediate container children of the current shared scope, with a
+ * trimmed badge row per node (file count + active violation count).
+ * Single click selects (opens DetailsPanel); double-click drills the
+ * shared scope. Up/breadcrumb shares <DrillBreadcrumb> with Files.
+ */
+function LevelsTab({
+  data,
+  scope,
+  onScope,
+  onSelect,
+}: {
+  data: DataContract;
+  scope: string;
+  onScope?: (scope: string) => void;
+  onSelect?: (id: string) => void;
+}) {
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string | null, NodeEntry[]>();
+    for (const n of data.nodes) {
+      const key = n.parent;
+      const arr = m.get(key);
+      if (arr) arr.push(n);
+      else m.set(key, [n]);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.id.localeCompare(b.id));
+    return m;
+  }, [data.nodes]);
+
+  // Per-container violation count = number of violations whose
+  // offender file sits inside the container. Cheap to compute lazily.
+  const violationsByContainer = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of data.violations) {
+      // Walk up the parent chain from the offender's file and credit
+      // every ancestor container. Stops when no parent found.
+      let cur: string | null = v.edge.from;
+      while (cur) {
+        counts.set(cur, (counts.get(cur) ?? 0) + 1);
+        const node = data.nodes.find((n) => n.id === cur);
+        cur = node?.parent ?? null;
+      }
+    }
+    return counts;
+  }, [data.violations, data.nodes]);
+
+  const rootKey = scope === "" ? null : scope;
+  const children = (childrenByParent.get(rootKey) ?? []).filter(
+    (n) => n.kind !== "file",
+  );
+
+  return (
+    <div>
+      <DrillBreadcrumb scope={scope} onScope={(s) => onScope?.(s)} />
+      <p className="m-0 mb-2 text-[11px] text-muted">
+        One level at a time. Click a row to select; double-click to drill.
+      </p>
+      {children.length === 0 ? (
+        <p className="m-0 text-[12px] text-muted">
+          No nested containers at this level.
+        </p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {children.map((n) => {
+            const fc =
+              typeof n.metrics.file_count === "number"
+                ? n.metrics.file_count
+                : null;
+            const violCount = violationsByContainer.get(n.id) ?? 0;
+            return (
+              <li key={n.id}>
+                <button
+                  onClick={() => onSelect?.(n.id)}
+                  onDoubleClick={() => onScope?.(n.id)}
+                  className="flex w-full items-center justify-between rounded-sm border border-border bg-canvas px-2 py-1.5 text-left text-[12px] hover:bg-pill hover:text-pill-text"
+                  title={`${n.id} — double-click to drill`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={
+                        "inline-block h-3 w-0.5 rounded-sm align-middle " +
+                        layerAccent(n.layer)
+                      }
+                    />
+                    <span className="truncate font-mono text-text">
+                      {basename(n.id)}
+                    </span>
+                  </span>
+                  <span className="ml-2 flex shrink-0 items-center gap-2 text-[10px]">
+                    {fc !== null && (
+                      <span className="text-muted">{fc}f</span>
+                    )}
+                    {violCount > 0 && (
+                      <span className="rounded-full bg-edge-violation/20 px-1.5 py-0.5 font-bold text-edge-violation">
+                        {violCount}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function TreeRow({
   node,
   depth,
@@ -649,9 +776,18 @@ interface IssuesTabProps {
   onSpotFilter?: (
     f: "all" | "in-cycles" | "with-violations" | "gravity-wells",
   ) => void;
+  onIssueFocus?: (issue: Issue | null, key: string | null) => void;
+  activeIssueKey?: string | null;
 }
 
-function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
+function IssuesTab({
+  data,
+  onScope,
+  onSelect,
+  onSpotFilter,
+  onIssueFocus,
+  activeIssueKey,
+}: IssuesTabProps) {
   const items = useMemo(() => buildIssues(data), [data]);
 
   if (items.length === 0) {
@@ -664,32 +800,45 @@ function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
 
   return (
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {items.map((it, i) => (
-        <li key={`${it.kind}-${i}`}>
-          <button
-            onClick={() => {
-              switch (it.kind) {
-                case "violation":
-                  onSpotFilter?.("with-violations");
-                  onSelect?.(it.subject);
-                  break;
-                case "cycle":
-                  onSpotFilter?.("in-cycles");
-                  if (it.subject) onSelect?.(it.subject);
-                  break;
-                case "red-flag":
-                  if (it.scope) onScope?.(it.scope);
-                  if (it.subject) onSelect?.(it.subject);
-                  break;
-                case "gravity-well":
-                  onSpotFilter?.("gravity-wells");
-                  onSelect?.(it.subject);
-                  break;
+      {items.map((it, i) => {
+        const key = `${it.kind}-${i}`;
+        const selected = activeIssueKey === key;
+        return (
+          <li key={key}>
+            <button
+              aria-pressed={selected}
+              onClick={() => {
+                onIssueFocus?.(it, key);
+                // Keep the legacy hooks for tabs/canvas that still use
+                // the spot filter as the "narrow my view" lever.
+                switch (it.kind) {
+                  case "violation":
+                    onSpotFilter?.("with-violations");
+                    onSelect?.(it.subject);
+                    break;
+                  case "cycle":
+                    onSpotFilter?.("in-cycles");
+                    if (it.subject) onSelect?.(it.subject);
+                    break;
+                  case "red-flag":
+                    if (it.scope) onScope?.(it.scope);
+                    if (it.subject) onSelect?.(it.subject);
+                    break;
+                  case "gravity-well":
+                    onSpotFilter?.("gravity-wells");
+                    onSelect?.(it.subject);
+                    break;
+                }
+              }}
+              className={
+                "block w-full rounded-md border bg-canvas px-3 py-2 text-left hover:bg-canvas/60 hover:border-text/30 transition-colors " +
+                (selected
+                  ? "border-l-4 border-l-accent-domain border-border bg-canvas/80"
+                  : "border-border")
               }
-            }}
-            className="block w-full rounded-md border border-border bg-canvas px-3 py-2 text-left hover:bg-pill hover:text-pill-text"
-            title={it.description}
-          >
+              data-issue-key={key}
+              title={it.description}
+            >
             <div className="mb-0.5 flex items-center justify-between">
               <span
                 className={
@@ -713,14 +862,15 @@ function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
             )}
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
 
 type IssueKind = "violation" | "cycle" | "red-flag" | "gravity-well";
 
-interface Issue {
+export interface Issue {
   kind: IssueKind;
   title: string;
   subtitle?: string;
