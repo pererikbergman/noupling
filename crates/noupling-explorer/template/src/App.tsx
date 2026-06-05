@@ -8,7 +8,7 @@ import { DetailsPanel } from "./components/DetailsPanel";
 import { EdgeDetailsPanel } from "./components/EdgeDetailsPanel";
 import { ScoreDialog } from "./components/ScoreDialog";
 import type { Issue } from "./components/SidePanel";
-import { useExplorerState, useNodeFilter, inScope } from "./state/explorerState";
+import { useExplorerStore, useNodeFilter, inScope } from "./state/explorerState";
 import { shortestPath, pathEdges, minCutEdges } from "./state/paths";
 
 interface IssueFocus {
@@ -46,7 +46,7 @@ export function App({ data }: AppProps) {
     setTheme(next);
   }
 
-  const state = useExplorerState(data);
+  const state = useExplorerStore(data);
   const filterFn = useNodeFilter(data, state);
 
   const visibleData = useMemo(
@@ -79,7 +79,7 @@ export function App({ data }: AppProps) {
   }, [state.minCutShown, visibleData, issueFocus]);
 
   function startPathFinder() {
-    state.setPathFinder({ mode: "pick-from" });
+    state.setState({ pathFinder: { mode: "pick-from" } });
   }
 
   // Esc clears issue focus mode (#275 acceptance — "focus mode must
@@ -132,7 +132,7 @@ export function App({ data }: AppProps) {
       const node = data.nodes.find((n) => n.id === p);
       if (node?.kind === "file") participantFiles.add(p);
     }
-    if (lca !== state.scope) state.setScope(lca);
+    if (lca !== state.scope) state.setState({ scope: lca });
     setIssueFocus({
       key,
       lca,
@@ -145,12 +145,12 @@ export function App({ data }: AppProps) {
   function onNodePicked(id: string) {
     const pf = state.pathFinder;
     if (pf.mode === "pick-from") {
-      state.setPathFinder({ mode: "pick-to", from: id });
+      state.setState({ pathFinder: { mode: "pick-to", from: id } });
     } else if (pf.mode === "pick-to") {
-      state.setPathFinder({ mode: "done", from: pf.from, to: id });
+      state.setState({ pathFinder: { mode: "done", from: pf.from, to: id } });
     } else {
       // Default click → open details panel.
-      state.setSelected(id);
+      state.setState({ selected: id });
     }
   }
 
@@ -169,36 +169,36 @@ export function App({ data }: AppProps) {
         data={data}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onResetView={state.resetView}
+        onResetView={state.reset}
         viewMode={state.viewMode}
-        onViewMode={state.setViewMode}
+        onViewMode={(viewMode) => state.setState({ viewMode })}
         onStartPathFinder={startPathFinder}
         pathFinderActive={state.pathFinder.mode !== "idle"}
-        onShowMinCut={() => state.setMinCutShown(!state.minCutShown)}
+        onShowMinCut={() => state.setState({ minCutShown: !state.minCutShown })}
         minCutShown={state.minCutShown}
         hasCycles={visibleData.cycles.length > 0}
       />
       <SearchRow
         data={visibleData}
         search={state.search}
-        onSearch={state.setSearch}
+        onSearch={(search) => state.setState({ search })}
         searchMode={state.searchMode}
-        onSearchMode={state.setSearchMode}
+        onSearchMode={(searchMode) => state.setState({ searchMode })}
       />
       <SidePanel
         data={data}
         scope={state.scope}
-        onScope={state.setScope}
-        onSelect={state.setSelected}
-        onSpotFilter={(f) => {
+        onScope={(scope) => state.setState({ scope })}
+        onSelect={(selected) => state.setState({ selected })}
+        onSpotFilter={(spotFilter) => {
           // Clearing spot filter (back to "all") also exits focus mode
           // — sticky-until-replaced semantics from #275.
-          if (f === "all" && issueFocus) setIssueFocus(null);
-          state.setSpotFilter(f);
+          if (spotFilter === "all" && issueFocus) setIssueFocus(null);
+          state.setState({ spotFilter });
         }}
         onScoreClick={() => setScoreDialogOpen(true)}
         foldersOnly={state.foldersOnly}
-        onFoldersOnly={state.setFoldersOnly}
+        onFoldersOnly={(foldersOnly) => state.setState({ foldersOnly })}
         activeIssueKey={issueFocus?.key ?? null}
         onIssueFocus={onIssueFocus}
       />
@@ -206,18 +206,22 @@ export function App({ data }: AppProps) {
         data={visibleData}
         scope={state.scope}
         codebaseTitle={codebaseTitleOf(data)}
-        onScope={state.setScope}
-        onClearScope={() => state.setScope("")}
+        onScope={(scope) => state.setState({ scope })}
+        onClearScope={() => state.setState({ scope: "" })}
         onNodeClick={onNodePicked}
         spotFilter={state.spotFilter}
-        onSpotFilter={state.setSpotFilter}
+        onSpotFilter={(spotFilter) => state.setState({ spotFilter })}
         layerOverlay={state.layerOverlay}
-        onToggleLayerOverlay={() => state.setLayerOverlay(!state.layerOverlay)}
+        onToggleLayerOverlay={() =>
+          state.setState({ layerOverlay: !state.layerOverlay })
+        }
         cycleHighlight={state.cycleHighlight}
-        onToggleCycleHighlight={() => state.setCycleHighlight(!state.cycleHighlight)}
+        onToggleCycleHighlight={() =>
+          state.setState({ cycleHighlight: !state.cycleHighlight })
+        }
         viewMode={state.viewMode}
         pathFinder={state.pathFinder}
-        onCancelPathFinder={() => state.setPathFinder({ mode: "idle" })}
+        onCancelPathFinder={() => state.setState({ pathFinder: { mode: "idle" } })}
         pathHighlight={pathHighlight}
         minCutHighlight={minCutHighlight}
         issueFocusActive={!!issueFocus}
@@ -225,42 +229,33 @@ export function App({ data }: AppProps) {
         expandedContainers={issueFocus?.expandedContainers ?? new Set()}
         participantFiles={issueFocus?.participantFiles ?? new Set()}
         selectedEdge={state.selectedEdge}
-        onEdgeClick={(from, to) => {
-          state.setSelectedEdge({ from, to });
-          state.setSelected(null);
-        }}
+        onEdgeClick={(from, to) =>
+          state.setState({ selectedEdge: { from, to }, selected: null })
+        }
       />
       <ScoreDialog
         data={data}
         open={scoreDialogOpen}
         onClose={() => setScoreDialogOpen(false)}
-        onSelect={state.setSelected}
+        onSelect={(selected) => state.setState({ selected })}
       />
       <DetailsPanel
         data={visibleData}
         selectedId={state.selected}
-        onClose={() => state.setSelected(null)}
-        onSelect={(id) => {
-          state.setSelected(id);
-          state.setSelectedEdge(null);
-        }}
-        onFocus={(scope) => {
-          state.setScope(scope);
-          state.setSelected(null);
-        }}
+        onClose={() => state.setState({ selected: null })}
+        onSelect={(selected) =>
+          state.setState({ selected, selectedEdge: null })
+        }
+        onFocus={(scope) => state.setState({ scope, selected: null })}
       />
       <EdgeDetailsPanel
         data={data}
         selectedEdge={state.selectedEdge}
-        onClose={() => state.setSelectedEdge(null)}
-        onSelectNode={(id) => {
-          state.setSelected(id);
-          state.setSelectedEdge(null);
-        }}
-        onScope={(scope) => {
-          state.setScope(scope);
-          state.setSelectedEdge(null);
-        }}
+        onClose={() => state.setState({ selectedEdge: null })}
+        onSelectNode={(selected) =>
+          state.setState({ selected, selectedEdge: null })
+        }
+        onScope={(scope) => state.setState({ scope, selectedEdge: null })}
       />
     </div>
   );
