@@ -463,6 +463,22 @@ test.describe("Explorer — acme-payments sample", () => {
     ).not.toBeVisible();
   });
 
+  test("Field guide dialog opens with section nav + glossary", async ({
+    page,
+  }) => {
+    await page.locator("button[aria-label='Open the Explorer field guide']").click();
+    await expect(page.locator("[role='dialog'][aria-label='Explorer guide']")).toBeVisible();
+    // Overview is the default section.
+    await expect(page.locator("text=What the Explorer is").first()).toBeVisible();
+    // Switch to glossary via the side nav.
+    await page.locator("button:has-text('Glossary')").click();
+    await expect(page.locator("text=/Quick reference/").first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.locator("[role='dialog'][aria-label='Explorer guide']"),
+    ).not.toBeVisible();
+  });
+
   test("Help dialog opens with keyboard shortcuts (#254)", async ({ page }) => {
     await page.locator("button[aria-label='Keyboard shortcuts (?)']").click();
     await expect(page.locator("[role='dialog']")).toBeVisible();
