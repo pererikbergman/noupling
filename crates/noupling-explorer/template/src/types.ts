@@ -8,6 +8,7 @@ export interface DataContract {
   noupling_version: string;
   generated_at: string;
   report_options: ReportOptions;
+  layers_auto_detected: boolean;
   codebase: Codebase;
   health_score: number;
   summary_counts: SummaryCounts;

@@ -14,8 +14,11 @@ use noupling_core::analyzer::AuditResult;
 use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::settings::Settings;
 
+mod auto_layers;
 mod data_contract;
 mod render;
+
+pub use auto_layers::detect_layers;
 
 /// Options controlling how the Explorer report is generated.
 ///
@@ -31,6 +34,10 @@ pub struct RenderOptions {
     /// Include the `history[]` snapshot list in the Data Contract.
     /// Set to `false` via `--no-history` to shrink the output file.
     pub include_history: bool,
+    /// True when the cli is rendering with auto-detected layers
+    /// rather than the project's hand-written settings.json. The
+    /// template surfaces a banner so the user knows.
+    pub layers_auto_detected: bool,
 }
 
 impl Default for RenderOptions {
@@ -39,6 +46,7 @@ impl Default for RenderOptions {
             editor: None,
             title: None,
             include_history: true,
+            layers_auto_detected: false,
         }
     }
 }

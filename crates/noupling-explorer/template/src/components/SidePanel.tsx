@@ -67,11 +67,35 @@ function InfoTab({ data }: { data: DataContract }) {
   return (
     <>
       <WelcomeCard data={data} />
+      {data.layers_auto_detected && <AutoLayersBanner data={data} />}
       <SectionHeading>Steps</SectionHeading>
       <Steps />
       <SectionHeading>Stats</SectionHeading>
       <Stats data={data} />
     </>
+  );
+}
+
+function AutoLayersBanner({ data }: { data: DataContract }) {
+  const names = data.layers.map((l) => l.name).join(", ") || "—";
+  return (
+    <div
+      role="note"
+      className="mt-3 rounded-md border border-accent-ui/40 bg-accent-ui/10 px-3 py-2.5 text-[12px] leading-relaxed"
+    >
+      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-ui">
+        Layers auto-detected
+      </div>
+      <p className="m-0 text-muted">
+        No <code className="font-mono text-text">layers</code> were configured
+        in <code className="font-mono text-text">.noupling/settings.json</code>,
+        so the Explorer inferred{" "}
+        <strong className="text-text">{names}</strong> from path patterns.
+        The score reflects this guess. Add a real{" "}
+        <code className="font-mono text-text">layers</code> array to your
+        settings to take over.
+      </p>
+    </div>
   );
 }
 
