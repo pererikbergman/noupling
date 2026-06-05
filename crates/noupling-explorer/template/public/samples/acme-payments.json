@@ -50,7 +50,7 @@
   "nodes": [
     { "id": "src/ui/CheckoutForm.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 0, "efferent": 4, "instability": 1.0, "loc": 142 } },
     { "id": "src/ui/CartView.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 1, "efferent": 2, "instability": 0.67, "loc": 92 } },
-    { "id": "src/ui", "kind": "package", "parent": "src", "layer": "ui", "metrics": { "file_count": 24, "cohesion": 0.42 } },
+    { "id": "src/ui", "kind": "package", "parent": "src", "layer": "ui", "metrics": { "file_count": 24, "cohesion": 0.42, "llm": { "summary": "Checkout + receipt UI", "responsibility": "React components for the checkout flow, receipt rendering, and post-payment confirmation states.", "tags": ["ui"], "generated_at": "2026-06-05T10:30:00Z", "model": "claude-opus-4-7" } } },
     { "id": "src/domain/payment.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 6, "efferent": 3, "instability": 0.33, "loc": 612 } },
     { "id": "src/domain/cart.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 2, "efferent": 2, "instability": 0.5, "loc": 248 } },
     { "id": "src/domain/user.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 1, "efferent": 1, "instability": 0.5, "loc": 160 } },

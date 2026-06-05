@@ -79,6 +79,19 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(await cards.count()).toBeGreaterThan(0);
   });
 
+  test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
+    page,
+  }) => {
+    // Sample wraps everything under src/, and the llm.summary lives on
+    // src/ui — drill into src first so Composition shows that level.
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    await page.locator("button:has-text('Composition')").click();
+    await expect(
+      page.locator("text=Checkout + receipt UI").first(),
+    ).toBeVisible();
+  });
+
   test("Force view renders d3-force layout when switched to (#278)", async ({
     page,
   }) => {

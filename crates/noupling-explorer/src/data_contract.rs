@@ -239,12 +239,15 @@ pub(crate) fn build(
             &settings.dependency_rules,
             audit_result,
         ),
-        nodes: build_nodes(
-            &settings.layers,
-            modules,
-            dependencies,
-            audit_result,
-            &snapshot.root_path,
+        nodes: merge_enrichment(
+            build_nodes(
+                &settings.layers,
+                modules,
+                dependencies,
+                audit_result,
+                &snapshot.root_path,
+            ),
+            &options.module_enrichment,
         ),
         edges: build_edges(modules, dependencies, audit_result),
         cycles: build_cycles(audit_result),
@@ -622,6 +625,40 @@ fn build_violations(audit_result: &AuditResult) -> Vec<ViolationEntry> {
             introduced_in: None,
         })
         .collect()
+}
+
+/// Fold the optional LLM enrichment entries into each node's
+/// `metrics.llm` block. Skipped entries leave the metrics object
+/// unchanged. Issue #280 — the Composition view picks up the
+/// `summary` field as the labeled card text when present.
+fn merge_enrichment(
+    mut nodes: Vec<NodeEntry>,
+    enrichment: &[crate::ModuleEnrichmentEntry],
+) -> Vec<NodeEntry> {
+    if enrichment.is_empty() {
+        return nodes;
+    }
+    let by_path: std::collections::HashMap<&str, &crate::ModuleEnrichmentEntry> = enrichment
+        .iter()
+        .map(|e| (e.module_path.as_str(), e))
+        .collect();
+    for n in &mut nodes {
+        if let Some(e) = by_path.get(n.id.as_str()) {
+            // Attach an `llm` sub-object under the node's metrics —
+            // additive and discoverable by the Composition view.
+            let llm = serde_json::json!({
+                "summary": e.summary,
+                "responsibility": e.responsibility,
+                "tags": e.tags,
+                "generated_at": e.generated_at,
+                "model": e.model,
+            });
+            if let Some(obj) = n.metrics.as_object_mut() {
+                obj.insert("llm".into(), llm);
+            }
+        }
+    }
+    nodes
 }
 
 fn build_score_breakdown(audit_result: &AuditResult) -> ScoreBreakdown {
