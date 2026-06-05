@@ -18,6 +18,11 @@ export interface LSMProps {
   pathHighlight?: Set<string>;
   /** Edge keys to render as the min-cut suggestion. */
   minCutHighlight?: Set<string>;
+  /** Edge selected for inspection — shows the same accent treatment
+   *  as path-finder hits and pushes the edge to the top of the z-order. */
+  selectedEdgeKey?: string | null;
+  /** Click handler for edges. Invoked with the edge's from/to ids. */
+  onEdgeClick?: (from: string, to: string) => void;
 }
 
 /**
@@ -39,6 +44,8 @@ export function LSM({
   cyclesByNode,
   pathHighlight,
   minCutHighlight,
+  selectedEdgeKey,
+  onEdgeClick,
 }: LSMProps) {
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -110,6 +117,10 @@ export function LSM({
               highlightCycles={highlightCycles}
               isOnPath={pathHighlight?.has(key) ?? false}
               isMinCut={minCutHighlight?.has(key) ?? false}
+              isSelected={selectedEdgeKey === key}
+              onClick={
+                onEdgeClick ? () => onEdgeClick(e.from, e.to) : undefined
+              }
             />
           );
         })}
@@ -197,6 +208,8 @@ function EdgePath({
   highlightCycles,
   isOnPath,
   isMinCut,
+  isSelected,
+  onClick,
 }: {
   edge: PositionedEdge;
   dimmed: boolean;
@@ -204,45 +217,72 @@ function EdgePath({
   highlightCycles: boolean;
   isOnPath: boolean;
   isMinCut: boolean;
+  isSelected: boolean;
+  onClick?: () => void;
 }) {
   const showViolation = edge.isViolation && highlightViolations;
   const showCycle = edge.isCycle && highlightCycles;
-  // Path finder + min-cut take precedence over the violation/cycle
-  // colours so the user can see what they just asked for.
-  const stroke = isOnPath
-    ? "rgb(var(--accent-ui))"
-    : isMinCut
-      ? "rgb(var(--accent-infra))"
-      : showViolation
-        ? "rgb(var(--edge-violation))"
-        : showCycle
-          ? "rgb(var(--edge-cycle))"
-          : "rgb(var(--text-muted))";
+  // Selection takes top priority — explicit user pick should win
+  // over heuristic highlights so the user knows what they clicked.
+  const stroke = isSelected
+    ? "rgb(var(--accent-domain))"
+    : isOnPath
+      ? "rgb(var(--accent-ui))"
+      : isMinCut
+        ? "rgb(var(--accent-infra))"
+        : showViolation
+          ? "rgb(var(--edge-violation))"
+          : showCycle
+            ? "rgb(var(--edge-cycle))"
+            : "rgb(var(--text-muted))";
   const dash = isMinCut ? "4 4" : showViolation ? "6 4" : "0";
   const opacity = dimmed
     ? 0.18
-    : isOnPath || isMinCut
+    : isSelected || isOnPath || isMinCut
       ? 1
       : showCycle || showViolation
         ? 0.95
         : 0.55;
   const baseWidth = 1 + Math.min(edge.weight, 4) * 0.4;
-  const strokeWidth = isOnPath || isMinCut ? baseWidth + 1.5 : baseWidth;
+  const strokeWidth =
+    isSelected || isOnPath || isMinCut ? baseWidth + 1.5 : baseWidth;
   const midY = (edge.y1 + edge.y2) / 2;
+  const d = `M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`;
   return (
-    <path
-      d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`}
-      fill="none"
-      stroke={stroke}
-      strokeWidth={strokeWidth}
-      strokeDasharray={dash}
-      opacity={opacity}
-      markerEnd={`url(#${showCycle ? "lsm-arrow-cycle" : "lsm-arrow"})`}
+    <g
+      style={onClick ? { cursor: "pointer" } : undefined}
+      onClick={onClick}
     >
-      {edge.isViolation && edge.violationMessage ? (
-        <title>{edge.violationMessage}</title>
-      ) : null}
-    </path>
+      {/* Visible edge */}
+      <path
+        d={d}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeDasharray={dash}
+        opacity={opacity}
+        markerEnd={`url(#${showCycle ? "lsm-arrow-cycle" : "lsm-arrow"})`}
+      >
+        {edge.isViolation && edge.violationMessage ? (
+          <title>{edge.violationMessage}</title>
+        ) : (
+          <title>
+            {edge.from} → {edge.to} · click for details
+          </title>
+        )}
+      </path>
+      {/* Fat invisible hit area — thin SVG paths are awkward to click;
+          a 12-px wide transparent overlay catches the click reliably. */}
+      {onClick && (
+        <path
+          d={d}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={12}
+          pointerEvents="stroke"
+        />
+      )}
+    </g>
   );
 }
 

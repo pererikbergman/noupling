@@ -15,6 +15,11 @@ export type SearchMode = "substring" | "regex";
 
 export type ViewMode = "lsm" | "matrix" | "force" | "composition";
 
+export interface EdgeSelection {
+  from: string;
+  to: string;
+}
+
 export type SpotFilter =
   | "all"
   | "in-cycles"
@@ -40,6 +45,8 @@ export interface ExplorerState {
   setScope: (s: string) => void;
   selected: string | null;
   setSelected: (s: string | null) => void;
+  selectedEdge: EdgeSelection | null;
+  setSelectedEdge: (e: EdgeSelection | null) => void;
   search: string;
   setSearch: (s: string) => void;
   searchMode: SearchMode;
@@ -67,6 +74,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
   const key = storageKey(data);
   const [scope, setScope] = usePersistedString(`${key}::scope`, "");
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<EdgeSelection | null>(null);
   const [search, setSearch] = usePersistedString(`${key}::search`, "");
   const [searchMode, setSearchMode] = usePersistedEnum<SearchMode>(
     `${key}::searchMode`,
@@ -105,6 +113,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setLayerOverlay(false);
     setCycleHighlight(true);
     setSelected(null);
+    setSelectedEdge(null);
     setViewMode("lsm");
     setPathFinder({ mode: "idle" });
     setMinCutShown(false);
@@ -132,6 +141,8 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setScope,
     selected,
     setSelected,
+    selectedEdge,
+    setSelectedEdge,
     search,
     setSearch,
     searchMode,

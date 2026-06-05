@@ -39,6 +39,10 @@ export interface CanvasAreaProps {
   /** Issue-focus mode: the actual participant file ids to surface
    *  when a container is expanded (keeps the canvas tight). */
   participantFiles: Set<string>;
+  /** Currently selected edge for inspection (LSM clicks). */
+  selectedEdge: { from: string; to: string } | null;
+  /** Click handler invoked when the user clicks an LSM edge. */
+  onEdgeClick: (from: string, to: string) => void;
 }
 
 const ZOOM_STEP = 1.2;
@@ -67,6 +71,8 @@ export function CanvasArea({
   onCancelIssueFocus,
   expandedContainers,
   participantFiles,
+  selectedEdge,
+  onEdgeClick,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
@@ -259,6 +265,12 @@ export function CanvasArea({
               cyclesByNode={cyclesByNode}
               pathHighlight={pathHighlight}
               minCutHighlight={minCutHighlight}
+              selectedEdgeKey={
+                selectedEdge
+                  ? `${selectedEdge.from}→${selectedEdge.to}`
+                  : null
+              }
+              onEdgeClick={onEdgeClick}
             />
           </div>
         </div>

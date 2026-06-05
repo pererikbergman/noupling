@@ -5,6 +5,7 @@ import { SearchRow } from "./components/SearchRow";
 import { SidePanel } from "./components/SidePanel";
 import { CanvasArea } from "./components/CanvasArea";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { EdgeDetailsPanel } from "./components/EdgeDetailsPanel";
 import { ScoreDialog } from "./components/ScoreDialog";
 import type { Issue } from "./components/SidePanel";
 import { useExplorerState, useNodeFilter, inScope } from "./state/explorerState";
@@ -157,9 +158,9 @@ export function App({ data }: AppProps) {
     <div
       className={
         "grid h-screen w-screen grid-rows-[auto_auto_1fr] " +
-        // Right details column expands inline only when a node is
-        // selected — otherwise the canvas keeps all the room.
-        (state.selected
+        // Right details column expands inline only when a node or an
+        // edge is selected — otherwise the canvas keeps all the room.
+        (state.selected || state.selectedEdge
           ? "grid-cols-[380px_1fr_360px]"
           : "grid-cols-[380px_1fr]")
       }
@@ -223,6 +224,11 @@ export function App({ data }: AppProps) {
         onCancelIssueFocus={() => setIssueFocus(null)}
         expandedContainers={issueFocus?.expandedContainers ?? new Set()}
         participantFiles={issueFocus?.participantFiles ?? new Set()}
+        selectedEdge={state.selectedEdge}
+        onEdgeClick={(from, to) => {
+          state.setSelectedEdge({ from, to });
+          state.setSelected(null);
+        }}
       />
       <ScoreDialog
         data={data}
@@ -234,10 +240,26 @@ export function App({ data }: AppProps) {
         data={visibleData}
         selectedId={state.selected}
         onClose={() => state.setSelected(null)}
-        onSelect={state.setSelected}
+        onSelect={(id) => {
+          state.setSelected(id);
+          state.setSelectedEdge(null);
+        }}
         onFocus={(scope) => {
           state.setScope(scope);
           state.setSelected(null);
+        }}
+      />
+      <EdgeDetailsPanel
+        data={data}
+        selectedEdge={state.selectedEdge}
+        onClose={() => state.setSelectedEdge(null)}
+        onSelectNode={(id) => {
+          state.setSelected(id);
+          state.setSelectedEdge(null);
+        }}
+        onScope={(scope) => {
+          state.setScope(scope);
+          state.setSelectedEdge(null);
         }}
       />
     </div>
