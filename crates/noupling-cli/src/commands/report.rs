@@ -40,15 +40,28 @@ pub fn run(
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
 
-    match format {
-        "json" => {
-            let report =
-                crate::reporter::JsonReport::from_audit(&report_modules, &result, &snapshot.id);
-            let content = report.to_json()?;
-            let file_path = report_dir.join("report.json");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
+    // The six simple formats (string + file + print) are now adapters
+    // behind a single registry (#301). Anything that matches an
+    // adapter returns here; complex formats — markdown, html, bundle,
+    // dashboard, pr, explorer, strategy, all — keep their bespoke
+    // arms below because their input shapes differ.
+    let registry = crate::report_formatter::builtin_formatters();
+    let ctx = crate::report_formatter::FormatterContext {
+        modules: &report_modules,
+        result: &result,
+        snapshot: &snapshot,
+        report_dir: &report_dir,
+    };
+    if let Some(out) = crate::report_formatter::dispatch(format, &ctx, &registry)? {
+        std::fs::write(&out.file_path, &out.content)?;
+        println!("Report saved to {}", out.file_path.display());
+        if let Some(tail) = out.success_tail {
+            println!("{}", tail);
         }
+        return Ok(());
+    }
+
+    match format {
         "md" => {
             let md_dir = report_dir.join("report-md");
             crate::reporter::generate_markdown_report(
@@ -58,22 +71,6 @@ pub fn run(
                 &md_dir,
             )?;
             println!("Report saved to {}/README.md", md_dir.display());
-        }
-        "xml" => {
-            let content = crate::reporter::format_xml(&report_modules, &result, &snapshot.id);
-            let file_path = report_dir.join("report.xml");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "sonar" => {
-            let content = crate::reporter::format_sonar(&result);
-            let file_path = report_dir.join("noupling-sonar.json");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-            println!(
-                "Add to sonar-project.properties: sonar.externalIssuesReportPaths={}",
-                file_path.display()
-            );
         }
         "html" => {
             let html_dir = report_dir.join("report");
@@ -85,22 +82,6 @@ pub fn run(
                 &project_settings,
             )?;
             println!("Report saved to {}/index.html", html_dir.display());
-        }
-        "mermaid" => {
-            let content = crate::reporter::format_mermaid(&report_modules, &result);
-            let file_path = report_dir.join("report.mermaid");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "dot" => {
-            let content = crate::reporter::format_dot(&report_modules, &result);
-            let file_path = report_dir.join("report.dot");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-            println!(
-                "Render with: dot -Tpng {} -o graph.png",
-                file_path.display()
-            );
         }
         "bundle" => {
             let file_path = report_dir.join("bundle.html");
@@ -142,12 +123,6 @@ pub fn run(
 
             let content = crate::reporter::format_pr(&result, prev_score, prev_count, None, None);
             let file_path = report_dir.join("pr.md");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "briefing" => {
-            let content = crate::reporter::format_briefing(&result);
-            let file_path = report_dir.join("briefing.md");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
@@ -309,7 +284,7 @@ pub fn run(
                     &report_modules,
                     &report_deps,
                     &result,
-                    &snapshot.id,
+                    &snapshot,
                     &project_settings,
                 );
                 match r {
@@ -367,56 +342,43 @@ fn generate_single_format(
     modules: &[noupling_core::core::Module],
     deps: &[noupling_core::core::Dependency],
     result: &noupling_core::analyzer::AuditResult,
-    snapshot_id: &str,
+    snapshot: &noupling_core::core::Snapshot,
     settings: &noupling_core::settings::Settings,
 ) -> anyhow::Result<()> {
+    // Try the simple-format registry first — six of the eleven `all`
+    // arms (json, xml, sonar, mermaid, dot, briefing) go through it.
+    let registry = crate::report_formatter::builtin_formatters();
+    let ctx = crate::report_formatter::FormatterContext {
+        modules,
+        result,
+        snapshot,
+        report_dir,
+    };
+    if let Some(out) = crate::report_formatter::dispatch(format, &ctx, &registry)? {
+        std::fs::write(&out.file_path, &out.content)?;
+        println!("Report saved to {}", out.file_path.display());
+        // The success-tail messages are noisy in `all`-mode; suppress
+        // them and only print on the focused arms.
+        return Ok(());
+    }
+
+    // Complex formats that don't fit the simple seam yet.
     match format {
-        "json" => {
-            let report = crate::reporter::JsonReport::from_audit(modules, result, snapshot_id);
-            let content = report.to_json()?;
-            let file_path = report_dir.join("report.json");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
         "md" => {
             let md_dir = report_dir.join("report-md");
-            crate::reporter::generate_markdown_report(modules, result, snapshot_id, &md_dir)?;
+            crate::reporter::generate_markdown_report(modules, result, &snapshot.id, &md_dir)?;
             println!("Report saved to {}/README.md", md_dir.display());
-        }
-        "xml" => {
-            let content = crate::reporter::format_xml(modules, result, snapshot_id);
-            let file_path = report_dir.join("report.xml");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "sonar" => {
-            let content = crate::reporter::format_sonar(result);
-            let file_path = report_dir.join("noupling-sonar.json");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
         }
         "html" => {
             let html_dir = report_dir.join("report");
             crate::reporter::generate_html_report(
                 modules,
                 result,
-                snapshot_id,
+                &snapshot.id,
                 &html_dir,
                 settings,
             )?;
             println!("Report saved to {}/index.html", html_dir.display());
-        }
-        "mermaid" => {
-            let content = crate::reporter::format_mermaid(modules, result);
-            let file_path = report_dir.join("report.mermaid");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "dot" => {
-            let content = crate::reporter::format_dot(modules, result);
-            let file_path = report_dir.join("report.dot");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
         }
         "bundle" => {
             let file_path = report_dir.join("bundle.html");
@@ -432,12 +394,6 @@ fn generate_single_format(
             // Without snapshot history context, generate a simple current-state PR report.
             let content = crate::reporter::format_pr(result, None, None, None, None);
             let file_path = report_dir.join("pr.md");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "briefing" => {
-            let content = crate::reporter::format_briefing(result);
-            let file_path = report_dir.join("briefing.md");
             std::fs::write(&file_path, &content)?;
             println!("Report saved to {}", file_path.display());
         }
