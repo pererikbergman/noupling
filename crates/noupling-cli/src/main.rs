@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod db_session;
 mod hook;
+mod report_formatter;
 mod reporter;
 
 use clap::Parser;
