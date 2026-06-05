@@ -161,6 +161,24 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(allPill).not.toHaveClass(/bg-pill/);
   });
 
+  test("score click opens breakdown dialog with formula + top contributors", async ({
+    page,
+  }) => {
+    await page
+      .locator("button[aria-label='Show health score breakdown']")
+      .first()
+      .click();
+    await expect(page.locator("[role='dialog']")).toBeVisible();
+    await expect(
+      page.locator("text=Health score: 82/100").first(),
+    ).toBeVisible();
+    // Formula line spells out the math; sample uses 18 modules.
+    await expect(page.locator("text=/100 × \\(1 −/").first()).toBeVisible();
+    await expect(page.locator("text=Top contributors").first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("[role='dialog']")).not.toBeVisible();
+  });
+
   test("Help dialog opens with keyboard shortcuts (#254)", async ({ page }) => {
     await page.locator("button[aria-label='Keyboard shortcuts (?)']").click();
     await expect(page.locator("[role='dialog']")).toBeVisible();

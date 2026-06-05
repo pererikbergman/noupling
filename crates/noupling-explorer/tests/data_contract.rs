@@ -506,6 +506,40 @@ fn health_score_and_summary_counts_come_from_audit() {
 }
 
 #[test]
+fn score_breakdown_explains_the_health_score_math() {
+    // 1 coupling + 1 cycle, each severity 0.5, score 95 → 5 points lost.
+    let (settings, snapshot) = default_inputs();
+    let audit = AuditResultBuilder::new()
+        .with_score(95.0)
+        .with_total_modules(20)
+        .with_violations(vec![violation("a", "b", false), violation("x", "y", true)])
+        .build();
+
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
+
+    let contract = extract_data_contract(&html);
+    let b = &contract["score_breakdown"];
+    assert_eq!(b["total_modules"], 20);
+    assert_eq!(b["total_severity"], 1.0);
+    assert_eq!(b["points_lost"], 5.0);
+    assert_eq!(b["cycles_severity"], 0.5);
+    assert_eq!(b["coupling_severity"], 0.5);
+    assert_eq!(b["top_contributors"].as_array().unwrap().len(), 2);
+    // Order is severity desc; both 0.5 so order is input-order.
+    assert_eq!(b["top_contributors"][0]["from"], "a");
+    assert_eq!(b["top_contributors"][0]["kind"], "coupling");
+    assert_eq!(b["top_contributors"][1]["kind"], "cycle");
+}
+
+#[test]
 fn codebase_counts_module_file_edge_from_inputs() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().with_total_modules(3).build();

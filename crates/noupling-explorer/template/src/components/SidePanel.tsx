@@ -11,6 +11,7 @@ export interface SidePanelProps {
   onSpotFilter?: (
     f: "all" | "in-cycles" | "with-violations" | "gravity-wells",
   ) => void;
+  onScoreClick?: () => void;
 }
 
 export function SidePanel({
@@ -19,6 +20,7 @@ export function SidePanel({
   onScope,
   onSelect,
   onSpotFilter,
+  onScoreClick,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   const issuesCount =
@@ -33,7 +35,7 @@ export function SidePanel({
     >
       <Tabs current={tab} onChange={setTab} issuesCount={issuesCount} />
       <div className="flex-1 overflow-y-auto px-4 py-3.5">
-        {tab === "Info" && <InfoTab data={data} />}
+        {tab === "Info" && <InfoTab data={data} onScoreClick={onScoreClick} />}
         {tab === "Files" && (
           <FilesTab
             data={data}
@@ -97,13 +99,19 @@ function Tabs({
   );
 }
 
-function InfoTab({ data }: { data: DataContract }) {
+function InfoTab({
+  data,
+  onScoreClick,
+}: {
+  data: DataContract;
+  onScoreClick?: () => void;
+}) {
   return (
     <>
-      <WelcomeCard data={data} />
+      <WelcomeCard data={data} onScoreClick={onScoreClick} />
       {data.layers_auto_detected && <AutoLayersBanner data={data} />}
       <SectionHeading>Stats</SectionHeading>
-      <Stats data={data} />
+      <Stats data={data} onScoreClick={onScoreClick} />
     </>
   );
 }
@@ -180,7 +188,13 @@ function AutoLayersBanner({ data }: { data: DataContract }) {
   );
 }
 
-function WelcomeCard({ data }: { data: DataContract }) {
+function WelcomeCard({
+  data,
+  onScoreClick,
+}: {
+  data: DataContract;
+  onScoreClick?: () => void;
+}) {
   const codebaseTitle = data.codebase.path.split("/").filter(Boolean).pop() ?? data.codebase.path;
   return (
     <div className="rounded-md border border-border bg-canvas p-3.5">
@@ -190,9 +204,7 @@ function WelcomeCard({ data }: { data: DataContract }) {
       <p className="m-0 text-[12px] leading-relaxed text-muted">
         {data.codebase.module_count} modules across {data.layers.length} layers.
         Health{" "}
-        <strong className="text-accent-domain">
-          {formatScore(data.health_score)}/100
-        </strong>
+        <ScoreButton score={data.health_score} onClick={onScoreClick} />
         .{" "}
         <span className="text-muted/80">
           Double-click any node to drill in; click for details.
@@ -202,13 +214,43 @@ function WelcomeCard({ data }: { data: DataContract }) {
   );
 }
 
-function Stats({ data }: { data: DataContract }) {
+function ScoreButton({
+  score,
+  onClick,
+}: {
+  score: number;
+  onClick?: () => void;
+}) {
+  if (!onClick) {
+    return (
+      <strong className="text-accent-domain">{formatScore(score)}/100</strong>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Show health score breakdown"
+      className="cursor-pointer rounded-sm border-b border-dotted border-accent-domain/60 px-0.5 font-bold text-accent-domain hover:bg-accent-domain/10"
+      title="Why this score? Click for the breakdown."
+    >
+      {formatScore(score)}/100
+    </button>
+  );
+}
+
+function Stats({
+  data,
+  onScoreClick,
+}: {
+  data: DataContract;
+  onScoreClick?: () => void;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <StatRow label="Health">
-        <strong className="text-accent-domain">
-          <span data-bind="health_score">{formatScore(data.health_score)}</span>/100
-        </strong>
+        <span data-bind="health_score">
+          <ScoreButton score={data.health_score} onClick={onScoreClick} />
+        </span>
       </StatRow>
       <StatRow label="Violations">
         <strong data-bind="summary_counts.violations">{data.summary_counts.violations}</strong>

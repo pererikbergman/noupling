@@ -18,6 +18,20 @@
     ]
   },
   "health_score": 82,
+  "score_breakdown": {
+    "total_modules": 18,
+    "total_severity": 3.24,
+    "points_lost": 18,
+    "cycles_severity": 2.0,
+    "coupling_severity": 1.24,
+    "top_contributors": [
+      { "from": "src/data/PaymentRepository.ts", "to": "src/ui/PaymentForm.tsx", "severity": 0.9, "kind": "cycle" },
+      { "from": "src/ui/PaymentForm.tsx", "to": "src/data/PaymentRepository.ts", "severity": 0.9, "kind": "cycle" },
+      { "from": "src/domain/PricingService.ts", "to": "src/data/RatesRepository.ts", "severity": 0.62, "kind": "coupling" },
+      { "from": "src/ui/Receipt.tsx", "to": "src/data/PrinterClient.ts", "severity": 0.5, "kind": "coupling" },
+      { "from": "src/infra/Logger.ts", "to": "src/domain/AuditService.ts", "severity": 0.32, "kind": "coupling" }
+    ]
+  },
   "summary_counts": { "violations": 7, "cycles": 2, "gravity_wells": 1, "red_flags": 3 },
   "layers": [
     { "name": "ui",     "pattern": "**/ui/**",     "allow_sibling": false, "index": 0, "file_count": 24, "afferent": 0, "efferent": 41, "instability": 1.0 },
