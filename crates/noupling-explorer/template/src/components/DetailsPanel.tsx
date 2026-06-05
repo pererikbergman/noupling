@@ -126,7 +126,17 @@ export function DetailsPanel({
                   </div>
                   {c.minimum_cut.length > 0 && (
                     <div className="mt-1 text-[11px] text-text">
-                      Min-cut: <span className="font-mono">{c.minimum_cut[0].from} → {c.minimum_cut[0].to}</span>
+                      Min-cut:{" "}
+                      <ul className="mt-0.5 ml-3 list-disc space-y-0.5 text-muted">
+                        {c.minimum_cut.map((cut, i) => (
+                          <li key={i} className="font-mono">
+                            {cut.from} → {cut.to}{" "}
+                            <span className="text-muted/70">
+                              ({cut.weight} vs {cut.vs_weight})
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </li>
