@@ -1,4 +1,5 @@
 import type { DataContract } from "../../types";
+import { firstViolationForRule } from "../../state/queries";
 
 export function RulesTab({
   data,
@@ -43,9 +44,7 @@ export function RulesTab({
                 // Jump to the first concrete offender of this rule so the
                 // user lands on something — not just "filter is now
                 // active, hunt around."
-                const first = data.violations.find(
-                  (v) => v.rule.from === r.from && v.rule.to === r.to,
-                );
+                const first = firstViolationForRule(data, r.from, r.to);
                 if (first) onSelect?.(first.edge.from);
               }}
               disabled={!broken}

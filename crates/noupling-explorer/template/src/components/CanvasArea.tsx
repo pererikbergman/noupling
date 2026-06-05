@@ -12,6 +12,7 @@ import {
   type PathFinder,
   shouldHighlightViolations,
 } from "../state/explorerState";
+import { cycleMembershipCounts, nodeById } from "../state/queries";
 
 export interface CanvasAreaProps {
   data: DataContract;
@@ -165,18 +166,13 @@ export function CanvasArea({
   }, [data, scope, expandedContainers, participantFiles]);
 
   function onNodeDoubleClick(id: string) {
-    const node = data.nodes.find((n) => n.id === id);
+    const node = nodeById(data, id);
     if (!node) return;
     if (node.kind === "file") return;
     onScope(node.id);
   }
 
-  const cyclesByNode = new Map<string, number>();
-  for (const c of data.cycles) {
-    for (const id of c.members) {
-      cyclesByNode.set(id, (cyclesByNode.get(id) ?? 0) + 1);
-    }
-  }
+  const cyclesByNode = cycleMembershipCounts(data);
 
   return (
     <main id="root-canvas" className="relative overflow-hidden bg-canvas">

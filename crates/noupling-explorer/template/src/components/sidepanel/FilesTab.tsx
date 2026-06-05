@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../../types";
+import { buildChildIndex } from "../../state/queries";
 import { DrillBreadcrumb } from "../DrillBreadcrumb";
 import { basename, layerAccent } from "./shared";
 
@@ -21,13 +22,8 @@ export function FilesTab({
   onFoldersOnly,
 }: FilesTabProps) {
   const childrenByParent = useMemo(() => {
-    const m = new Map<string | null, NodeEntry[]>();
-    for (const n of data.nodes) {
-      const key = n.parent;
-      const arr = m.get(key);
-      if (arr) arr.push(n);
-      else m.set(key, [n]);
-    }
+    const m = buildChildIndex(data);
+    // Files-tab sort: folders first, then files, alphabetical inside each.
     for (const arr of m.values()) {
       arr.sort((a, b) => {
         const ak = a.kind === "file" ? 1 : 0;
@@ -36,7 +32,7 @@ export function FilesTab({
       });
     }
     return m;
-  }, [data.nodes]);
+  }, [data]);
 
   // Roots = immediate children of the current drill scope. At scope === ""
   // that's nodes with parent === null (top-level dirs + top-level files);

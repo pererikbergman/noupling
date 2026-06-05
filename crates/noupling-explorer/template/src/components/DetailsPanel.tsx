@@ -2,6 +2,15 @@ import { useEffect, useMemo } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { buildSourceUrl } from "../sourceLink";
 import {
+  cyclesInvolving,
+  gravityWellFor,
+  incomingOf,
+  nodeById,
+  outgoingOf,
+  redFlagsForModule,
+  violationsFor,
+} from "../state/queries";
+import {
   VIOLATION_EXPLAINER,
   CYCLE_EXPLAINER,
   GRAVITY_WELL_EXPLAINER,
@@ -36,43 +45,33 @@ export function DetailsPanel({
   }, [selectedId, onClose]);
 
   const node = useMemo(
-    () => (selectedId ? data.nodes.find((n) => n.id === selectedId) : null),
-    [selectedId, data.nodes],
+    () => (selectedId ? nodeById(data, selectedId) ?? null : null),
+    [selectedId, data],
   );
   const incoming = useMemo(
-    () => (selectedId ? data.edges.filter((e) => e.to === selectedId) : []),
-    [selectedId, data.edges],
+    () => (selectedId ? incomingOf(data, selectedId) : []),
+    [selectedId, data],
   );
   const outgoing = useMemo(
-    () => (selectedId ? data.edges.filter((e) => e.from === selectedId) : []),
-    [selectedId, data.edges],
+    () => (selectedId ? outgoingOf(data, selectedId) : []),
+    [selectedId, data],
   );
   const cyclesHere = useMemo(
-    () => (selectedId ? data.cycles.filter((c) => c.members.includes(selectedId)) : []),
-    [selectedId, data.cycles],
+    () => (selectedId ? cyclesInvolving(data, selectedId) : []),
+    [selectedId, data],
   );
   const violationsHere = useMemo(
-    () =>
-      selectedId
-        ? data.violations.filter(
-            (v) => v.edge.from === selectedId || v.edge.to === selectedId,
-          )
-        : [],
-    [selectedId, data.violations],
+    () => (selectedId ? violationsFor(data, selectedId) : []),
+    [selectedId, data],
   );
-  const gravityWellsHere = useMemo(
-    () =>
-      selectedId
-        ? data.gravity_wells.filter((g) => g.module_path === selectedId)
-        : [],
-    [selectedId, data.gravity_wells],
-  );
+  const gravityWellsHere = useMemo(() => {
+    if (!selectedId) return [];
+    const g = gravityWellFor(data, selectedId);
+    return g ? [g] : [];
+  }, [selectedId, data]);
   const redFlagsHere = useMemo(
-    () =>
-      selectedId
-        ? data.red_flags.filter((f) => f.modules.includes(selectedId))
-        : [],
-    [selectedId, data.red_flags],
+    () => (selectedId ? redFlagsForModule(data, selectedId) : []),
+    [selectedId, data],
   );
 
   if (!selectedId || !node) return null;

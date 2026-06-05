@@ -1,6 +1,12 @@
 import { useEffect, useMemo } from "react";
 import type { DataContract, EdgeEntry } from "../types";
 import type { EdgeSelection } from "../state/explorerState";
+import {
+  cycleContainingEdge,
+  fileContributorsForEdge,
+  findEdge,
+  violationForEdge,
+} from "../state/queries";
 
 export interface EdgeDetailsPanelProps {
   data: DataContract;
@@ -40,51 +46,23 @@ export function EdgeDetailsPanel({
   // collect the file-level contributors from the full Data Contract.
   const aggregate = useMemo(() => {
     if (!selectedEdge) return null;
-    return (
-      data.edges.find(
-        (e) => e.from === selectedEdge.from && e.to === selectedEdge.to,
-      ) ?? null
-    );
-  }, [data.edges, selectedEdge]);
+    return findEdge(data, selectedEdge.from, selectedEdge.to) ?? null;
+  }, [data, selectedEdge]);
 
   const fileContributors = useMemo<EdgeEntry[]>(() => {
     if (!selectedEdge) return [];
-    // For container-to-container edges, the file-level breakdown is
-    // every edge whose from sits inside `selectedEdge.from` AND to
-    // sits inside `selectedEdge.to`. For file-to-file edges this
-    // collapses to just the edge itself.
-    const fromPrefix = selectedEdge.from + "/";
-    const toPrefix = selectedEdge.to + "/";
-    return data.edges.filter(
-      (e) =>
-        (e.from === selectedEdge.from || e.from.startsWith(fromPrefix)) &&
-        (e.to === selectedEdge.to || e.to.startsWith(toPrefix)),
-    );
-  }, [data.edges, selectedEdge]);
+    return fileContributorsForEdge(data, selectedEdge.from, selectedEdge.to);
+  }, [data, selectedEdge]);
 
   const cycle = useMemo(() => {
     if (!selectedEdge) return null;
-    return (
-      data.cycles.find((c) => {
-        for (let i = 0; i < c.members.length; i++) {
-          const a = c.members[i];
-          const b = c.members[(i + 1) % c.members.length];
-          if (a === selectedEdge.from && b === selectedEdge.to) return true;
-        }
-        return false;
-      }) ?? null
-    );
-  }, [data.cycles, selectedEdge]);
+    return cycleContainingEdge(data, selectedEdge.from, selectedEdge.to) ?? null;
+  }, [data, selectedEdge]);
 
   const violation = useMemo(() => {
     if (!selectedEdge) return null;
-    return (
-      data.violations.find(
-        (v) =>
-          v.edge.from === selectedEdge.from && v.edge.to === selectedEdge.to,
-      ) ?? null
-    );
-  }, [data.violations, selectedEdge]);
+    return violationForEdge(data, selectedEdge.from, selectedEdge.to) ?? null;
+  }, [data, selectedEdge]);
 
   if (!selectedEdge) return null;
 

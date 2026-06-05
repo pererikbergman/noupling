@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import type { DataContract, NodeEntry } from "../../types";
+import type { DataContract } from "../../types";
+import {
+  allViolations,
+  buildChildIndex,
+  nodeById,
+} from "../../state/queries";
 import { DrillBreadcrumb } from "../DrillBreadcrumb";
 import { basename, layerAccent } from "./shared";
 
@@ -22,33 +27,26 @@ export function LevelsTab({
   onSelect?: (id: string) => void;
 }) {
   const childrenByParent = useMemo(() => {
-    const m = new Map<string | null, NodeEntry[]>();
-    for (const n of data.nodes) {
-      const key = n.parent;
-      const arr = m.get(key);
-      if (arr) arr.push(n);
-      else m.set(key, [n]);
-    }
+    const m = buildChildIndex(data);
     for (const arr of m.values()) arr.sort((a, b) => a.id.localeCompare(b.id));
     return m;
-  }, [data.nodes]);
+  }, [data]);
 
   // Per-container violation count = number of violations whose
   // offender file sits inside the container. Cheap to compute lazily.
   const violationsByContainer = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const v of data.violations) {
+    for (const v of allViolations(data)) {
       // Walk up the parent chain from the offender's file and credit
       // every ancestor container. Stops when no parent found.
       let cur: string | null = v.edge.from;
       while (cur) {
         counts.set(cur, (counts.get(cur) ?? 0) + 1);
-        const node = data.nodes.find((n) => n.id === cur);
-        cur = node?.parent ?? null;
+        cur = nodeById(data, cur)?.parent ?? null;
       }
     }
     return counts;
-  }, [data.violations, data.nodes]);
+  }, [data]);
 
   const rootKey = scope === "" ? null : scope;
   const children = (childrenByParent.get(rootKey) ?? []).filter(
