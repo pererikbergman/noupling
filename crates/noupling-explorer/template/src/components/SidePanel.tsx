@@ -103,7 +103,45 @@ function InfoTab({ data }: { data: DataContract }) {
 }
 
 function AutoLayersBanner({ data }: { data: DataContract }) {
+  const [copied, setCopied] = useState(false);
   const names = data.layers.map((l) => l.name).join(", ") || "—";
+
+  // Render the inferred layers as a settings.json snippet the user can
+  // paste verbatim. Only the fields the user typically authors —
+  // omitting derived noise like allow_sibling/reduced_sibling_weight
+  // unless the auto-detector set them away from defaults.
+  const snippet = JSON.stringify(
+    {
+      layers: data.layers.map((l) => ({
+        name: l.name,
+        pattern: l.pattern,
+      })),
+    },
+    null,
+    2,
+  );
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Older browsers / file:// without permission — fall back to a
+      // hidden textarea + execCommand. Still works on macOS Safari.
+      const ta = document.createElement("textarea");
+      ta.value = snippet;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  }
+
   return (
     <div
       role="note"
@@ -112,15 +150,23 @@ function AutoLayersBanner({ data }: { data: DataContract }) {
       <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-ui">
         Layers auto-detected
       </div>
-      <p className="m-0 text-muted">
+      <p className="m-0 mb-2 text-muted">
         No <code className="font-mono text-text">layers</code> were configured
         in <code className="font-mono text-text">.noupling/settings.json</code>,
         so the Explorer inferred{" "}
         <strong className="text-text">{names}</strong> from path patterns.
-        The score reflects this guess. Add a real{" "}
-        <code className="font-mono text-text">layers</code> array to your
+        The score reflects this guess. Paste the snippet below into your
         settings to take over.
       </p>
+      <pre className="m-0 overflow-x-auto rounded-sm border border-border bg-canvas p-2 font-mono text-[10px] text-text">
+        {snippet}
+      </pre>
+      <button
+        onClick={copy}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-sm bg-action px-2.5 py-1 text-[11px] font-semibold text-action-text"
+      >
+        {copied ? "✓ Copied" : "Copy snippet"}
+      </button>
     </div>
   );
 }
