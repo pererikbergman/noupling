@@ -56,6 +56,9 @@ export interface ExplorerState {
   setPathFinder: (p: PathFinder) => void;
   minCutShown: boolean;
   setMinCutShown: (b: boolean) => void;
+  /** Files tab folder-only filter (#273). */
+  foldersOnly: boolean;
+  setFoldersOnly: (b: boolean) => void;
   /** Wipe all persisted state for this Explorer file and return to defaults (PRD F10.2). */
   resetView: () => void;
 }
@@ -89,6 +92,10 @@ export function useExplorerState(data: DataContract): ExplorerState {
   // the user reloads the page. Not persisted.
   const [pathFinder, setPathFinder] = useState<PathFinder>({ mode: "idle" });
   const [minCutShown, setMinCutShown] = useState(false);
+  const [foldersOnly, setFoldersOnly] = usePersistedBool(
+    `${key}::foldersOnly`,
+    false,
+  );
 
   function resetView() {
     setScope("");
@@ -101,6 +108,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setViewMode("lsm");
     setPathFinder({ mode: "idle" });
     setMinCutShown(false);
+    setFoldersOnly(false);
     try {
       for (const suffix of [
         "::scope",
@@ -110,6 +118,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
         "::layerOverlay",
         "::cycleHighlight",
         "::viewMode",
+        "::foldersOnly",
       ]) {
         localStorage.removeItem(`${key}${suffix}`);
       }
@@ -139,6 +148,8 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setPathFinder,
     minCutShown,
     setMinCutShown,
+    foldersOnly,
+    setFoldersOnly,
     resetView,
   };
 }

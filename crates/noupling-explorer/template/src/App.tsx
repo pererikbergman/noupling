@@ -95,6 +95,8 @@ export function App({ data }: AppProps) {
         onSelect={state.setSelected}
         onSpotFilter={state.setSpotFilter}
         onScoreClick={() => setScoreDialogOpen(true)}
+        foldersOnly={state.foldersOnly}
+        onFoldersOnly={state.setFoldersOnly}
       />
       <CanvasArea
         data={visibleData}
