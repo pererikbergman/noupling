@@ -402,6 +402,30 @@ test.describe("Explorer — acme-payments sample", () => {
     ).toBeVisible();
   });
 
+  test("Matrix row label is click-to-select / double-click-to-drill (keeps state in sync)", async ({
+    page,
+  }) => {
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    await page.locator("button:has-text('Matrix')").click();
+    // Single click on a row label selects the node — DetailsPanel
+    // opens (same selection state the LSM uses).
+    const rowLabel = page.locator("#root-canvas table th[title*='click to']").first();
+    await rowLabel.click();
+    await expect(
+      page.locator("[aria-label*='Details for ']").first(),
+    ).toBeVisible({ timeout: 2000 });
+    // Double-click drills the shared scope — breadcrumb deepens.
+    const breadcrumbBefore = await page
+      .locator("#root-canvas nav[aria-label='Drill scope']")
+      .textContent();
+    await rowLabel.dblclick();
+    const breadcrumbAfter = await page
+      .locator("#root-canvas nav[aria-label='Drill scope']")
+      .textContent();
+    expect(breadcrumbBefore).not.toBe(breadcrumbAfter);
+  });
+
   test("Clicking a populated matrix cell opens the edge-details inlay", async ({
     page,
   }) => {

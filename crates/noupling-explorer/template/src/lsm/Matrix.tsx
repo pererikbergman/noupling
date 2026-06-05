@@ -3,7 +3,13 @@ import type { DataContract, NodeEntry } from "../types";
 
 export interface MatrixProps {
   data: DataContract;
+  /** Single-click on a row/column label — selects the node, same as
+   *  clicking a card on the LSM. */
   onNodeClick?: (id: string) => void;
+  /** Double-click on a row/column label — drills into the node, same
+   *  as double-clicking a card on the LSM. Keeps the views' selection
+   *  + scope state in sync. */
+  onNodeDoubleClick?: (id: string) => void;
   /** Selected edge — gets a highlighted border on the matrix cell. */
   selectedEdge?: { from: string; to: string } | null;
   /** Fired when a populated cell is clicked. Diagonal and empty
@@ -33,6 +39,7 @@ const MAX_MATRIX_NODES = 200;
 export function Matrix({
   data,
   onNodeClick,
+  onNodeDoubleClick,
   selectedEdge,
   onEdgeClick,
 }: MatrixProps) {
@@ -83,8 +90,10 @@ export function Matrix({
             {layout.nodes.map((n) => (
               <th
                 key={n.id}
-                title={n.id}
-                className="sticky top-0 z-10 border-b border-r border-border bg-card-header p-0 text-muted"
+                title={`${n.id} — click to select, double-click to drill`}
+                onClick={() => onNodeClick?.(n.id)}
+                onDoubleClick={() => onNodeDoubleClick?.(n.id)}
+                className="sticky top-0 z-10 cursor-pointer border-b border-r border-border bg-card-header p-0 text-muted transition-colors hover:bg-canvas/60 hover:text-text"
                 style={{ width: 14, height: 80 }}
               >
                 <div
@@ -105,8 +114,9 @@ export function Matrix({
           {layout.nodes.map((row, i) => (
             <tr key={row.id}>
               <th
-                title={row.id}
+                title={`${row.id} — click to select, double-click to drill`}
                 onClick={() => onNodeClick?.(row.id)}
+                onDoubleClick={() => onNodeDoubleClick?.(row.id)}
                 className="sticky left-0 z-10 cursor-pointer truncate border-b border-r border-border bg-card p-1.5 text-left text-[11px] text-text transition-colors hover:bg-canvas/60 hover:text-text"
                 style={{ maxWidth: 220, width: 220 }}
               >
