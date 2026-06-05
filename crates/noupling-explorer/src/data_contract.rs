@@ -20,6 +20,11 @@ pub(crate) struct DataContract {
     pub noupling_version: String,
     pub generated_at: String,
     pub report_options: ReportOptions,
+    /// True when the cli auto-detected `layers` from path-segment
+    /// patterns because the project's settings.json had no
+    /// configured layers. The template surfaces a banner so the user
+    /// knows the layers aren't authoritative.
+    pub layers_auto_detected: bool,
     pub codebase: Codebase,
     pub health_score: f64,
     pub summary_counts: SummaryCounts,
@@ -158,6 +163,7 @@ pub(crate) fn build(
             editor: options.editor.clone(),
             title: options.title.clone(),
         },
+        layers_auto_detected: options.layers_auto_detected,
         codebase: build_codebase(modules, dependencies, audit_result, snapshot),
         health_score: audit_result.score,
         summary_counts: SummaryCounts {

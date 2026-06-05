@@ -207,10 +207,11 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "explorer" => {
-            let options = noupling_explorer::RenderOptions {
+            let mut options = noupling_explorer::RenderOptions {
                 editor: explorer_editor.map(str::to_string),
                 title: explorer_title.map(str::to_string),
                 include_history: !explorer_no_history,
+                layers_auto_detected: false,
             };
             // Resolve the codebase root to an absolute path so the template's
             // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at
@@ -224,11 +225,65 @@ pub fn run(
                 root_path: abs_root,
                 ..snapshot.clone()
             };
+
+            // When the project has no configured layers, infer a sensible
+            // set from common path-segment patterns (Android `ui/domain/data`,
+            // Spring `controller/service/repository`, etc.) and re-run audit
+            // so the Explorer reflects the inferred architecture. The
+            // user-written settings.json is left untouched on disk.
+            let auto_detected = if project_settings.layers.is_empty() {
+                let d = noupling_explorer::detect_layers(&report_modules);
+                if d.is_empty() {
+                    None
+                } else {
+                    Some(d)
+                }
+            } else {
+                None
+            };
+
+            // Owns the re-audited result when auto-detection fired; left
+            // empty otherwise so we can hand the original `result` to the
+            // renderer by reference.
+            let mut explorer_settings = project_settings.clone();
+            let re_audited_holder;
+            let result_for_render: &noupling_core::analyzer::AuditResult = if let Some(layers) =
+                auto_detected
+            {
+                options.layers_auto_detected = true;
+                explorer_settings.layers = layers;
+                let type_counts =
+                    noupling_core::scanner::recompute_type_counts(Path::new(path), &report_modules);
+                let mut re_audited = noupling_core::analyzer::audit_with_settings(
+                    &report_modules,
+                    &report_deps,
+                    &type_counts,
+                    &explorer_settings,
+                );
+                re_audited.rule_violations = noupling_core::analyzer::check_dependency_rules(
+                    &report_modules,
+                    &report_deps,
+                    &explorer_settings.dependency_rules,
+                );
+                re_audited.layer_violations = noupling_core::analyzer::check_layer_rules(
+                    &report_modules,
+                    &report_deps,
+                    &explorer_settings.layers,
+                );
+                re_audited.suppressed_count = result.suppressed_count;
+                re_audited.external_deps = result.external_deps.clone();
+                re_audited.total_external_imports = result.total_external_imports;
+                re_audited_holder = re_audited;
+                &re_audited_holder
+            } else {
+                &result
+            };
+
             let html = noupling_explorer::render(
                 &report_modules,
                 &report_deps,
-                &result,
-                &project_settings,
+                result_for_render,
+                &explorer_settings,
                 &resolved_snapshot,
                 &options,
             )?;
