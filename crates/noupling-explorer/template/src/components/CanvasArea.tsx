@@ -33,6 +33,12 @@ export interface CanvasAreaProps {
   minCutHighlight: Set<string>;
   issueFocusActive: boolean;
   onCancelIssueFocus: () => void;
+  /** Issue-focus mode: containers to render *expanded* — their
+   *  participant files appear inline instead of the container card. */
+  expandedContainers: Set<string>;
+  /** Issue-focus mode: the actual participant file ids to surface
+   *  when a container is expanded (keeps the canvas tight). */
+  participantFiles: Set<string>;
 }
 
 const ZOOM_STEP = 1.2;
@@ -59,6 +65,8 @@ export function CanvasArea({
   minCutHighlight,
   issueFocusActive,
   onCancelIssueFocus,
+  expandedContainers,
+  participantFiles,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
@@ -74,9 +82,30 @@ export function CanvasArea({
       else childrenByParent.set(k, [n]);
     }
     const immediate = data.nodes.filter((n) => isImmediateChild(n, scope));
-    const visibleNodes = immediate.map((n) =>
+    const collapsed = immediate.map((n) =>
       collapseSingletonChain(n, childrenByParent),
     );
+    // Issue-focus expansion (#275 follow-up): for containers in the
+    // expanded set, replace the single container card with the
+    // participant file nodes that live under it. Siblings stay
+    // collapsed so the canvas highlights the participants without
+    // hairballing on many-file packages.
+    const visibleNodes: NodeEntry[] = [];
+    for (const n of collapsed) {
+      if (expandedContainers.has(n.id) && participantFiles.size > 0) {
+        const files = data.nodes.filter(
+          (m) =>
+            m.kind === "file" &&
+            participantFiles.has(m.id) &&
+            (m.id === n.id || m.id.startsWith(n.id + "/")),
+        );
+        if (files.length > 0) {
+          visibleNodes.push(...files);
+          continue;
+        }
+      }
+      visibleNodes.push(n);
+    }
     const visibleIds = new Set(visibleNodes.map((n) => n.id));
 
     // File-level edges from data.edges connect leaf files, but the
@@ -127,7 +156,7 @@ export function CanvasArea({
       nodes: visibleNodes,
       edges,
     };
-  }, [data, scope]);
+  }, [data, scope, expandedContainers, participantFiles]);
 
   function onNodeDoubleClick(id: string) {
     const node = data.nodes.find((n) => n.id === id);

@@ -17,6 +17,15 @@ interface IssueFocus {
   lca: string;
   /** Concrete edges between participants — extra-prominent on the canvas. */
   edges: Set<string>;
+  /** Immediate-children-of-LCA containers that hold at least one
+   *  participant. These render *expanded* on the canvas (file children
+   *  shown inline) instead of as a single container card. #275
+   *  follow-up. */
+  expandedContainers: Set<string>;
+  /** The actual participant file ids that live under those containers
+   *  — the only files to surface in the expanded render so the canvas
+   *  doesn't hairball on many-file packages. */
+  participantFiles: Set<string>;
 }
 
 export interface AppProps {
@@ -104,8 +113,32 @@ export function App({ data }: AppProps) {
         }
       }
     }
+    // Determine which *immediate child of LCA* each participant lives
+    // under — those are the containers we'll expand inline on the
+    // canvas so the offending edges render at file level. Participants
+    // that ARE the immediate child stay as themselves.
+    const expandedContainers = new Set<string>();
+    const participantFiles = new Set<string>();
+    const lcaPrefix = lca === "" ? "" : lca + "/";
+    for (const p of participants) {
+      if (!p.startsWith(lcaPrefix) && p !== lca) continue;
+      const rest = p === lca ? "" : p.slice(lcaPrefix.length);
+      const firstSegment = rest.split("/")[0];
+      const container = lca === "" ? firstSegment : `${lca}/${firstSegment}`;
+      expandedContainers.add(container);
+      // Only add as a participant file if it's actually a file node
+      // (an edge endpoint may be a package path on some samples).
+      const node = data.nodes.find((n) => n.id === p);
+      if (node?.kind === "file") participantFiles.add(p);
+    }
     if (lca !== state.scope) state.setScope(lca);
-    setIssueFocus({ key, lca, edges });
+    setIssueFocus({
+      key,
+      lca,
+      edges,
+      expandedContainers,
+      participantFiles,
+    });
   }
 
   function onNodePicked(id: string) {
@@ -179,6 +212,8 @@ export function App({ data }: AppProps) {
         minCutHighlight={minCutHighlight}
         issueFocusActive={!!issueFocus}
         onCancelIssueFocus={() => setIssueFocus(null)}
+        expandedContainers={issueFocus?.expandedContainers ?? new Set()}
+        participantFiles={issueFocus?.participantFiles ?? new Set()}
       />
       <ScoreDialog
         data={data}

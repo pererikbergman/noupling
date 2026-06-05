@@ -809,8 +809,16 @@ function IssuesTab({
               aria-pressed={selected}
               onClick={() => {
                 onIssueFocus?.(it, key);
-                // Keep the legacy hooks for tabs/canvas that still use
-                // the spot filter as the "narrow my view" lever.
+                // When focus mode is wired, skip the legacy spot-filter
+                // call — the focus mode replaces it (and the spot
+                // filter would narrow visible nodes to the issue's
+                // file ids, hiding the participant containers needed
+                // for inline file-level expansion).
+                if (onIssueFocus) {
+                  if (it.subject) onSelect?.(it.subject);
+                  if (it.kind === "red-flag" && it.scope) onScope?.(it.scope);
+                  return;
+                }
                 switch (it.kind) {
                   case "violation":
                     onSpotFilter?.("with-violations");
