@@ -402,6 +402,25 @@ test.describe("Explorer — acme-payments sample", () => {
     ).toBeVisible();
   });
 
+  test("Clicking an LSM edge opens the edge-details inlay (#295)", async ({
+    page,
+  }) => {
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    // Each edge sits inside a <g style="cursor: pointer"> that owns the
+    // visible path + the fat invisible hit area. Click it.
+    const edges = page.locator("#root-canvas svg g > g[style*='cursor']");
+    expect(await edges.count()).toBeGreaterThan(0);
+    await edges.first().click({ force: true });
+    await expect(
+      page.locator("[aria-label*='Details for edge']").first(),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.locator("[aria-label*='Details for edge']"),
+    ).not.toBeVisible();
+  });
+
   test("Help dialog opens with keyboard shortcuts (#254)", async ({ page }) => {
     await page.locator("button[aria-label='Keyboard shortcuts (?)']").click();
     await expect(page.locator("[role='dialog']")).toBeVisible();
