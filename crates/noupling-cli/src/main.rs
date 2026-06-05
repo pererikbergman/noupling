@@ -1,3 +1,4 @@
+mod audit_pipeline;
 mod cli;
 mod commands;
 mod hook;
