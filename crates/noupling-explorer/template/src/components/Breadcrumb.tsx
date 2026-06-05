@@ -17,7 +17,10 @@ export function Breadcrumb({
   return (
     <nav
       aria-label="Drill scope"
-      className="absolute right-4 top-3 z-10 flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-[12px]"
+      // Full-width inlay row at the top of the canvas. Was floating
+      // top-right and overflowing into the spot-filter pills on deep
+      // paths (Android repo with ~10 segments).
+      className="absolute left-4 right-4 top-3 z-10 flex flex-wrap items-center gap-1 truncate rounded-md border border-border bg-card/95 px-3 py-1.5 text-[12px] backdrop-blur"
     >
       <button
         onClick={onClearScope}
