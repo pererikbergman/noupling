@@ -106,10 +106,12 @@ function InfoTab({
   data: DataContract;
   onScoreClick?: () => void;
 }) {
+  // Score block sits at the very top so the headline number is never
+  // pushed below the fold by the AutoLayersBanner (#272).
   return (
     <>
+      <ScoreBlock data={data} onScoreClick={onScoreClick} />
       <WelcomeCard data={data} onScoreClick={onScoreClick} />
-      {data.layers_auto_detected && <AutoLayersBanner data={data} />}
       <SectionHeading>Stats</SectionHeading>
       <Stats data={data} onScoreClick={onScoreClick} />
       {data.history.length >= 2 && (
@@ -118,7 +120,54 @@ function InfoTab({
           <HistoryScrubber data={data} />
         </>
       )}
+      {data.layers_auto_detected && <AutoLayersBanner data={data} />}
     </>
+  );
+}
+
+function ScoreBlock({
+  data,
+  onScoreClick,
+}: {
+  data: DataContract;
+  onScoreClick?: () => void;
+}) {
+  // Trend delta = current score − previous snapshot score; only shown
+  // when history has ≥2 points (so we have something to subtract).
+  const h = data.history;
+  const delta =
+    h.length >= 2 ? data.health_score - h[h.length - 2].health_score : null;
+
+  return (
+    <div className="mb-3 rounded-md border border-border bg-canvas p-4">
+      <p className="m-0 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        Health
+      </p>
+      <div className="flex items-baseline gap-3">
+        <button
+          onClick={onScoreClick}
+          aria-label="Show health score breakdown"
+          className="cursor-pointer rounded-sm border-b border-dotted border-accent-domain/60 text-left font-bold leading-none text-accent-domain hover:bg-accent-domain/10"
+          style={{ fontSize: "32px" }}
+          title="Why this score? Click for the breakdown."
+        >
+          {formatScore(data.health_score)}
+          <span className="ml-1 text-[14px] font-normal text-muted">/100</span>
+        </button>
+        {delta !== null && delta !== 0 && (
+          <span
+            className={
+              "font-mono text-[13px] " +
+              (delta > 0 ? "text-accent-domain" : "text-edge-violation")
+            }
+            title="Change since the previous snapshot"
+          >
+            {delta > 0 ? "▲ +" : "▼ "}
+            {formatScore(Math.abs(delta))}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

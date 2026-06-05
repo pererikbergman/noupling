@@ -179,6 +179,28 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("Info tab shows prominent score block above everything else (#272)", async ({
+    page,
+  }) => {
+    // Score block sits at the very top — find it by its big number text.
+    const block = page
+      .locator("#side-panel")
+      .locator("text=/^Health$/i")
+      .first();
+    await expect(block).toBeVisible();
+    // The score button inside should carry the breakdown-open aria-label
+    // and be visible before any other content on the tab.
+    const scoreButton = page
+      .locator("button[aria-label='Show health score breakdown']")
+      .first();
+    await expect(scoreButton).toBeVisible();
+    // Score-block button should come before WelcomeCard's #codebase-header
+    // in DOM order — proves the reorder.
+    const blockBox = await scoreButton.boundingBox();
+    const welcome = await page.locator("#codebase-header").boundingBox();
+    expect(blockBox!.y).toBeLessThan(welcome!.y);
+  });
+
   test("History scrubber renders when data.history has ≥2 snapshots", async ({
     page,
   }) => {
