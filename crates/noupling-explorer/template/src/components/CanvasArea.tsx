@@ -72,12 +72,54 @@ export function CanvasArea({
       collapseSingletonChain(n, childrenByParent),
     );
     const visibleIds = new Set(visibleNodes.map((n) => n.id));
+
+    // File-level edges from data.edges connect leaf files, but the
+    // visible nodes at this scope are containers/packages. Aggregate
+    // every file-level edge up to the visible-ancestor pair so the LSM
+    // and Matrix actually show coupling between the cards on screen.
+    const ancestorOf = (id: string): string | null => {
+      // Self: a visible node is its own representative.
+      if (visibleIds.has(id)) return id;
+      // Otherwise: find the visible node whose id is a prefix of `id`.
+      // visibleNodes is small (capped to immediate children of scope
+      // after singleton collapse), so a linear scan is fine here.
+      for (const v of visibleNodes) {
+        if (id.startsWith(v.id + "/")) return v.id;
+      }
+      return null;
+    };
+
+    const aggregated = new Map<string, { weight: number; violates: string | null }>();
+    for (const e of data.edges) {
+      const a = ancestorOf(e.from);
+      const b = ancestorOf(e.to);
+      if (!a || !b || a === b) continue;
+      const key = `${a}${b}`;
+      const cur = aggregated.get(key);
+      if (cur) {
+        cur.weight += e.weight;
+        if (e.violates_rule && !cur.violates) cur.violates = e.violates_rule;
+      } else {
+        aggregated.set(key, {
+          weight: e.weight,
+          violates: e.violates_rule,
+        });
+      }
+    }
+    const edges = Array.from(aggregated.entries()).map(([key, v]) => {
+      const sep = key.indexOf("");
+      return {
+        from: key.slice(0, sep),
+        to: key.slice(sep + 1),
+        weight: v.weight,
+        violates_rule: v.violates,
+      };
+    });
+
     return {
       ...data,
       nodes: visibleNodes,
-      edges: data.edges.filter(
-        (e) => visibleIds.has(e.from) && visibleIds.has(e.to),
-      ),
+      edges,
     };
   }, [data, scope]);
 
