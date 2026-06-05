@@ -66,13 +66,24 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(inCycles).toHaveClass(/bg-pill/);
   });
 
-  test("Force + Composition view modes are still dashed v3 placeholders", async ({
+  test("Composition view mode is still a dashed v3 placeholder", async ({
     page,
   }) => {
-    for (const label of ["Force", "Composition"]) {
-      const btn = page.locator(`button:has-text('${label}')`).first();
-      await expect(btn).toHaveAttribute("aria-disabled", "true");
-    }
+    // Force shipped in #278; Composition lands in #279.
+    const composition = page.locator("button:has-text('Composition')").first();
+    await expect(composition).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("Force view renders d3-force layout when switched to (#278)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Force')").click();
+    const svg = page.locator(
+      "svg[aria-label*='Force-directed cluster view']",
+    );
+    await expect(svg).toBeVisible();
+    const circles = svg.locator("circle");
+    expect(await circles.count()).toBeGreaterThan(0);
   });
 
   test("Matrix view renders a NxN dependency heatmap", async ({ page }) => {
@@ -195,17 +206,12 @@ test.describe("Explorer — acme-payments sample", () => {
     page,
   }) => {
     await page.locator("button:has-text('Levels')").click();
-    // At root scope sample has one container (src). Rows are buttons
-    // inside the side-panel ul.
     const rows = page.locator("#side-panel ul li button");
     expect(await rows.count()).toBeGreaterThanOrEqual(1);
-    // Double-click drills.
     await rows.first().dblclick();
-    // Breadcrumb up button appears.
     await expect(
       page.locator("#side-panel button[aria-label*='Up to']").first(),
     ).toBeVisible();
-    // Levels tab now shows the next level's containers (ui, domain, etc).
     expect(await rows.count()).toBeGreaterThan(0);
   });
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Matrix } from "../lsm/Matrix";
+import { ForceView } from "../lsm/ForceView";
 import { Breadcrumb } from "./Breadcrumb";
 import {
   breadcrumbFor,
@@ -207,7 +208,7 @@ export function CanvasArea({
         </div>
       )}
 
-      {viewMode === "lsm" ? (
+      {viewMode === "lsm" && (
         <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
           <div
             style={{
@@ -230,9 +231,19 @@ export function CanvasArea({
             />
           </div>
         </div>
-      ) : (
+      )}
+      {viewMode === "matrix" && (
         <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
           <Matrix data={lsmData} onNodeClick={onNodeClick} />
+        </div>
+      )}
+      {viewMode === "force" && (
+        <div className="h-full w-full px-4 pb-16 pt-14">
+          <ForceView
+            nodes={lsmData.nodes}
+            edges={lsmData.edges}
+            onNodeClick={onNodeClick}
+          />
         </div>
       )}
 

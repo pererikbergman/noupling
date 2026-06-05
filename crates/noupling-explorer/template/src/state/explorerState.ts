@@ -13,7 +13,7 @@ import type { DataContract, NodeEntry } from "../types";
 
 export type SearchMode = "substring" | "regex";
 
-export type ViewMode = "lsm" | "matrix";
+export type ViewMode = "lsm" | "matrix" | "force";
 
 export type SpotFilter =
   | "all"
@@ -86,7 +86,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
   const [viewMode, setViewMode] = usePersistedEnum<ViewMode>(
     `${key}::viewMode`,
     "lsm",
-    ["lsm", "matrix"],
+    ["lsm", "matrix", "force"],
   );
   // Path finder + min-cut are transient UI state — they reset whenever
   // the user reloads the page. Not persisted.
