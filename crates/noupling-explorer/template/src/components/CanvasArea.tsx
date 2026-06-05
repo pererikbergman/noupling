@@ -280,6 +280,7 @@ export function CanvasArea({
           <Matrix
             data={lsmData}
             onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
             selectedEdge={selectedEdge}
             onEdgeClick={onEdgeClick}
           />
