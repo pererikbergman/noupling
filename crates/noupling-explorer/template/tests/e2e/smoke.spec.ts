@@ -184,19 +184,11 @@ test.describe("Explorer — acme-payments sample", () => {
   }) => {
     await page.locator("button:has-text('Issues')").click();
     const firstCard = page.locator("#side-panel ul li button").first();
-    // Click activates focus mode.
     await firstCard.click();
-    // aria-pressed = "true" on the selected card (sticky).
     await expect(firstCard).toHaveAttribute("aria-pressed", "true");
-    // Focus banner is on the canvas.
-    await expect(
-      page.locator("text=Issue focused").first(),
-    ).toBeVisible();
-    // Esc clears the focus mode + sticky selected state.
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(
-      page.locator("text=Issue focused").first(),
-    ).not.toBeVisible();
+    await expect(page.locator("text=Issue focused").first()).not.toBeVisible();
   });
 
   test("Levels tab: containers only, double-click drills shared scope (#274)", async ({
