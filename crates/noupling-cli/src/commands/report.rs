@@ -91,6 +91,11 @@ pub fn run(
         result.filter_by_changed_files(changed_files);
     }
 
+    // Persist the score on the snapshot row so the Explorer's history
+    // scrubber (PRD §10.5) can render a trend over time, even when the
+    // user only ever runs `noupling report` (and never `audit`).
+    let _ = snap_repo.save_health_score(&snapshot.id, result.score);
+
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
 
@@ -207,11 +212,26 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "explorer" => {
+            // Load all prior snapshots with recorded scores so the
+            // history scrubber has a trend to render. Cheap: small,
+            // indexed SELECT. Returns empty for fresh projects.
+            let history: Vec<noupling_explorer::HistoryEntry> = snap_repo
+                .get_all_with_scores()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| noupling_explorer::HistoryEntry {
+                    snapshot_id: r.snapshot_id,
+                    taken_at: r.taken_at,
+                    health_score: r.health_score,
+                })
+                .collect();
+
             let mut options = noupling_explorer::RenderOptions {
                 editor: explorer_editor.map(str::to_string),
                 title: explorer_title.map(str::to_string),
                 include_history: !explorer_no_history,
                 layers_auto_detected: false,
+                history,
             };
             // Resolve the codebase root to an absolute path so the template's
             // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at

@@ -303,6 +303,37 @@ fn history_defaults_to_empty_array() {
 }
 
 #[test]
+fn history_block_propagates_supplied_entries_oldest_first() {
+    let (settings, snapshot) = default_inputs();
+    let audit = AuditResultBuilder::new().build();
+    let options = RenderOptions {
+        history: vec![
+            noupling_explorer::HistoryEntry {
+                snapshot_id: "s1".into(),
+                taken_at: "2026-05-01T00:00:00Z".into(),
+                health_score: 70.0,
+            },
+            noupling_explorer::HistoryEntry {
+                snapshot_id: "s2".into(),
+                taken_at: "2026-06-01T00:00:00Z".into(),
+                health_score: 82.5,
+            },
+        ],
+        ..Default::default()
+    };
+
+    let html =
+        render(&[], &[], &audit, &settings, &snapshot, &options).expect("render must succeed");
+    let contract = extract_data_contract(&html);
+    let history = contract["history"].as_array().unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0]["snapshot_id"], "s1");
+    assert_eq!(history[0]["health_score"], 70.0);
+    assert_eq!(history[1]["snapshot_id"], "s2");
+    assert_eq!(history[1]["health_score"], 82.5);
+}
+
+#[test]
 fn no_history_option_omits_history_block_content() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();

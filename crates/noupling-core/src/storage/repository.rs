@@ -16,6 +16,15 @@ pub struct SnapshotMeta {
     pub external_deps: Vec<ExternalDepRow>,
 }
 
+/// One historical snapshot with its recorded health score, as
+/// surfaced by the Explorer's history scrubber.
+#[derive(Debug, Clone)]
+pub struct SnapshotHistoryRow {
+    pub snapshot_id: String,
+    pub taken_at: String,
+    pub health_score: f64,
+}
+
 /// One row from snapshot_external_deps.
 #[derive(Debug, Clone)]
 pub struct ExternalDepRow {
@@ -133,6 +142,36 @@ impl<'a> SnapshotRepository<'a> {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    /// Record the audit's health score on a snapshot row. Called after
+    /// each audit/report run so the Explorer's history scrubber can
+    /// surface a score trend without re-running audits on every prior
+    /// snapshot.
+    pub fn save_health_score(&self, snapshot_id: &str, score: f64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE snapshots SET health_score = ?1 WHERE id = ?2",
+            rusqlite::params![score, snapshot_id],
+        )?;
+        Ok(())
+    }
+
+    /// Return every snapshot (oldest first) with its recorded health
+    /// score, skipping rows where the score is NULL (legacy snapshots
+    /// taken before the column existed, or pre-audit rows).
+    pub fn get_all_with_scores(&self) -> Result<Vec<SnapshotHistoryRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, timestamp, health_score FROM snapshots \
+             WHERE health_score IS NOT NULL ORDER BY rowid ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(SnapshotHistoryRow {
+                snapshot_id: row.get(0)?,
+                taken_at: row.get(1)?,
+                health_score: row.get(2)?,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     /// Load scan-time metadata for a snapshot.

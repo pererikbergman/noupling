@@ -152,6 +152,10 @@ pub fn run(
         None
     };
 
+    // Persist the score on the snapshot row so the Explorer's history
+    // scrubber (PRD §10.5) can render a trend over time.
+    let _ = snap_repo.save_health_score(&snapshot.id, result.score);
+
     print!("{}", crate::reporter::format_text(&result));
 
     if let Some((new_count, resolved_count)) = baseline_info {

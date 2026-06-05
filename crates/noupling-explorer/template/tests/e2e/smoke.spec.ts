@@ -179,6 +179,23 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("History scrubber renders when data.history has ≥2 snapshots", async ({
+    page,
+  }) => {
+    // Info tab is the default; scrubber sits under a 'History' heading.
+    await expect(page.locator("text=History").first()).toBeVisible();
+    const sparkline = page.locator(
+      "svg[aria-label*='Health score sparkline']",
+    );
+    await expect(sparkline).toBeVisible();
+    // Sample has 2 snapshots → 2 circles in the sparkline.
+    expect(await sparkline.locator("circle").count()).toBe(2);
+    // Footer surfaces the latest score (sample: 82).
+    await expect(
+      page.locator("text=/82\\/100/").first(),
+    ).toBeVisible();
+  });
+
   test("Help dialog opens with keyboard shortcuts (#254)", async ({ page }) => {
     await page.locator("button[aria-label='Keyboard shortcuts (?)']").click();
     await expect(page.locator("[role='dialog']")).toBeVisible();

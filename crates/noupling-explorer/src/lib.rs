@@ -38,6 +38,20 @@ pub struct RenderOptions {
     /// rather than the project's hand-written settings.json. The
     /// template surfaces a banner so the user knows.
     pub layers_auto_detected: bool,
+    /// Prior snapshots with their recorded health scores, used by the
+    /// history scrubber. The cli loads these from
+    /// `SnapshotRepository::get_all_with_scores()` and passes them
+    /// through so noupling-explorer doesn't depend on the storage
+    /// layer directly.
+    pub history: Vec<HistoryEntry>,
+}
+
+/// One historical snapshot the Explorer's scrubber can navigate to.
+#[derive(Debug, Clone)]
+pub struct HistoryEntry {
+    pub snapshot_id: String,
+    pub taken_at: String,
+    pub health_score: f64,
 }
 
 impl Default for RenderOptions {
@@ -47,6 +61,7 @@ impl Default for RenderOptions {
             title: None,
             include_history: true,
             layers_auto_detected: false,
+            history: Vec::new(),
         }
     }
 }
