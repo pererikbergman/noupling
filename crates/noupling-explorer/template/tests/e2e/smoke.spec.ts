@@ -66,12 +66,17 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(inCycles).toHaveClass(/bg-pill/);
   });
 
-  test("Composition view mode is still a dashed v3 placeholder", async ({
+  test("Composition view renders annotated container cards (#279)", async ({
     page,
   }) => {
-    // Force shipped in #278; Composition lands in #279.
-    const composition = page.locator("button:has-text('Composition')").first();
-    await expect(composition).toHaveAttribute("aria-disabled", "true");
+    await page.locator("button:has-text('Composition')").click();
+    // Banner explains the LLM-enrichment story.
+    await expect(
+      page.locator("text=/shows what each module/").first(),
+    ).toBeVisible();
+    // At least one container card renders for the sample.
+    const cards = page.locator("ul li button[title*='click to focus']");
+    expect(await cards.count()).toBeGreaterThan(0);
   });
 
   test("Force view renders d3-force layout when switched to (#278)", async ({
