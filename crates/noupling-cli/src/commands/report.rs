@@ -252,6 +252,16 @@ pub fn run(
             {
                 options.layers_auto_detected = true;
                 explorer_settings.layers = layers;
+                // Auto-detected layers are by definition coarse (`**/ui/**`
+                // etc.), so every sibling coupling inside one of them gets
+                // counted as a strict-mode violation and the score plummets
+                // to 0 with no actionable signal. Switch the audit to
+                // "actionable" mode so only circular deps count as
+                // violations; siblings become informational. The user can
+                // override by adding their own `coupling_mode` to settings.
+                if explorer_settings.coupling_mode.is_none() {
+                    explorer_settings.coupling_mode = Some("actionable".to_string());
+                }
                 let type_counts =
                     noupling_core::scanner::recompute_type_counts(Path::new(path), &report_modules);
                 let mut re_audited = noupling_core::analyzer::audit_with_settings(

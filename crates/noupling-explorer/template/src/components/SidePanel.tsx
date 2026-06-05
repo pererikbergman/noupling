@@ -154,9 +154,12 @@ function AutoLayersBanner({ data }: { data: DataContract }) {
         No <code className="font-mono text-text">layers</code> were configured
         in <code className="font-mono text-text">.noupling/settings.json</code>,
         so the Explorer inferred{" "}
-        <strong className="text-text">{names}</strong> from path patterns.
-        The score reflects this guess. Paste the snippet below into your
-        settings to take over.
+        <strong className="text-text">{names}</strong> from path patterns and
+        switched the audit to{" "}
+        <code className="font-mono text-text">coupling_mode: "actionable"</code>
+        {" "}so coarse-pattern sibling coupling doesn't tank the score. Paste
+        the snippet below into your settings to take over (and pick your
+        own coupling mode while you're there).
       </p>
       <pre className="m-0 overflow-x-auto rounded-sm border border-border bg-canvas p-2 font-mono text-[10px] text-text">
         {snippet}
