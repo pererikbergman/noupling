@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DataContract } from "../types";
 import type { ViewMode } from "../state/explorerState";
 import { HelpDialog } from "./HelpDialog";
+import { MethodologyDialog } from "./MethodologyDialog";
 
 export interface TopBarProps {
   data: DataContract;
@@ -31,6 +32,7 @@ export function TopBar({
   hasCycles,
 }: TopBarProps) {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const codebaseTitle = basename(data.codebase.path);
   return (
     <div className="col-span-full flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-2.5">
@@ -43,24 +45,31 @@ export function TopBar({
       {/* View modes — LSM + Matrix are wired; Force + Composition stay as
           v3 placeholders (the PRD §10 advanced views). */}
       <div className="flex items-center gap-1 rounded-md border border-border bg-canvas p-[3px]">
-        <ViewBtn active={viewMode === "lsm"} onClick={() => onViewMode("lsm")}>
+        <ViewBtn
+          active={viewMode === "lsm"}
+          onClick={() => onViewMode("lsm")}
+          title="Layered Structure Map — nodes laid out top-to-bottom by layer; cross-layer edges between them. The headline view."
+        >
           LSM
         </ViewBtn>
         <ViewBtn
           active={viewMode === "matrix"}
           onClick={() => onViewMode("matrix")}
+          title="N×N dependency heatmap — rows are sources, columns are targets. Cells show edge weight; reds mark cycles + violations."
         >
           Matrix
         </ViewBtn>
         <ViewBtn
           active={viewMode === "force"}
           onClick={() => onViewMode("force")}
+          title="Force-directed layout — tightly coupled nodes pull together. Cluster boundaries are precomputed (label propagation)."
         >
           Force
         </ViewBtn>
         <ViewBtn
           active={viewMode === "composition"}
           onClick={() => onViewMode("composition")}
+          title="Annotated module map — what each module is. Files inside, layer tag, dominant language, optional LLM purpose label."
         >
           Composition
         </ViewBtn>
@@ -98,11 +107,19 @@ export function TopBar({
       <IconButton title="Toggle theme" onClick={onToggleTheme}>
         {theme === "dark" ? "☾" : "☼"}
       </IconButton>
+      <IconButton
+        title="Field guide — how to read this view, what insights to look for, glossary"
+        ariaLabel="Open the Explorer field guide"
+        onClick={() => setGuideOpen(true)}
+      >
+        ⓘ
+      </IconButton>
       <IconButton title="Keyboard shortcuts (?)" onClick={() => setHelpOpen(true)}>
         ?
       </IconButton>
 
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <MethodologyDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }
@@ -130,16 +147,19 @@ function Divider() {
 function ViewBtn({
   active,
   onClick,
+  title,
   children,
 }: {
   active?: boolean;
   onClick?: () => void;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
+      title={title}
       className={
         "whitespace-nowrap rounded-sm px-2.5 py-1 text-[12px] " +
         (active

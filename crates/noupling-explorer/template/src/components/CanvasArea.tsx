@@ -183,33 +183,45 @@ export function CanvasArea({
       {/* Spot-filter pills overlay on the canvas (PRD F5.5). Sits
           below the breadcrumb row; top offset accounts for it. */}
       <div className="absolute left-4 top-14 z-10 flex flex-wrap gap-1.5">
-        <FilterPill active={spotFilter === "all"} onClick={() => onSpotFilter("all")}>
+        <FilterPill
+          active={spotFilter === "all"}
+          onClick={() => onSpotFilter("all")}
+          title="Show every node in scope. Default."
+        >
           All
         </FilterPill>
         <FilterPill
           active={spotFilter === "in-cycles"}
           onClick={() => onSpotFilter("in-cycles")}
+          title="Show only nodes that participate in at least one cycle. Use this to see how cycles span the architecture."
         >
           In cycles ({data.summary_counts.cycles})
         </FilterPill>
         <FilterPill
           active={spotFilter === "with-violations"}
           onClick={() => onSpotFilter("with-violations")}
+          title="Show only nodes touched by at least one rule violation."
         >
           With violations ({data.summary_counts.violations})
         </FilterPill>
-        <FilterPill active={spotFilter === "clean"} onClick={() => onSpotFilter("clean")}>
+        <FilterPill
+          active={spotFilter === "clean"}
+          onClick={() => onSpotFilter("clean")}
+          title="Show only nodes with zero violations and no cycle membership — the healthy parts of the codebase."
+        >
           Clean modules
         </FilterPill>
         <FilterPill
           active={spotFilter === "hide-violations"}
           onClick={() => onSpotFilter("hide-violations")}
+          title="Keep all nodes but mute the red violation highlights, so the structural shape reads cleanly."
         >
           Hide violations
         </FilterPill>
         <FilterPill
           active={spotFilter === "gravity-wells"}
           onClick={() => onSpotFilter("gravity-wells")}
+          title="Show only modules flagged as gravity wells — disproportionately high aggregate RRI. Concentration risk for refactors."
         >
           Gravity wells ({data.summary_counts.gravity_wells})
         </FilterPill>
@@ -413,14 +425,17 @@ function FilterPill({
   active,
   children,
   onClick,
+  title,
 }: {
   active?: boolean;
   children: React.ReactNode;
   onClick?: () => void;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={
         "rounded-full border px-3 py-1 text-[11px] " +
         (active

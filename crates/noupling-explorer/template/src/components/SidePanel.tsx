@@ -99,12 +99,20 @@ function Tabs({
   issuesCount: number;
 }) {
   const tabs: Tab[] = ["Info", "Files", "Levels", "Issues", "Rules"];
+  const tabDescriptions: Record<Tab, string> = {
+    Info: "Headline numbers — health score, modules/files counts, history sparkline, auto-layer banner.",
+    Files: "Full folder tree of the codebase. Expand and collapse rows; the row affordance drills into a folder.",
+    Levels: "Finder-style one-level-at-a-time browser of containers. Single-click selects, double-click drills.",
+    Issues: "Every violation, cycle, gravity well, and red flag in priority order. Click to focus the canvas.",
+    Rules: "The effective dependency rules (layer order + explicit rules). Broken rules sort first.",
+  };
   return (
     <div className="flex border-b border-border">
       {tabs.map((t) => (
         <button
           key={t}
           onClick={() => onChange(t)}
+          title={tabDescriptions[t]}
           className={
             "flex-1 px-2 py-3 text-[11px] font-semibold uppercase tracking-wider " +
             (current === t
