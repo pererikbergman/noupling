@@ -238,7 +238,7 @@ export function CanvasArea({
           <button
             onClick={onCancelIssueFocus}
             aria-label="Exit issue focus mode"
-            className="rounded-sm px-2 py-0.5 text-[11px] text-muted hover:bg-pill hover:text-pill-text"
+            className="rounded-sm px-2 py-0.5 text-[11px] text-muted transition-colors hover:bg-canvas/60 hover:text-text"
           >
             Exit (Esc)
           </button>

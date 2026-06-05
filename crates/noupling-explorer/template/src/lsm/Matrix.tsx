@@ -97,7 +97,7 @@ export function Matrix({ data, onNodeClick }: MatrixProps) {
               <th
                 title={row.id}
                 onClick={() => onNodeClick?.(row.id)}
-                className="sticky left-0 z-10 cursor-pointer truncate border-b border-r border-border bg-card p-1.5 text-left text-[11px] text-text hover:bg-pill hover:text-pill-text"
+                className="sticky left-0 z-10 cursor-pointer truncate border-b border-r border-border bg-card p-1.5 text-left text-[11px] text-text transition-colors hover:bg-canvas/60 hover:text-text"
                 style={{ maxWidth: 220, width: 220 }}
               >
                 {basename(row.id)}
