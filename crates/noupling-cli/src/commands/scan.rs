@@ -23,7 +23,9 @@ pub fn run(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
 
     let db_path = project_path.join(".noupling").join("history.db");
     let db = noupling_core::storage::Database::open(&db_path)?;
-
+    // scan owns its own Database for the initial create-or-open path
+    // (DatabaseSession::open expects an existing db). All subsequent
+    // commands flow through DatabaseSession.
     let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
     let snapshot = snap_repo.create(path)?;
     println!("Created snapshot: {}", snapshot.id);

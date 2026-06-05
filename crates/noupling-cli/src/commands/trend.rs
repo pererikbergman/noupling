@@ -1,10 +1,10 @@
 use std::path::Path;
 
 pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
-    let db = super::find_db(path)?;
-    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
-    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
+    let session = crate::db_session::DatabaseSession::open(path)?;
+    let snap_repo = session.snapshots();
+    let module_repo = session.modules();
+    let dep_repo = session.dependencies();
 
     let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
     let snapshots = snap_repo.get_all()?;

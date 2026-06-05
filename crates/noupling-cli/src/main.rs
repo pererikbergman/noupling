@@ -1,6 +1,7 @@
 mod audit_pipeline;
 mod cli;
 mod commands;
+mod db_session;
 mod hook;
 mod reporter;
 

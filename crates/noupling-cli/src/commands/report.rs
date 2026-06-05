@@ -11,14 +11,17 @@ pub fn run(
     explorer_title: Option<&str>,
     explorer_no_history: bool,
 ) -> anyhow::Result<()> {
-    let db = super::find_db(path)?;
+    let session = crate::db_session::DatabaseSession::open(path)?;
+    let snap_repo = session.snapshots();
+    let module_repo = session.modules();
+    let dep_repo = session.dependencies();
     let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
 
     // The shared load → filter → audit → enrich → diff-filter ladder
-    // is now in the AuditPipeline (#304). This caller owns only the
-    // bits specific to `report` (save_health_score + format dispatch).
+    // is in the AuditPipeline (#304). This caller owns only the bits
+    // specific to `report` (save_health_score + format dispatch).
     let pipeline =
-        crate::audit_pipeline::AuditPipeline::new(Path::new(path), &db, &project_settings);
+        crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
     let crate::audit_pipeline::PipelineOutcome {
         snapshot,
         modules: report_modules,
@@ -28,9 +31,6 @@ pub fn run(
         snapshot_id: None,
         module_filter,
     })?;
-    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
-    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
     // Persist the score on the snapshot row so the Explorer's history
     // scrubber (PRD §10.5) can render a trend over time, even when the
@@ -123,8 +123,7 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "pr" => {
-            // Compute deltas from previous snapshot if available
-            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
+            // Compute deltas from previous snapshot if available.
             let all = snap_repo.get_all()?;
             let prev = all.iter().rfind(|s| s.id != snapshot.id).cloned();
             let (prev_score, prev_count) = if let Some(prev_snap) = prev {
@@ -276,7 +275,6 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "strategy" => {
-            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
             let file_path = report_dir.join("strategy.html");
             crate::reporter::generate_strategy_report(
                 &snap_repo,
@@ -322,8 +320,7 @@ pub fn run(
                     }
                 }
             }
-            // Strategy needs snapshot history — handle separately
-            let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
+            // Strategy needs snapshot history — handle separately.
             let strategy_path = report_dir.join("strategy.html");
             match crate::reporter::generate_strategy_report(
                 &snap_repo,
