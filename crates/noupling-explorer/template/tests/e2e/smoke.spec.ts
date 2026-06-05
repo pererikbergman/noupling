@@ -402,6 +402,24 @@ test.describe("Explorer — acme-payments sample", () => {
     ).toBeVisible();
   });
 
+  test("Clicking a populated matrix cell opens the edge-details inlay", async ({
+    page,
+  }) => {
+    // Drill into src so packages are immediate children, switch to
+    // Matrix, then click one of the coloured (populated) cells.
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    await page.locator("button:has-text('Matrix')").click();
+    const populated = page.locator(
+      "#root-canvas td[style*='accent-domain'], #root-canvas td[style*='edge-violation']",
+    );
+    expect(await populated.count()).toBeGreaterThan(0);
+    await populated.first().click();
+    await expect(
+      page.locator("[aria-label*='Details for edge']").first(),
+    ).toBeVisible();
+  });
+
   test("Clicking an LSM edge opens the edge-details inlay (#295)", async ({
     page,
   }) => {

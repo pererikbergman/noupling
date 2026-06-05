@@ -4,6 +4,11 @@ import type { DataContract, NodeEntry } from "../types";
 export interface MatrixProps {
   data: DataContract;
   onNodeClick?: (id: string) => void;
+  /** Selected edge — gets a highlighted border on the matrix cell. */
+  selectedEdge?: { from: string; to: string } | null;
+  /** Fired when a populated cell is clicked. Diagonal and empty
+   *  cells stay inert. */
+  onEdgeClick?: (from: string, to: string) => void;
 }
 
 /**
@@ -25,7 +30,12 @@ export interface MatrixProps {
 // folder.
 const MAX_MATRIX_NODES = 200;
 
-export function Matrix({ data, onNodeClick }: MatrixProps) {
+export function Matrix({
+  data,
+  onNodeClick,
+  selectedEdge,
+  onEdgeClick,
+}: MatrixProps) {
   const layout = useMemo(() => computeMatrixLayout(data), [data]);
 
   if (layout.nodes.length === 0) {
@@ -104,20 +114,37 @@ export function Matrix({ data, onNodeClick }: MatrixProps) {
               </th>
               {layout.nodes.map((col, j) => {
                 const cell = layout.cells[i * layout.nodes.length + j];
+                const isDiagonal = i === j;
+                const clickable = !!cell && !isDiagonal && !!onEdgeClick;
+                const isSelected =
+                  !!cell &&
+                  selectedEdge?.from === row.id &&
+                  selectedEdge?.to === col.id;
                 return (
                   <td
                     key={col.id}
                     title={
                       cell
-                        ? `${row.id} → ${col.id} (×${cell.weight})${cell.isCycle ? " · cycle" : ""}${cell.violatesRule ? " · violation: " + cell.violatesRule : ""}`
+                        ? `${row.id} → ${col.id} (×${cell.weight})${cell.isCycle ? " · cycle" : ""}${cell.violatesRule ? " · violation: " + cell.violatesRule : ""}${clickable ? " · click for details" : ""}`
                         : `${row.id} → ${col.id}`
                     }
-                    className="border-b border-r border-border"
+                    className={
+                      "border-b border-r " +
+                      (isSelected
+                        ? "border-accent-domain outline outline-1 outline-accent-domain"
+                        : "border-border")
+                    }
                     style={{
                       width: 14,
                       height: 14,
-                      background: cellFill(cell, i === j),
+                      background: cellFill(cell, isDiagonal),
+                      cursor: clickable ? "pointer" : "default",
                     }}
+                    onClick={
+                      clickable
+                        ? () => onEdgeClick!(row.id, col.id)
+                        : undefined
+                    }
                   />
                 );
               })}
