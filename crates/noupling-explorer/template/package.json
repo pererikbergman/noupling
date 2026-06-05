@@ -7,13 +7,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && mv dist/index.html dist/explorer.html && rm -rf dist/samples",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test --project=chromium tests/e2e/smoke.spec.ts",
+    "test:e2e:android": "playwright test --project=chromium tests/e2e/android.spec.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

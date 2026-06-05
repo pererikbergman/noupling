@@ -16,11 +16,28 @@ See `docs/noupling-explorer-prd.md` §5.2 + §5.2.1 for the architecture; see
 ```
 cd crates/noupling-explorer/template
 pnpm install
-pnpm dev          # hot-reload dev server against ./public/samples/acme-payments.json
-pnpm build        # produce dist/explorer.html (single self-contained file)
+pnpm dev                  # hot-reload dev server against ./public/samples/acme-payments.json
+pnpm build                # produce dist/explorer.html (single self-contained file)
+pnpm test:e2e             # Playwright smoke suite (boots dev server, drives sample)
+pnpm test:e2e:android     # manual regression suite against a real codebase
 ```
 
 Open `http://localhost:5174/?sample=<name>` during dev to swap samples.
+
+### Real-codebase regression suite
+
+The `tests/e2e/android.spec.ts` suite exercises the parts of the
+Explorer that historically broke on real-world projects (URL-slash
+bugs, empty LSM on deeply-nested codebases, auto-layer banner, score
+rendering). It's gated on `NOUPLING_E2E_ANDROID_REPO` and does *not*
+run in CI — point it at any noupling-scanned repo locally:
+
+```
+noupling-dev report ~/my/project --format explorer --editor vscode
+NOUPLING_E2E_ANDROID_REPO=~/my/project pnpm test:e2e:android
+```
+
+The smoke suite (`pnpm test:e2e`) does run in CI on every PR.
 
 ## Data Contract
 

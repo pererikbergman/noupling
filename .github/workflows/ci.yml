@@ -81,3 +81,29 @@ jobs:
             git diff -- dist
             exit 1
           fi
+
+  template-e2e:
+    name: Explorer template e2e (Playwright smoke)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/noupling-explorer/template
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: crates/noupling-explorer/template/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: crates/noupling-explorer/template/playwright-report
+          retention-days: 7
