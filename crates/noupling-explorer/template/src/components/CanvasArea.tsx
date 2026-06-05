@@ -167,7 +167,7 @@ export function CanvasArea({
         </div>
       ) : (
         <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-          <Matrix data={data} onNodeClick={onNodeClick} />
+          <Matrix data={lsmData} onNodeClick={onNodeClick} />
         </div>
       )}
 

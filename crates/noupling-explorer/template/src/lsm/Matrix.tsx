@@ -17,6 +17,14 @@ export interface MatrixProps {
  * Same scope/filter rules as the LSM — `data.nodes` and `data.edges`
  * arrive pre-narrowed by `CanvasArea`/`App`.
  */
+// Safety cap — a 200×200 matrix is 40k cells, well within browser
+// budget. Beyond that the unvirtualized table freezes the page, so we
+// show an empty state pointing the user at drill-down instead. The
+// 200 figure was picked to comfortably handle the noupling self repo
+// (~85 immediate children at root) and a typical Android feature
+// folder.
+const MAX_MATRIX_NODES = 200;
+
 export function Matrix({ data, onNodeClick }: MatrixProps) {
   const layout = useMemo(() => computeMatrixLayout(data), [data]);
 
@@ -24,6 +32,26 @@ export function Matrix({ data, onNodeClick }: MatrixProps) {
     return (
       <div className="flex h-full items-center justify-center text-[12px] text-muted">
         No nodes in this scope.
+      </div>
+    );
+  }
+
+  if (layout.nodes.length > MAX_MATRIX_NODES) {
+    return (
+      <div className="flex h-full items-center justify-center px-8">
+        <div className="max-w-md rounded-md border border-border bg-card p-5 text-center">
+          <p className="m-0 mb-2 text-[14px] font-semibold text-text">
+            Matrix view is bounded
+          </p>
+          <p className="m-0 text-[12px] leading-relaxed text-muted">
+            This scope has{" "}
+            <strong className="text-text">{layout.nodes.length}</strong> nodes —
+            an {layout.nodes.length}×{layout.nodes.length} matrix would freeze
+            the page. Drill into a sub-package (double-click a card on the LSM)
+            until the canvas has ≤{MAX_MATRIX_NODES} nodes, then switch back to
+            Matrix.
+          </p>
+        </div>
       </div>
     );
   }
