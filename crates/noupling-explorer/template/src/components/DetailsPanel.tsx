@@ -84,9 +84,12 @@ export function DetailsPanel({
 
   return (
     <aside
-      role="dialog"
+      role="complementary"
       aria-label={`Details for ${node.id}`}
-      className="absolute right-0 top-0 z-30 flex h-full w-[360px] flex-col border-l border-border bg-card shadow-2xl"
+      // Inlay column in the App's grid (col 3, row 3). No absolute
+      // positioning, no shadow — it shares space with the canvas
+      // instead of covering it.
+      className="flex min-h-0 flex-col border-l border-border bg-card"
     >
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
