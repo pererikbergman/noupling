@@ -3,6 +3,7 @@ import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Matrix } from "../lsm/Matrix";
 import { ForceView } from "../lsm/ForceView";
+import { CompositionView } from "../lsm/CompositionView";
 import { Breadcrumb } from "./Breadcrumb";
 import {
   breadcrumbFor,
@@ -240,6 +241,15 @@ export function CanvasArea({
       {viewMode === "force" && (
         <div className="h-full w-full px-4 pb-16 pt-14">
           <ForceView
+            nodes={lsmData.nodes}
+            edges={lsmData.edges}
+            onNodeClick={onNodeClick}
+          />
+        </div>
+      )}
+      {viewMode === "composition" && (
+        <div className="h-full w-full pt-14">
+          <CompositionView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
             onNodeClick={onNodeClick}

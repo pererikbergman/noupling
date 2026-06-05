@@ -709,7 +709,21 @@ Noupling already detects Gravity Wells (high inbound coupling) and Red Flags (Fu
 - All Gravity Wells and Red Flags from noupling's output are surfaced.
 - Tooltip text reads as actionable guidance.
 
-### 10.8 v3 — Out of scope explicitly
+### 10.8 Feature: Composition view
+
+A top-level canvas view (alongside LSM, Matrix, Force) that answers "**what *kind* of thing is each module?**" — distinct from LSM (architecture/layering) and Force (coupling/clustering) by focusing on *identity*, not relationships.
+
+- **F23.1** Renders containers at the current scope as nested grouped rectangles (treemap-style), reusing the LSM card visual vocabulary.
+- **F23.2** Each card carries a layer tag, file count, and dominant language.
+- **F23.3** When LLM enrichment is present (per the `llm` block on a node, written by skills shipped under issue #280), the card additionally surfaces a one-line natural-language purpose ("Payment processing", "API serialization", "Test fixtures"). Without enrichment, the derived metadata is enough — Composition is never a dead-end empty state.
+- **F23.4** A banner near the top of the view points users at the enrichment skill (`noupling-describe-modules`) so they can opt-in to richer labels.
+
+**Acceptance criteria:**
+- Composition renders at the current shared scope; no canvas-side LLM call is made (enrichment is sidecar-merged at generation time per #280).
+- Cards click through to the DetailsPanel like other views.
+- Cards remain useful when no enrichment data exists — banner offers, doesn't gate.
+
+### 10.9 v3 — Out of scope explicitly
 
 - Function-level call graphs (requires noupling to extract function-level data, which it currently does not; that's a noupling-core feature, not an Explorer feature)
 - Heatmap views (Layer x Metric, Module x Metric) — defer until requested

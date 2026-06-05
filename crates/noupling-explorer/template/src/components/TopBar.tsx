@@ -58,9 +58,12 @@ export function TopBar({
         >
           Force
         </ViewBtn>
-        <DisabledViewBtn title="Composition view ships in v3 (PRD §10.x).">
+        <ViewBtn
+          active={viewMode === "composition"}
+          onClick={() => onViewMode("composition")}
+        >
           Composition
-        </DisabledViewBtn>
+        </ViewBtn>
       </div>
 
       <div className="flex-1" />
@@ -143,24 +146,6 @@ function ViewBtn({
           ? "bg-card text-text shadow-[0_1px_0_rgb(var(--border))]"
           : "text-muted hover:text-text")
       }
-    >
-      {children}
-    </button>
-  );
-}
-
-function DisabledViewBtn({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      title={title}
-      aria-disabled
-      className="cursor-not-allowed whitespace-nowrap rounded-sm border border-dashed border-border px-2.5 py-1 text-[12px] text-muted/60"
     >
       {children}
     </button>
