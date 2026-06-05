@@ -104,6 +104,26 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(await circles.count()).toBeGreaterThan(0);
   });
 
+  test("Matrix aggregates file-level edges to visible packages (#290)", async ({
+    page,
+  }) => {
+    // Regression: narrowData previously required both edge endpoints
+    // in visibleIds, which silently dropped every file-level edge
+    // when the visible nodes were packages — leaving the Matrix view
+    // entirely blank on real codebases. Drill into src/ so the four
+    // sample packages (ui, domain, data, infra) are immediate
+    // children; the matrix must render at least one coloured cell
+    // for the aggregated file-level imports between them.
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    await page.locator("button:has-text('Matrix')").click();
+    // accent-domain alpha-tinted cells = healthy (non-violation) edges.
+    const coloured = page.locator(
+      "#root-canvas td[style*='accent-domain']",
+    );
+    expect(await coloured.count()).toBeGreaterThan(0);
+  });
+
   test("Matrix view renders a NxN dependency heatmap", async ({ page }) => {
     await page.locator("button:has-text('Matrix')").click();
     const table = page.locator("#root-canvas table");

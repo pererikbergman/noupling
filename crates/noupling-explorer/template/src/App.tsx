@@ -266,13 +266,24 @@ function narrowData(
   predicate: (n: NodeEntry) => boolean,
 ): DataContract {
   const visibleNodes = data.nodes.filter((n) => inScope(n.id, scope) && predicate(n));
-  const visibleIds = new Set(visibleNodes.map((n) => n.id));
-  const visibleEdges = data.edges.filter((e) => visibleIds.has(e.from) && visibleIds.has(e.to));
+  // Edges are scope-filtered but NOT predicate-filtered: file-level
+  // edges must survive even when the spot filter narrows visible
+  // nodes to packages, because the canvas aggregation maps each file
+  // edge up to its visible-ancestor pair (the file paths themselves
+  // are deliberately absent from `visibleIds` in that case). Previously
+  // we required both endpoints in `visibleIds`, which silently emptied
+  // the Matrix view whenever a non-file-level filter was active.
+  const allScopeIds = new Set(
+    data.nodes.filter((n) => inScope(n.id, scope)).map((n) => n.id),
+  );
+  const visibleEdges = data.edges.filter(
+    (e) => allScopeIds.has(e.from) && allScopeIds.has(e.to),
+  );
   const fileCount = visibleNodes.filter((n) => n.kind === "file").length;
   const moduleCount = visibleNodes.filter((n) => n.kind !== "file").length;
-  const visibleCycles = data.cycles.filter((c) => c.members.every((id) => visibleIds.has(id)));
+  const visibleCycles = data.cycles.filter((c) => c.members.every((id) => allScopeIds.has(id)));
   const visibleViolations = data.violations.filter(
-    (v) => visibleIds.has(v.edge.from) && visibleIds.has(v.edge.to),
+    (v) => allScopeIds.has(v.edge.from) && allScopeIds.has(v.edge.to),
   );
   return {
     ...data,
