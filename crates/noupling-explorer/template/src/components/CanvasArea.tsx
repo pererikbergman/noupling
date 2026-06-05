@@ -174,8 +174,9 @@ export function CanvasArea({
 
   return (
     <main id="root-canvas" className="relative overflow-hidden bg-canvas">
-      {/* Spot-filter pills overlay on the canvas (PRD F5.5) */}
-      <div className="absolute left-4 top-3 z-10 flex flex-wrap gap-1.5">
+      {/* Spot-filter pills overlay on the canvas (PRD F5.5). Sits
+          below the breadcrumb row; top offset accounts for it. */}
+      <div className="absolute left-4 top-14 z-10 flex flex-wrap gap-1.5">
         <FilterPill active={spotFilter === "all"} onClick={() => onSpotFilter("all")}>
           All
         </FilterPill>
@@ -222,7 +223,7 @@ export function CanvasArea({
       {issueFocusActive && (
         <div
           role="status"
-          className="absolute left-4 right-4 top-12 z-20 flex items-center justify-between rounded-md border border-edge-violation/40 bg-edge-violation/10 px-3 py-2 text-[12px]"
+          className="absolute left-4 right-4 top-24 z-20 flex items-center justify-between rounded-md border border-edge-violation/40 bg-edge-violation/10 px-3 py-2 text-[12px]"
         >
           <span>
             <strong className="text-edge-violation">Issue focused.</strong>{" "}
@@ -239,7 +240,7 @@ export function CanvasArea({
       )}
 
       {viewMode === "lsm" && (
-        <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
+        <div className="h-full w-full overflow-auto px-4 pb-16 pt-24">
           <div
             style={{
               transform: `scale(${zoom})`,
@@ -263,12 +264,12 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "matrix" && (
-        <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
+        <div className="h-full w-full overflow-auto px-4 pb-16 pt-24">
           <Matrix data={lsmData} onNodeClick={onNodeClick} />
         </div>
       )}
       {viewMode === "force" && (
-        <div className="h-full w-full px-4 pb-16 pt-14">
+        <div className="h-full w-full px-4 pb-16 pt-24">
           <ForceView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
@@ -278,7 +279,7 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "composition" && (
-        <div className="h-full w-full pt-14">
+        <div className="h-full w-full pt-24">
           <CompositionView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
@@ -373,7 +374,7 @@ function PathFinderBanner({
       return null;
   }
   return (
-    <div className="absolute left-1/2 top-14 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-accent-ui bg-card px-3 py-1.5 text-[12px] text-text shadow-md">
+    <div className="absolute left-1/2 top-24 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-accent-ui bg-card px-3 py-1.5 text-[12px] text-text shadow-md">
       <span className="font-mono text-accent-ui">↣</span>
       <span>{msg}</span>
       <button
