@@ -117,7 +117,7 @@ function ContributorRow({
     <li>
       <button
         onClick={onClick}
-        className="block w-full rounded-sm border border-border bg-canvas p-2 text-left text-[12px] hover:bg-pill"
+        className="block w-full rounded-sm border border-border bg-canvas p-2 text-left text-[12px] transition-colors hover:bg-canvas/60 hover:border-text/30"
         title="Open details for the offender"
       >
         <div className="flex items-center justify-between gap-2">

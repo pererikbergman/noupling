@@ -40,7 +40,7 @@ export function DrillBreadcrumb({
       <button
         onClick={() => onScope(up)}
         aria-label={up === "" ? `Up to ${rootLabel}` : `Up to ${up}`}
-        className="shrink-0 rounded-sm px-1 text-muted hover:bg-pill hover:text-pill-text"
+        className="shrink-0 rounded-sm px-1 text-muted transition-colors hover:bg-canvas/60 hover:text-text"
         title="Go up one level"
       >
         ↑

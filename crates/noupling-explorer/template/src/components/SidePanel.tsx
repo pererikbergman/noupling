@@ -628,7 +628,7 @@ function LevelsTab({
                 <button
                   onClick={() => onSelect?.(n.id)}
                   onDoubleClick={() => onScope?.(n.id)}
-                  className="flex w-full items-center justify-between rounded-sm border border-border bg-canvas px-2 py-1.5 text-left text-[12px] hover:bg-pill hover:text-pill-text"
+                  className="flex w-full items-center justify-between rounded-sm border border-border bg-canvas px-2 py-1.5 text-left text-[12px] transition-colors hover:bg-canvas/60 hover:border-text/30"
                   title={`${n.id} — double-click to drill`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -733,7 +733,7 @@ function TreeRow({
             onClick={onDeepDrill}
             aria-label={`Drill into ${label}`}
             title="Drill into this folder (changes shared scope)"
-            className="ml-1 rounded-sm px-1 text-[10px] text-muted hover:bg-pill hover:text-pill-text"
+            className="ml-1 rounded-sm px-1 text-[10px] text-muted transition-colors hover:bg-canvas/60 hover:text-text"
           >
             ↘
           </button>

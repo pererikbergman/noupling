@@ -193,7 +193,7 @@ export function DetailsPanel({
       <footer className="space-y-2 border-t border-border px-4 py-3">
         <button
           onClick={() => onFocus(focusScopeFor(node))}
-          className="block w-full rounded-sm border border-border bg-canvas px-3 py-2 text-center text-[13px] font-semibold text-text hover:bg-pill hover:text-pill-text"
+          className="block w-full rounded-sm border border-border bg-canvas px-3 py-2 text-center text-[13px] font-semibold text-text transition-colors hover:bg-canvas/60 hover:border-text/30"
         >
           Focus on this node
         </button>
