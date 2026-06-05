@@ -277,7 +277,12 @@ export function CanvasArea({
       )}
       {viewMode === "matrix" && (
         <div className="h-full w-full overflow-auto px-4 pb-16 pt-24">
-          <Matrix data={lsmData} onNodeClick={onNodeClick} />
+          <Matrix
+            data={lsmData}
+            onNodeClick={onNodeClick}
+            selectedEdge={selectedEdge}
+            onEdgeClick={onEdgeClick}
+          />
         </div>
       )}
       {viewMode === "force" && (
