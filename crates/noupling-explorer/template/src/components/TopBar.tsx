@@ -33,7 +33,7 @@ export function TopBar({
   const [helpOpen, setHelpOpen] = useState(false);
   const codebaseTitle = basename(data.codebase.path);
   return (
-    <div className="col-span-2 flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-2.5">
+    <div className="col-span-full flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-2.5">
       <Logo />
       <Badge>{`v${data.noupling_version}`}</Badge>
       <span className="ml-1 text-[13px] text-muted">{codebaseTitle}</span>

@@ -17,7 +17,7 @@ export function SearchRow({
   onSearchMode,
 }: SearchRowProps) {
   return (
-    <div className="col-span-2 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
+    <div className="col-span-full flex items-center gap-2 border-b border-border bg-card px-4 py-2">
       <span className="rounded-sm border border-border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
         Project overview
       </span>

@@ -154,7 +154,16 @@ export function App({ data }: AppProps) {
   }
 
   return (
-    <div className="grid h-screen w-screen grid-cols-[380px_1fr] grid-rows-[auto_auto_1fr]">
+    <div
+      className={
+        "grid h-screen w-screen grid-rows-[auto_auto_1fr] " +
+        // Right details column expands inline only when a node is
+        // selected — otherwise the canvas keeps all the room.
+        (state.selected
+          ? "grid-cols-[380px_1fr_360px]"
+          : "grid-cols-[380px_1fr]")
+      }
+    >
       <TopBar
         data={data}
         theme={theme}
