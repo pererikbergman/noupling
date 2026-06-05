@@ -19,7 +19,22 @@ export interface DataContract {
   edges: EdgeEntry[];
   cycles: CycleEntry[];
   violations: ViolationEntry[];
+  gravity_wells: GravityWellEntry[];
+  red_flags: RedFlagEntry[];
   history: HistoryEntry[];
+}
+
+export interface GravityWellEntry {
+  module_path: string;
+  total_rri: number;
+  relationship_count: number;
+}
+
+export interface RedFlagEntry {
+  flag_type: string;
+  modules: string[];
+  rri: number;
+  recommendation: string;
 }
 
 export interface ReportOptions {

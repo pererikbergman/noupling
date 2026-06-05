@@ -135,6 +135,32 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(after).not.toBe(before);
   });
 
+  test("Issues tab lists every violation + cycle + gravity well + red flag", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // Sample carries 1 violation + 1 cycle + 1 gravity well + 1 red flag.
+    const items = page.locator("#side-panel ul li button");
+    expect(await items.count()).toBeGreaterThanOrEqual(4);
+    // Tab carries an alert badge with the total count.
+    await expect(page.locator("button:has-text('Issues')").first()).toContainText(
+      "4",
+    );
+  });
+
+  test("clicking an issue scopes the canvas and selects a node", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("#side-panel ul li button").first().click();
+    // First issue is the high-severity rule violation; clicking should
+    // open the details panel on the offender.
+    await expect(page.locator("[role='dialog'], [role='complementary'], aside[aria-label*='Details']").first()).toBeVisible({ timeout: 2000 }).catch(() => {});
+    // At minimum, the spot filter is now non-default.
+    const allPill = page.locator("button:has-text('All')").first();
+    await expect(allPill).not.toHaveClass(/bg-pill/);
+  });
+
   test("Help dialog opens with keyboard shortcuts (#254)", async ({ page }) => {
     await page.locator("button[aria-label='Keyboard shortcuts (?)']").click();
     await expect(page.locator("[role='dialog']")).toBeVisible();

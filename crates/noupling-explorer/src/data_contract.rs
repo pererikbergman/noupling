@@ -35,7 +35,24 @@ pub(crate) struct DataContract {
     pub edges: Vec<EdgeEntry>,
     pub cycles: Vec<CycleEntry>,
     pub violations: Vec<ViolationEntry>,
+    pub gravity_wells: Vec<GravityWellEntry>,
+    pub red_flags: Vec<RedFlagEntry>,
     pub history: Vec<HistoryEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct GravityWellEntry {
+    pub module_path: String,
+    pub total_rri: f64,
+    pub relationship_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct RedFlagEntry {
+    pub flag_type: String,
+    pub modules: Vec<String>,
+    pub rri: f64,
+    pub recommendation: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -193,6 +210,25 @@ pub(crate) fn build(
         edges: build_edges(modules, dependencies, audit_result),
         cycles: build_cycles(audit_result),
         violations: build_violations(audit_result),
+        gravity_wells: audit_result
+            .gravity_wells
+            .iter()
+            .map(|g| GravityWellEntry {
+                module_path: g.module_path.clone(),
+                total_rri: g.total_rri,
+                relationship_count: g.relationship_count,
+            })
+            .collect(),
+        red_flags: audit_result
+            .red_flags
+            .iter()
+            .map(|f| RedFlagEntry {
+                flag_type: format!("{:?}", f.flag_type),
+                modules: f.modules.clone(),
+                rri: f.rri,
+                recommendation: f.recommendation.clone(),
+            })
+            .collect(),
         // `include_history` is plumbed for future use; for now the
         // history block is always empty because we don't yet read prior
         // snapshots from storage here. Wired in a later slice.

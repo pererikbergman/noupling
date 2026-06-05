@@ -91,6 +91,7 @@ export function App({ data }: AppProps) {
         scope={state.scope}
         onScope={state.setScope}
         onSelect={state.setSelected}
+        onSpotFilter={state.setSpotFilter}
       />
       <CanvasArea
         data={visibleData}
