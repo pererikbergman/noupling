@@ -52,9 +52,12 @@ export function TopBar({
         >
           Matrix
         </ViewBtn>
-        <DisabledViewBtn title="Force-directed layout ships in v3 (PRD §10.3).">
+        <ViewBtn
+          active={viewMode === "force"}
+          onClick={() => onViewMode("force")}
+        >
           Force
-        </DisabledViewBtn>
+        </ViewBtn>
         <DisabledViewBtn title="Composition view ships in v3 (PRD §10.x).">
           Composition
         </DisabledViewBtn>
