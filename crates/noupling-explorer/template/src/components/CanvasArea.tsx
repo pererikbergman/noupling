@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
+import { Matrix } from "../lsm/Matrix";
 import { Breadcrumb } from "./Breadcrumb";
 import {
   breadcrumbFor,
   type SpotFilter,
+  type ViewMode,
+  type PathFinder,
   shouldHighlightViolations,
 } from "../state/explorerState";
 
@@ -21,6 +24,11 @@ export interface CanvasAreaProps {
   onToggleLayerOverlay: () => void;
   cycleHighlight: boolean;
   onToggleCycleHighlight: () => void;
+  viewMode: ViewMode;
+  pathFinder: PathFinder;
+  onCancelPathFinder: () => void;
+  pathHighlight: Set<string>;
+  minCutHighlight: Set<string>;
 }
 
 const ZOOM_STEP = 1.2;
@@ -40,15 +48,17 @@ export function CanvasArea({
   onToggleLayerOverlay,
   cycleHighlight,
   onToggleCycleHighlight,
+  viewMode,
+  pathFinder,
+  onCancelPathFinder,
+  pathHighlight,
+  minCutHighlight,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
 
-  // Filter the data passed to the LSM down to *immediate children* of the
-  // current scope so the canvas reads as a Structure101-style composition
-  // diagram: at root you see top-level packages, drill in to see their
-  // children, drill again to land on files. The side panel + search row
-  // still show counts over the full sub-tree (PRD F3.3).
+  // The LSM shows immediate children of the scope so the canvas reads
+  // like a composition diagram; the Matrix shows the full scoped set.
   const lsmData = useMemo(() => {
     const childrenByParent = new Map<string | null, NodeEntry[]>();
     for (const n of data.nodes) {
@@ -58,13 +68,9 @@ export function CanvasArea({
       else childrenByParent.set(k, [n]);
     }
     const immediate = data.nodes.filter((n) => isImmediateChild(n, scope));
-    // Collapse singleton chains: when an immediate child is a directory
-    // with exactly one directory child (and no files of its own), jump to
-    // that child. Repeat until the displayed node is a fork (>1 child),
-    // a directory that contains a file directly, or a leaf file. The
-    // breadcrumb is still the canonical navigation surface for any
-    // intermediate level you want to jump back to.
-    const visibleNodes = immediate.map((n) => collapseSingletonChain(n, childrenByParent));
+    const visibleNodes = immediate.map((n) =>
+      collapseSingletonChain(n, childrenByParent),
+    );
     const visibleIds = new Set(visibleNodes.map((n) => n.id));
     return {
       ...data,
@@ -78,7 +84,7 @@ export function CanvasArea({
   function onNodeDoubleClick(id: string) {
     const node = data.nodes.find((n) => n.id === id);
     if (!node) return;
-    if (node.kind === "file") return; // leaves don't drill
+    if (node.kind === "file") return;
     onScope(node.id);
   }
 
@@ -132,38 +138,50 @@ export function CanvasArea({
         codebaseTitle={codebaseTitle}
       />
 
-      <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
-        <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: "top left",
-            display: "inline-block",
-            minWidth: "100%",
-          }}
-        >
-          <LSM
-            data={lsmData}
-            onNodeClick={onNodeClick}
-            onNodeDoubleClick={onNodeDoubleClick}
-            highlightViolations={shouldHighlightViolations(spotFilter)}
-            highlightCycles={cycleHighlight}
-            layerOverlay={layerOverlay}
-            cyclesByNode={cyclesByNode}
-          />
-        </div>
-      </div>
+      {pathFinder.mode !== "idle" && (
+        <PathFinderBanner pathFinder={pathFinder} onCancel={onCancelPathFinder} />
+      )}
 
-      {/* Zoom + view-mode controls (bottom-left) */}
+      {viewMode === "lsm" ? (
+        <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
+          <div
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "top left",
+              display: "inline-block",
+              minWidth: "100%",
+            }}
+          >
+            <LSM
+              data={lsmData}
+              onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
+              highlightViolations={shouldHighlightViolations(spotFilter)}
+              highlightCycles={cycleHighlight}
+              layerOverlay={layerOverlay}
+              cyclesByNode={cyclesByNode}
+              pathHighlight={pathHighlight}
+              minCutHighlight={minCutHighlight}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="h-full w-full overflow-auto px-4 pb-16 pt-14">
+          <Matrix data={data} onNodeClick={onNodeClick} />
+        </div>
+      )}
+
+      {/* Toolbar (bottom-left) */}
       <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-0.5 rounded-sm border border-border bg-card p-0.5">
         <ZoomBtn
-          title={`Zoom in (currently ${Math.round(zoom * 100)}%)`}
+          title={`Zoom in (${Math.round(zoom * 100)}%)`}
           ariaLabel="Zoom in"
           onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * ZOOM_STEP))}
         >
           +
         </ZoomBtn>
         <ZoomBtn
-          title={`Zoom out (currently ${Math.round(zoom * 100)}%)`}
+          title={`Zoom out (${Math.round(zoom * 100)}%)`}
           ariaLabel="Zoom out"
           onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / ZOOM_STEP))}
         >
@@ -193,21 +211,6 @@ export function CanvasArea({
           ⊚
         </ZoomBtn>
       </div>
-
-      {/* PLAN strip — v2 placeholder, visibly disabled so it can't be
-          mistaken for a wired affordance (#254). */}
-      <div
-        className="absolute bottom-3 right-4 z-10 flex cursor-not-allowed items-center gap-3 rounded-md border border-dashed border-border bg-card/60 px-3.5 py-2.5 text-[12px] text-muted opacity-60"
-        title="Action plan ships in v2 (#228 §9)"
-        aria-disabled="true"
-      >
-        <span className="rounded-full bg-text/40 px-2 py-0.5 text-[10px] font-bold text-canvas">
-          PLAN
-        </span>
-        <span>
-          Refactor sandbox · <strong className="text-muted">v2</strong>
-        </span>
-      </div>
     </main>
   );
 }
@@ -217,17 +220,6 @@ function isImmediateChild(node: NodeEntry, scope: string): boolean {
   return node.parent === scope;
 }
 
-/**
- * Walk down a singleton chain — keeps descending as long as the current
- * directory has exactly one *directory* child and no files of its own.
- * Stops at the first fork (≥2 children) or the first dir that holds a
- * file directly, or a leaf file.
- *
- * For an Android `app/src/main/java/com/<org>/<app>/cart/...` codebase
- * the root view collapses `app` straight to the first package with
- * multiple sub-packages, skipping the seven dead-end intermediate
- * directories.
- */
 function collapseSingletonChain(
   start: NodeEntry,
   childrenByParent: Map<string | null, NodeEntry[]>,
@@ -241,6 +233,45 @@ function collapseSingletonChain(
     if (only.kind === "file") return current;
     current = only;
   }
+}
+
+function PathFinderBanner({
+  pathFinder,
+  onCancel,
+}: {
+  pathFinder: PathFinder;
+  onCancel: () => void;
+}) {
+  let msg: string;
+  switch (pathFinder.mode) {
+    case "pick-from":
+      msg = "Path finder — click the start node";
+      break;
+    case "pick-to":
+      msg = `Path finder — click the destination (start: ${basename(pathFinder.from)})`;
+      break;
+    case "done":
+      msg = `Path: ${basename(pathFinder.from)} → ${basename(pathFinder.to)}`;
+      break;
+    default:
+      return null;
+  }
+  return (
+    <div className="absolute left-1/2 top-14 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-accent-ui bg-card px-3 py-1.5 text-[12px] text-text shadow-md">
+      <span className="font-mono text-accent-ui">↣</span>
+      <span>{msg}</span>
+      <button
+        onClick={onCancel}
+        className="rounded-sm px-2 py-0.5 text-[11px] text-muted hover:bg-canvas hover:text-text"
+      >
+        Cancel · esc
+      </button>
+    </div>
+  );
+}
+
+function basename(p: string): string {
+  return p.split("/").filter(Boolean).pop() ?? p;
 }
 
 function FilterPill({

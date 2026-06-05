@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { DataContract } from "../types";
+import type { ViewMode } from "../state/explorerState";
 import { HelpDialog } from "./HelpDialog";
 
 export interface TopBarProps {
@@ -7,9 +8,28 @@ export interface TopBarProps {
   theme: "dark" | "light";
   onToggleTheme: () => void;
   onResetView: () => void;
+  viewMode: ViewMode;
+  onViewMode: (v: ViewMode) => void;
+  onStartPathFinder: () => void;
+  pathFinderActive: boolean;
+  onShowMinCut: () => void;
+  minCutShown: boolean;
+  hasCycles: boolean;
 }
 
-export function TopBar({ data, theme, onToggleTheme, onResetView }: TopBarProps) {
+export function TopBar({
+  data,
+  theme,
+  onToggleTheme,
+  onResetView,
+  viewMode,
+  onViewMode,
+  onStartPathFinder,
+  pathFinderActive,
+  onShowMinCut,
+  minCutShown,
+  hasCycles,
+}: TopBarProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const codebaseTitle = basename(data.codebase.path);
   return (
@@ -20,46 +40,49 @@ export function TopBar({ data, theme, onToggleTheme, onResetView }: TopBarProps)
 
       <Divider />
 
-      {/* View modes — only LSM is wired in v1; matrix/force/composition land
-          in v3 (PRD §10). Render the placeholders visibly disabled so the
-          surface communicates honestly (#254). */}
-      <SegmentedGroup
-        live={["LSM"]}
-        deferred={["Matrix", "Force", "Composition"]}
-        active="LSM"
-        deferredTooltip="View modes Matrix / Force / Composition ship in v3 (PRD §10)."
-      />
-
-      {/* Inside / + External scope — v2 placeholder. */}
-      <SegmentedGroup
-        live={["Inside"]}
-        deferred={["+ External"]}
-        active="Inside"
-        deferredTooltip="External-dependency overlay ships in v2 (PRD §9)."
-      />
-
-      {/* Hide-by-kind chips — placeholder until kind taxonomy is real. */}
-      <SegmentedGroup
-        live={[]}
-        deferred={["UI", "Domain", "Infra", "Tests", "Generated"]}
-        active=""
-        deferredTooltip="Hide-by-kind filtering needs a kind taxonomy from the scanner — tracked under v2/v3 chrome cleanup (#254)."
-      />
+      {/* View modes — LSM + Matrix are wired; Force + Composition stay as
+          v3 placeholders (the PRD §10 advanced views). */}
+      <div className="flex items-center gap-1 rounded-md border border-border bg-canvas p-[3px]">
+        <ViewBtn active={viewMode === "lsm"} onClick={() => onViewMode("lsm")}>
+          LSM
+        </ViewBtn>
+        <ViewBtn
+          active={viewMode === "matrix"}
+          onClick={() => onViewMode("matrix")}
+        >
+          Matrix
+        </ViewBtn>
+        <DisabledViewBtn title="Force-directed layout ships in v3 (PRD §10.3).">
+          Force
+        </DisabledViewBtn>
+        <DisabledViewBtn title="Composition view ships in v3 (PRD §10.x).">
+          Composition
+        </DisabledViewBtn>
+      </div>
 
       <div className="flex-1" />
 
-      {/* Structure101-style utility icons. ↣ and ⌀ are visibly disabled v2
-          placeholders; ▼ is redundant with the spot-filter pills on the
-          canvas; ↗ Export is wired; ↺ Reset is wired; ? opens Help. */}
-      <DisabledIconButton title="Path finder ships in v2 (PRD §9.x). Tracked in #228.">
+      <IconButton
+        title="Find a dependency path between two nodes — click, then click two cards"
+        ariaLabel="Find a dependency path between two nodes"
+        active={pathFinderActive}
+        onClick={onStartPathFinder}
+      >
         ↣
-      </DisabledIconButton>
-      <DisabledIconButton title="Cycle min-cut suggestion ships in v2 (PRD §9.x). The cycle data + min-cut already render in the details panel.">
+      </IconButton>
+      <IconButton
+        title={
+          hasCycles
+            ? "Highlight the minimum cut for every visible cycle"
+            : "No cycles in the current scope"
+        }
+        ariaLabel="Toggle minimum cut highlight"
+        active={minCutShown}
+        onClick={onShowMinCut}
+        disabled={!hasCycles}
+      >
         ⌀
-      </DisabledIconButton>
-      <DisabledIconButton title="Global filter button is redundant with the spot-filter pills on the canvas. Removed in #254 follow-up.">
-        ▼
-      </DisabledIconButton>
+      </IconButton>
       <IconButton title="Export the Data Contract JSON" onClick={() => downloadDataContract(data)}>
         ↗
       </IconButton>
@@ -98,82 +121,79 @@ function Divider() {
   return <div className="mx-1 h-5 w-px bg-border" />;
 }
 
-function SegmentedGroup({
-  live,
-  deferred,
+function ViewBtn({
   active,
-  deferredTooltip,
-}: {
-  live: string[];
-  deferred: string[];
-  active: string;
-  deferredTooltip: string;
-}) {
-  if (live.length === 0 && deferred.length === 0) return null;
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-border bg-canvas p-[3px]">
-      {live.map((o) => (
-        <button
-          key={o}
-          aria-pressed={active === o}
-          className={
-            "whitespace-nowrap rounded-sm px-2.5 py-1 text-[12px] " +
-            (active === o
-              ? "bg-card text-text shadow-[0_1px_0_rgb(var(--border))]"
-              : "text-muted hover:text-text")
-          }
-        >
-          {o}
-        </button>
-      ))}
-      {deferred.map((o) => (
-        <button
-          key={o}
-          aria-disabled
-          title={deferredTooltip}
-          className="cursor-not-allowed whitespace-nowrap rounded-sm border border-dashed border-border px-2.5 py-1 text-[12px] text-muted/60"
-        >
-          {o}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function IconButton({
-  children,
-  title,
   onClick,
+  children,
 }: {
-  children: React.ReactNode;
-  title: string;
+  active?: boolean;
   onClick?: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <button
-      title={title}
-      aria-label={title}
       onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-border text-muted hover:text-text"
+      aria-pressed={active}
+      className={
+        "whitespace-nowrap rounded-sm px-2.5 py-1 text-[12px] " +
+        (active
+          ? "bg-card text-text shadow-[0_1px_0_rgb(var(--border))]"
+          : "text-muted hover:text-text")
+      }
     >
       {children}
     </button>
   );
 }
 
-function DisabledIconButton({
-  children,
+function DisabledViewBtn({
   title,
+  children,
 }: {
-  children: React.ReactNode;
   title: string;
+  children: React.ReactNode;
 }) {
   return (
     <button
       title={title}
-      aria-label={title}
       aria-disabled
-      className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-sm border border-dashed border-border text-muted/50"
+      className="cursor-not-allowed whitespace-nowrap rounded-sm border border-dashed border-border px-2.5 py-1 text-[12px] text-muted/60"
+    >
+      {children}
+    </button>
+  );
+}
+
+function IconButton({
+  children,
+  title,
+  ariaLabel,
+  onClick,
+  active,
+  disabled,
+}: {
+  children: React.ReactNode;
+  title: string;
+  ariaLabel?: string;
+  onClick?: () => void;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      title={title}
+      aria-label={ariaLabel ?? title}
+      aria-pressed={active}
+      aria-disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      className={
+        "inline-flex h-8 w-8 items-center justify-center rounded-sm border text-[14px] " +
+        (active
+          ? "border-pill bg-pill text-pill-text"
+          : disabled
+            ? "cursor-not-allowed border-dashed border-border text-muted/50"
+            : "border-border text-muted hover:text-text")
+      }
     >
       {children}
     </button>

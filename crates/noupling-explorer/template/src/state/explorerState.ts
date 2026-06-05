@@ -13,6 +13,8 @@ import type { DataContract, NodeEntry } from "../types";
 
 export type SearchMode = "substring" | "regex";
 
+export type ViewMode = "lsm" | "matrix";
+
 export type SpotFilter =
   | "all"
   | "in-cycles"
@@ -20,6 +22,18 @@ export type SpotFilter =
   | "clean"
   | "hide-violations"
   | "gravity-wells";
+
+/**
+ * Two-step path-finder gesture state. `idle` until the user clicks ↣;
+ * `pick-from` until they click the first node; `pick-to` until they
+ * click the second; then resolves to `done` carrying the from + to
+ * node ids so the LSM/Matrix can highlight the resulting path.
+ */
+export type PathFinder =
+  | { mode: "idle" }
+  | { mode: "pick-from" }
+  | { mode: "pick-to"; from: string }
+  | { mode: "done"; from: string; to: string };
 
 export interface ExplorerState {
   scope: string;
@@ -36,6 +50,12 @@ export interface ExplorerState {
   setLayerOverlay: (b: boolean) => void;
   cycleHighlight: boolean;
   setCycleHighlight: (b: boolean) => void;
+  viewMode: ViewMode;
+  setViewMode: (m: ViewMode) => void;
+  pathFinder: PathFinder;
+  setPathFinder: (p: PathFinder) => void;
+  minCutShown: boolean;
+  setMinCutShown: (b: boolean) => void;
   /** Wipe all persisted state for this Explorer file and return to defaults (PRD F10.2). */
   resetView: () => void;
 }
@@ -60,6 +80,15 @@ export function useExplorerState(data: DataContract): ExplorerState {
     `${key}::cycleHighlight`,
     true,
   );
+  const [viewMode, setViewMode] = usePersistedEnum<ViewMode>(
+    `${key}::viewMode`,
+    "lsm",
+    ["lsm", "matrix"],
+  );
+  // Path finder + min-cut are transient UI state — they reset whenever
+  // the user reloads the page. Not persisted.
+  const [pathFinder, setPathFinder] = useState<PathFinder>({ mode: "idle" });
+  const [minCutShown, setMinCutShown] = useState(false);
 
   function resetView() {
     setScope("");
@@ -69,8 +98,10 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setLayerOverlay(false);
     setCycleHighlight(true);
     setSelected(null);
+    setViewMode("lsm");
+    setPathFinder({ mode: "idle" });
+    setMinCutShown(false);
     try {
-      // Hard-clear in case future setters skip useEffect.
       for (const suffix of [
         "::scope",
         "::search",
@@ -78,6 +109,7 @@ export function useExplorerState(data: DataContract): ExplorerState {
         "::spotFilter",
         "::layerOverlay",
         "::cycleHighlight",
+        "::viewMode",
       ]) {
         localStorage.removeItem(`${key}${suffix}`);
       }
@@ -101,6 +133,12 @@ export function useExplorerState(data: DataContract): ExplorerState {
     setLayerOverlay,
     cycleHighlight,
     setCycleHighlight,
+    viewMode,
+    setViewMode,
+    pathFinder,
+    setPathFinder,
+    minCutShown,
+    setMinCutShown,
     resetView,
   };
 }

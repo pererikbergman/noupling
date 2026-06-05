@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 
-type Tab = "Info" | "Files" | "Rules" | "Plan";
+type Tab = "Info" | "Files" | "Rules";
 
 export interface SidePanelProps {
   data: DataContract;
@@ -29,7 +29,6 @@ export function SidePanel({ data, scope, onScope, onSelect }: SidePanelProps) {
           />
         )}
         {tab === "Rules" && <RulesTab data={data} />}
-        {tab === "Plan" && <PlanTab />}
       </div>
     </aside>
   );
@@ -42,7 +41,7 @@ function Tabs({
   current: Tab;
   onChange: (t: Tab) => void;
 }) {
-  const tabs: Tab[] = ["Info", "Files", "Rules", "Plan"];
+  const tabs: Tab[] = ["Info", "Files", "Rules"];
   return (
     <div className="flex border-b border-border">
       {tabs.map((t) => (
@@ -68,8 +67,6 @@ function InfoTab({ data }: { data: DataContract }) {
     <>
       <WelcomeCard data={data} />
       {data.layers_auto_detected && <AutoLayersBanner data={data} />}
-      <SectionHeading>Steps</SectionHeading>
-      <Steps />
       <SectionHeading>Stats</SectionHeading>
       <Stats data={data} />
     </>
@@ -117,49 +114,7 @@ function WelcomeCard({ data }: { data: DataContract }) {
           Double-click any node to drill in; click for details.
         </span>
       </p>
-      <button
-        title="Guided tour ships in v2 (PRD §9.x)"
-        aria-disabled
-        className="mt-3 w-full cursor-not-allowed rounded-sm border border-dashed border-border bg-canvas px-3 py-2 text-[13px] font-semibold text-muted/70"
-      >
-        Start tour · v2
-      </button>
     </div>
-  );
-}
-
-const STEPS = [
-  "Project overview & health",
-  "Layer boundaries & rules",
-  "Finding the gravity well",
-  "Cycle: infra ↔ domain",
-  "How to read instability (I)",
-  "Composition: drill into a package",
-  "Pattern: trapped child",
-  "Pattern: fused sibling",
-  "Min-cut suggestion",
-  "Refactoring plan (v2)",
-];
-
-function Steps() {
-  return (
-    <ol
-      title="Guided tour ships in v2 (PRD §9.x) — these steps are the planned narrative."
-      aria-disabled
-      className="m-0 mt-0 list-none cursor-not-allowed p-0 opacity-60"
-    >
-      {STEPS.map((s, i) => (
-        <li
-          key={s}
-          className="flex items-baseline gap-2.5 rounded-sm px-1.5 py-2 text-[13px] text-muted"
-        >
-          <span className="font-mono text-[10px] text-muted">
-            {String(i + 1).padStart(2, "0")}
-          </span>
-          {s}
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -378,15 +333,6 @@ function RulesTab({ data }: { data: DataContract }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function PlanTab() {
-  return (
-    <p className="m-0 text-[12px] leading-relaxed text-muted">
-      The refactoring action plan lives here once v2 ships the Sandbox
-      experience. Queue moves, splits, and merges; export as JSON or Markdown.
-    </p>
   );
 }
 

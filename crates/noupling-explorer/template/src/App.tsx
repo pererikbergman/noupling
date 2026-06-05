@@ -6,6 +6,7 @@ import { SidePanel } from "./components/SidePanel";
 import { CanvasArea } from "./components/CanvasArea";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { useExplorerState, useNodeFilter, inScope } from "./state/explorerState";
+import { shortestPath, pathEdges, minCutEdges } from "./state/paths";
 
 export interface AppProps {
   data: DataContract;
@@ -25,11 +26,43 @@ export function App({ data }: AppProps) {
   const state = useExplorerState(data);
   const filterFn = useNodeFilter(data, state);
 
-  // scoped+filtered Data Contract — drives every consumer downstream.
   const visibleData = useMemo(
     () => narrowData(data, state.scope, filterFn),
     [data, state.scope, filterFn],
   );
+
+  // Path-finder highlight: only when the user has completed both picks.
+  const pathHighlight = useMemo(() => {
+    if (state.pathFinder.mode !== "done") return new Set<string>();
+    const chain = shortestPath(
+      data,
+      state.pathFinder.from,
+      state.pathFinder.to,
+    );
+    return pathEdges(chain);
+  }, [data, state.pathFinder]);
+
+  // Min-cut highlight: precompute from scoped cycles.
+  const minCutHighlight = useMemo(
+    () => (state.minCutShown ? minCutEdges(visibleData) : new Set<string>()),
+    [state.minCutShown, visibleData],
+  );
+
+  function startPathFinder() {
+    state.setPathFinder({ mode: "pick-from" });
+  }
+
+  function onNodePicked(id: string) {
+    const pf = state.pathFinder;
+    if (pf.mode === "pick-from") {
+      state.setPathFinder({ mode: "pick-to", from: id });
+    } else if (pf.mode === "pick-to") {
+      state.setPathFinder({ mode: "done", from: pf.from, to: id });
+    } else {
+      // Default click → open details panel.
+      state.setSelected(id);
+    }
+  }
 
   return (
     <div className="grid h-screen w-screen grid-cols-[380px_1fr] grid-rows-[auto_auto_1fr]">
@@ -38,6 +71,13 @@ export function App({ data }: AppProps) {
         theme={theme}
         onToggleTheme={toggleTheme}
         onResetView={state.resetView}
+        viewMode={state.viewMode}
+        onViewMode={state.setViewMode}
+        onStartPathFinder={startPathFinder}
+        pathFinderActive={state.pathFinder.mode !== "idle"}
+        onShowMinCut={() => state.setMinCutShown(!state.minCutShown)}
+        minCutShown={state.minCutShown}
+        hasCycles={visibleData.cycles.length > 0}
       />
       <SearchRow
         data={visibleData}
@@ -58,13 +98,18 @@ export function App({ data }: AppProps) {
         codebaseTitle={codebaseTitleOf(data)}
         onScope={state.setScope}
         onClearScope={() => state.setScope("")}
-        onNodeClick={state.setSelected}
+        onNodeClick={onNodePicked}
         spotFilter={state.spotFilter}
         onSpotFilter={state.setSpotFilter}
         layerOverlay={state.layerOverlay}
         onToggleLayerOverlay={() => state.setLayerOverlay(!state.layerOverlay)}
         cycleHighlight={state.cycleHighlight}
         onToggleCycleHighlight={() => state.setCycleHighlight(!state.cycleHighlight)}
+        viewMode={state.viewMode}
+        pathFinder={state.pathFinder}
+        onCancelPathFinder={() => state.setPathFinder({ mode: "idle" })}
+        pathHighlight={pathHighlight}
+        minCutHighlight={minCutHighlight}
       />
       <DetailsPanel
         data={visibleData}
@@ -88,11 +133,6 @@ function codebaseTitleOf(data: DataContract): string {
   );
 }
 
-/**
- * Narrow the Data Contract to the active scope ∩ active filter set.
- * Both edges drop when either endpoint drops. Counts recompute so the
- * side panel + search row reflect the visible subset.
- */
 function narrowData(
   data: DataContract,
   scope: string,

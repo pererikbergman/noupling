@@ -66,13 +66,46 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(inCycles).toHaveClass(/bg-pill/);
   });
 
-  test("v2/v3 placeholder controls are visibly disabled (#254)", async ({
+  test("Force + Composition view modes are still dashed v3 placeholders", async ({
     page,
   }) => {
-    for (const label of ["Matrix", "Force", "Composition"]) {
+    for (const label of ["Force", "Composition"]) {
       const btn = page.locator(`button:has-text('${label}')`).first();
       await expect(btn).toHaveAttribute("aria-disabled", "true");
     }
+  });
+
+  test("Matrix view renders a NxN dependency heatmap", async ({ page }) => {
+    await page.locator("button:has-text('Matrix')").click();
+    const table = page.locator("#root-canvas table");
+    await expect(table).toBeVisible();
+    // Diagonal cell is the only one guaranteed to exist; the sample has
+    // 23 modules so the table has at least a header row.
+    await expect(table.locator("thead th").first()).toContainText("×");
+  });
+
+  test("Path finder ↣ walks pick-from → pick-to → done", async ({ page }) => {
+    await page.locator("button[aria-label*='Find a dependency path']").click();
+    await expect(page.locator("text=Path finder — click the start node")).toBeVisible();
+    await page.locator("g[role='button']").first().click();
+    await expect(
+      page.locator("text=Path finder — click the destination").first(),
+    ).toBeVisible();
+  });
+
+  test("Min-cut ⌀ button highlights when the user toggles it on", async ({
+    page,
+  }) => {
+    // Cycle members are nested under src/, so we drill in first to
+    // bring the cycle into scope. The dblclick also triggers a single
+    // click that opens the details panel — dismiss it with Esc before
+    // reaching for the toolbar button on the right edge.
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    const minCut = page.locator("button[aria-label*='minimum cut']");
+    await expect(minCut).toBeVisible();
+    await minCut.click();
+    await expect(minCut).toHaveAttribute("aria-pressed", "true");
   });
 
   test("Open in editor produces a vscode:// URL when --editor vscode was passed", async ({
