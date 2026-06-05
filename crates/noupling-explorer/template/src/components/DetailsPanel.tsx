@@ -1,6 +1,13 @@
 import { useEffect, useMemo } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { buildSourceUrl } from "../sourceLink";
+import {
+  VIOLATION_EXPLAINER,
+  CYCLE_EXPLAINER,
+  GRAVITY_WELL_EXPLAINER,
+  RED_FLAG_EXPLAINER,
+  type VerdictKind,
+} from "../verdictExplainers";
 
 export interface DetailsPanelProps {
   data: DataContract;
@@ -53,6 +60,20 @@ export function DetailsPanel({
         : [],
     [selectedId, data.violations],
   );
+  const gravityWellsHere = useMemo(
+    () =>
+      selectedId
+        ? data.gravity_wells.filter((g) => g.module_path === selectedId)
+        : [],
+    [selectedId, data.gravity_wells],
+  );
+  const redFlagsHere = useMemo(
+    () =>
+      selectedId
+        ? data.red_flags.filter((f) => f.modules.includes(selectedId))
+        : [],
+    [selectedId, data.red_flags],
+  );
 
   if (!selectedId || !node) return null;
 
@@ -91,6 +112,13 @@ export function DetailsPanel({
         </section>
 
         <Metrics node={node} />
+
+        <AboutThisVerdict
+          violations={violationsHere}
+          cycles={cyclesHere}
+          gravityWells={gravityWellsHere}
+          redFlags={redFlagsHere}
+        />
 
         {violationsHere.length > 0 && (
           <Section title={`Violations · ${violationsHere.length}`}>
@@ -204,6 +232,115 @@ function Metrics({ node }: { node: NodeEntry }) {
           </div>
         ))}
       </dl>
+    </Section>
+  );
+}
+
+/**
+ * Per-kind verdict explainer block — #276. Renders only the kinds
+ * present on the selected node, each with hard-coded prose explaining
+ * what the kind means and per-instance numbers showing what tripped
+ * the threshold (RRI, severity, cycle break cost, etc.).
+ */
+function AboutThisVerdict({
+  violations,
+  cycles,
+  gravityWells,
+  redFlags,
+}: {
+  violations: DataContract["violations"];
+  cycles: DataContract["cycles"];
+  gravityWells: DataContract["gravity_wells"];
+  redFlags: DataContract["red_flags"];
+}) {
+  const blocks: Array<{
+    kind: VerdictKind;
+    badge: string;
+    chipClass: string;
+    triggers: string[];
+  }> = [];
+
+  if (violations.length > 0) {
+    blocks.push({
+      kind: VIOLATION_EXPLAINER,
+      badge: "VIOLATION",
+      chipClass: "bg-edge-violation/20 text-edge-violation",
+      triggers: violations.map(
+        (v) =>
+          `${v.severity} severity: ${v.rule.from} → ${v.rule.to}`,
+      ),
+    });
+  }
+  if (cycles.length > 0) {
+    blocks.push({
+      kind: CYCLE_EXPLAINER,
+      badge: "CYCLE",
+      chipClass: "bg-edge-cycle/20 text-edge-cycle",
+      triggers: cycles.map((c) => {
+        const cut = c.minimum_cut[0];
+        if (!cut) return `cycle of ${c.size} members`;
+        return `cycle of ${c.size} members · break ${basename(cut.from)} → ${basename(cut.to)} (${cut.weight} vs ${cut.vs_weight})`;
+      }),
+    });
+  }
+  if (gravityWells.length > 0) {
+    blocks.push({
+      kind: GRAVITY_WELL_EXPLAINER,
+      badge: "GRAVITY WELL",
+      chipClass: "bg-accent-infra/20 text-accent-infra",
+      triggers: gravityWells.map(
+        (g) =>
+          `total RRI ${g.total_rri.toFixed(1)} across ${g.relationship_count} relationship${g.relationship_count === 1 ? "" : "s"}`,
+      ),
+    });
+  }
+  if (redFlags.length > 0) {
+    blocks.push({
+      kind: RED_FLAG_EXPLAINER,
+      badge: "RED FLAG",
+      chipClass: "bg-accent-ui/20 text-accent-ui",
+      triggers: redFlags.map(
+        (f) =>
+          `${f.flag_type.replace(/([a-z])([A-Z])/g, "$1 $2")} (RRI ${f.rri.toFixed(1)}): ${f.recommendation}`,
+      ),
+    });
+  }
+
+  if (blocks.length === 0) return null;
+  return (
+    <Section title="About this verdict">
+      <div className="flex flex-col gap-3">
+        {blocks.map((b, i) => (
+          <div
+            key={i}
+            className="rounded-sm border border-border bg-canvas p-2.5 text-[11px] leading-relaxed"
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <span
+                className={
+                  "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider " +
+                  b.chipClass
+                }
+              >
+                {b.badge}
+              </span>
+              <span className="text-[11px] font-semibold text-text">
+                {b.kind.title}
+              </span>
+            </div>
+            <p className="m-0 text-muted">{b.kind.what}</p>
+            {b.triggers.length > 0 && (
+              <ul className="m-0 mt-1.5 ml-3 list-disc text-[10px] text-text">
+                {b.triggers.map((t, j) => (
+                  <li key={j} className="font-mono">
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }

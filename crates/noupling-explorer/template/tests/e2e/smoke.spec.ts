@@ -179,6 +179,26 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("DetailsPanel shows 'About this verdict' explainer + per-instance numbers (#276)", async ({
+    page,
+  }) => {
+    // Open the Issues tab and click the high-severity violation row;
+    // that selects the offender file. DetailsPanel should now carry
+    // an "About this verdict" section.
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("#side-panel ul li button").first().click();
+    await expect(
+      page.locator("text=About this verdict").first(),
+    ).toBeVisible();
+    await expect(
+      page.locator("text=Why this is a violation").first(),
+    ).toBeVisible();
+    // Per-instance trigger numbers — severity for violations
+    await expect(
+      page.locator("text=/high severity/").first(),
+    ).toBeVisible();
+  });
+
   test("cycle issue row shows 'break: A → B (N vs M)', not full path (#277)", async ({
     page,
   }) => {
