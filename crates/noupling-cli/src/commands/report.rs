@@ -12,84 +12,25 @@ pub fn run(
     explorer_no_history: bool,
 ) -> anyhow::Result<()> {
     let db = super::find_db(path)?;
-    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
-
-    let snapshot = snap_repo
-        .get_latest()?
-        .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?;
-
-    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
-
-    let modules = module_repo.get_by_snapshot(&snapshot.id)?;
-    let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
-
     let project_settings = noupling_core::settings::Settings::load(Path::new(path))?;
 
-    // If --module specified with monorepo config, filter to that module's files
-    let (report_modules, report_deps) = if let Some(name) = module_filter {
-        let cfg = project_settings
-            .modules
-            .iter()
-            .find(|m| m.name == name)
-            .ok_or_else(|| anyhow::anyhow!("Module '{}' not found in settings", name))?;
-        let prefix = format!("{}/", cfg.path);
-        let filtered_modules: Vec<_> = modules
-            .iter()
-            .filter(|m| m.path.starts_with(&prefix) || m.path == cfg.path)
-            .cloned()
-            .collect();
-        let module_ids: std::collections::HashSet<&str> =
-            filtered_modules.iter().map(|m| m.id.as_str()).collect();
-        let filtered_deps: Vec<_> = dependencies
-            .iter()
-            .filter(|d| {
-                module_ids.contains(d.from_module_id.as_str())
-                    && module_ids.contains(d.to_module_id.as_str())
-            })
-            .cloned()
-            .collect();
-        (filtered_modules, filtered_deps)
-    } else {
-        (modules, dependencies)
-    };
-
-    let type_counts =
-        noupling_core::scanner::recompute_type_counts(Path::new(path), &report_modules);
-    let mut result = noupling_core::analyzer::audit_with_settings(
-        &report_modules,
-        &report_deps,
-        &type_counts,
-        &project_settings,
-    );
-    result.rule_violations = noupling_core::analyzer::check_dependency_rules(
-        &report_modules,
-        &report_deps,
-        &project_settings.dependency_rules,
-    );
-    result.layer_violations = noupling_core::analyzer::check_layer_rules(
-        &report_modules,
-        &report_deps,
-        &project_settings.layers,
-    );
-
-    // Load scan-time metadata from SQLite
-    let scan_meta = snap_repo.get_meta(&snapshot.id)?;
-    result.suppressed_count = scan_meta.suppressed_count;
-    result.external_deps = scan_meta
-        .external_deps
-        .iter()
-        .map(|e| noupling_core::analyzer::ExternalDepMetric {
-            module_path: e.module_path.clone(),
-            count: e.count,
-        })
-        .collect();
-    result.total_external_imports = result.external_deps.iter().map(|e| e.count).sum();
-
-    // Apply diff filter if a diff scan was performed
-    if let Some(ref changed_files) = scan_meta.diff_changed_files {
-        result.filter_by_changed_files(changed_files);
-    }
+    // The shared load → filter → audit → enrich → diff-filter ladder
+    // is now in the AuditPipeline (#304). This caller owns only the
+    // bits specific to `report` (save_health_score + format dispatch).
+    let pipeline =
+        crate::audit_pipeline::AuditPipeline::new(Path::new(path), &db, &project_settings);
+    let crate::audit_pipeline::PipelineOutcome {
+        snapshot,
+        modules: report_modules,
+        dependencies: report_deps,
+        result,
+    } = pipeline.run(crate::audit_pipeline::PipelineOptions {
+        snapshot_id: None,
+        module_filter,
+    })?;
+    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
+    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
+    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
     // Persist the score on the snapshot row so the Explorer's history
     // scrubber (PRD §10.5) can render a trend over time, even when the

@@ -80,40 +80,32 @@ pub fn run(
         return Ok(());
     }
 
-    // Single-project mode (existing behavior)
-    let type_counts =
-        noupling_core::scanner::recompute_type_counts(std::path::Path::new(path), &modules);
-    let mut result = noupling_core::analyzer::audit_with_settings(
-        &modules,
-        &dependencies,
-        &type_counts,
-        &project_settings,
-    );
-    result.rule_violations = noupling_core::analyzer::check_dependency_rules(
-        &modules,
-        &dependencies,
-        &project_settings.dependency_rules,
-    );
-    result.layer_violations = noupling_core::analyzer::check_layer_rules(
-        &modules,
-        &dependencies,
-        &project_settings.layers,
-    );
+    // Single-project mode — the load → filter → audit → enrich → diff
+    // ladder lives in AuditPipeline (#304). This caller owns only the
+    // audit-specific extras (diff-mode print, violation age, baseline
+    // compare, fail-below).
 
-    // Load scan-time metadata from SQLite
-    let scan_meta = snap_repo.get_meta(&snapshot.id)?;
-    result.suppressed_count = scan_meta.suppressed_count;
-    result.external_deps = scan_meta
-        .external_deps
-        .iter()
-        .map(|e| noupling_core::analyzer::ExternalDepMetric {
-            module_path: e.module_path.clone(),
-            count: e.count,
-        })
-        .collect();
-    result.total_external_imports = result.external_deps.iter().map(|e| e.count).sum();
+    // Pre-pipeline: surface the diff-mode banner. The pipeline applies
+    // the filter; we just want the user-facing print.
+    let pre_meta = snap_repo.get_meta(&snapshot.id)?;
+    if pre_meta.diff_changed_files.is_some() {
+        if let Some(ref base) = pre_meta.diff_base {
+            if !base.is_empty() {
+                println!("Diff mode: filtered to changes against {}", base);
+            }
+        }
+    }
 
-    // Compute violation age from snapshot history
+    let pipeline =
+        crate::audit_pipeline::AuditPipeline::new(Path::new(path), &db, &project_settings);
+    let crate::audit_pipeline::PipelineOutcome { mut result, .. } =
+        pipeline.run(crate::audit_pipeline::PipelineOptions {
+            snapshot_id: Some(&snapshot.id),
+            module_filter,
+        })?;
+
+    // Compute violation age from snapshot history. Specific to audit;
+    // not part of the shared pipeline.
     let all_snapshots = snap_repo.get_all()?;
     let mut historical: Vec<Vec<(String, String)>> = Vec::new();
     for s in &all_snapshots {
@@ -132,16 +124,6 @@ pub fn run(
     }
     result.violation_age =
         noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
-
-    // Apply diff filter if a diff scan was performed
-    if let Some(ref changed_files) = scan_meta.diff_changed_files {
-        if let Some(ref base) = scan_meta.diff_base {
-            if !base.is_empty() {
-                println!("Diff mode: filtered to changes against {}", base);
-            }
-        }
-        result.filter_by_changed_files(changed_files);
-    }
 
     // Apply baseline filter
     let baseline_info = if use_baseline {
