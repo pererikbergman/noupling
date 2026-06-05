@@ -14,6 +14,10 @@ export interface LSMProps {
   layerOverlay?: boolean;
   /** Per-node cycle membership count, for the badge. */
   cyclesByNode?: Map<string, number>;
+  /** Edge keys (`from→to`) to render in the path-finder accent colour. */
+  pathHighlight?: Set<string>;
+  /** Edge keys to render as the min-cut suggestion. */
+  minCutHighlight?: Set<string>;
 }
 
 /**
@@ -33,6 +37,8 @@ export function LSM({
   highlightCycles = true,
   layerOverlay = false,
   cyclesByNode,
+  pathHighlight,
+  minCutHighlight,
 }: LSMProps) {
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -93,15 +99,20 @@ export function LSM({
 
       {/* Edges */}
       <g>
-        {layout.edges.map((e) => (
-          <EdgePath
-            key={`${e.from}->${e.to}`}
-            edge={e}
-            dimmed={directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))}
-            highlightViolations={highlightViolations}
-            highlightCycles={highlightCycles}
-          />
-        ))}
+        {layout.edges.map((e) => {
+          const key = `${e.from}→${e.to}`;
+          return (
+            <EdgePath
+              key={`${e.from}->${e.to}`}
+              edge={e}
+              dimmed={directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))}
+              highlightViolations={highlightViolations}
+              highlightCycles={highlightCycles}
+              isOnPath={pathHighlight?.has(key) ?? false}
+              isMinCut={minCutHighlight?.has(key) ?? false}
+            />
+          );
+        })}
       </g>
 
       {/* Nodes */}
@@ -184,22 +195,39 @@ function EdgePath({
   dimmed,
   highlightViolations,
   highlightCycles,
+  isOnPath,
+  isMinCut,
 }: {
   edge: PositionedEdge;
   dimmed: boolean;
   highlightViolations: boolean;
   highlightCycles: boolean;
+  isOnPath: boolean;
+  isMinCut: boolean;
 }) {
   const showViolation = edge.isViolation && highlightViolations;
   const showCycle = edge.isCycle && highlightCycles;
-  const stroke = showViolation
-    ? "rgb(var(--edge-violation))"
-    : showCycle
-      ? "rgb(var(--edge-cycle))"
-      : "rgb(var(--text-muted))";
-  const dash = showViolation ? "6 4" : "0";
-  const opacity = dimmed ? 0.18 : showCycle || showViolation ? 0.95 : 0.55;
-  const strokeWidth = 1 + Math.min(edge.weight, 4) * 0.4;
+  // Path finder + min-cut take precedence over the violation/cycle
+  // colours so the user can see what they just asked for.
+  const stroke = isOnPath
+    ? "rgb(var(--accent-ui))"
+    : isMinCut
+      ? "rgb(var(--accent-infra))"
+      : showViolation
+        ? "rgb(var(--edge-violation))"
+        : showCycle
+          ? "rgb(var(--edge-cycle))"
+          : "rgb(var(--text-muted))";
+  const dash = isMinCut ? "4 4" : showViolation ? "6 4" : "0";
+  const opacity = dimmed
+    ? 0.18
+    : isOnPath || isMinCut
+      ? 1
+      : showCycle || showViolation
+        ? 0.95
+        : 0.55;
+  const baseWidth = 1 + Math.min(edge.weight, 4) * 0.4;
+  const strokeWidth = isOnPath || isMinCut ? baseWidth + 1.5 : baseWidth;
   const midY = (edge.y1 + edge.y2) / 2;
   return (
     <path
