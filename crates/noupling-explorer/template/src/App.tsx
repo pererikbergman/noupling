@@ -46,7 +46,12 @@ export function App({ data }: AppProps) {
         searchMode={state.searchMode}
         onSearchMode={state.setSearchMode}
       />
-      <SidePanel data={visibleData} />
+      <SidePanel
+        data={data}
+        scope={state.scope}
+        onScope={state.setScope}
+        onSelect={state.setSelected}
+      />
       <CanvasArea
         data={visibleData}
         scope={state.scope}

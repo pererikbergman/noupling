@@ -1,9 +1,16 @@
-import { useState } from "react";
-import type { DataContract } from "../types";
+import { useMemo, useState } from "react";
+import type { DataContract, NodeEntry } from "../types";
 
 type Tab = "Info" | "Files" | "Rules" | "Plan";
 
-export function SidePanel({ data }: { data: DataContract }) {
+export interface SidePanelProps {
+  data: DataContract;
+  scope: string;
+  onScope?: (scope: string) => void;
+  onSelect?: (id: string) => void;
+}
+
+export function SidePanel({ data, scope, onScope, onSelect }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   return (
     <aside
@@ -13,7 +20,14 @@ export function SidePanel({ data }: { data: DataContract }) {
       <Tabs current={tab} onChange={setTab} />
       <div className="flex-1 overflow-y-auto px-4 py-3.5">
         {tab === "Info" && <InfoTab data={data} />}
-        {tab === "Files" && <FilesTab data={data} />}
+        {tab === "Files" && (
+          <FilesTab
+            data={data}
+            scope={scope}
+            onScope={onScope}
+            onSelect={onSelect}
+          />
+        )}
         {tab === "Rules" && <RulesTab data={data} />}
         {tab === "Plan" && <PlanTab />}
       </div>
@@ -175,31 +189,142 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FilesTab({ data }: { data: DataContract }) {
+interface FilesTabProps {
+  data: DataContract;
+  scope: string;
+  onScope?: (scope: string) => void;
+  onSelect?: (id: string) => void;
+}
+
+function FilesTab({ data, scope, onScope, onSelect }: FilesTabProps) {
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string | null, NodeEntry[]>();
+    for (const n of data.nodes) {
+      const key = n.parent;
+      const arr = m.get(key);
+      if (arr) arr.push(n);
+      else m.set(key, [n]);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        const ak = a.kind === "file" ? 1 : 0;
+        const bk = b.kind === "file" ? 1 : 0;
+        return ak - bk || a.id.localeCompare(b.id);
+      });
+    }
+    return m;
+  }, [data.nodes]);
+
+  // Roots = immediate children of the current drill scope. At scope === ""
+  // that's nodes with parent === null (top-level dirs + top-level files);
+  // when drilled, it's nodes with parent === scope.
+  const rootKey = scope === "" ? null : scope;
+  const roots = childrenByParent.get(rootKey) ?? [];
+  if (roots.length === 0) {
+    return (
+      <p className="m-0 text-[12px] text-muted">No files in this scope.</p>
+    );
+  }
+
   return (
-    <ul className="flex flex-col gap-0.5">
-      {data.nodes
-        .filter((n) => n.kind !== "container")
-        .slice(0, 80)
-        .map((n) => (
-          <li
-            key={n.id}
-            className="flex items-center justify-between rounded-sm px-2 py-1.5 text-[12px] hover:bg-canvas"
-          >
-            <span className="truncate">
-              <span
-                className={
-                  "mr-2 inline-block h-3 w-0.5 rounded-sm align-middle " +
-                  layerAccent(n.layer)
-                }
-              />
-              {n.id}
-            </span>
-            <span className="text-[11px] text-muted">{n.kind}</span>
-          </li>
-        ))}
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+      {roots.map((n) => (
+        <TreeRow
+          key={n.id}
+          node={n}
+          depth={0}
+          childrenByParent={childrenByParent}
+          onScope={onScope}
+          onSelect={onSelect}
+        />
+      ))}
     </ul>
   );
+}
+
+function TreeRow({
+  node,
+  depth,
+  childrenByParent,
+  onScope,
+  onSelect,
+}: {
+  node: NodeEntry;
+  depth: number;
+  childrenByParent: Map<string | null, NodeEntry[]>;
+  onScope?: (scope: string) => void;
+  onSelect?: (id: string) => void;
+}) {
+  // Top-level rows default to expanded so users see the codebase shape
+  // immediately; deeper rows default to collapsed so the tree doesn't
+  // explode.
+  const [expanded, setExpanded] = useState(depth === 0);
+  const children = childrenByParent.get(node.id) ?? [];
+  const isLeaf = node.kind === "file";
+  const label = basename(node.id);
+
+  function onActivate() {
+    if (isLeaf) {
+      onSelect?.(node.id);
+    } else {
+      onScope?.(node.id);
+    }
+  }
+
+  return (
+    <li>
+      <div
+        className="flex cursor-pointer items-center justify-between rounded-sm px-1.5 py-1 text-[12px] hover:bg-canvas"
+        style={{ paddingLeft: `${depth * 12 + 6}px` }}
+      >
+        <button
+          onClick={() => !isLeaf && setExpanded((e) => !e)}
+          className="mr-1 inline-flex h-4 w-4 items-center justify-center text-muted hover:text-text"
+          aria-label={isLeaf ? "Leaf" : expanded ? "Collapse" : "Expand"}
+        >
+          {isLeaf ? "•" : expanded ? "▾" : "▸"}
+        </button>
+        <button
+          onClick={onActivate}
+          title={node.id}
+          className="flex flex-1 min-w-0 items-center gap-2 text-left text-text"
+        >
+          <span
+            className={
+              "inline-block h-3 w-0.5 rounded-sm align-middle " +
+              layerAccent(node.layer)
+            }
+          />
+          <span className="truncate">{label}</span>
+        </button>
+        <span className="ml-2 text-[10px] text-muted">
+          {node.kind === "file"
+            ? "file"
+            : node.kind === "package"
+              ? `${typeof node.metrics.file_count === "number" ? node.metrics.file_count : "?"}f`
+              : "▸"}
+        </span>
+      </div>
+      {!isLeaf && expanded && children.length > 0 && (
+        <ul className="m-0 list-none p-0">
+          {children.map((c) => (
+            <TreeRow
+              key={c.id}
+              node={c}
+              depth={depth + 1}
+              childrenByParent={childrenByParent}
+              onScope={onScope}
+              onSelect={onSelect}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function basename(p: string): string {
+  return p.split("/").filter(Boolean).pop() ?? p;
 }
 
 function RulesTab({ data }: { data: DataContract }) {
