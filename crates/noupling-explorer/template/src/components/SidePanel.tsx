@@ -15,6 +15,12 @@ export interface SidePanelProps {
   onScoreClick?: () => void;
   foldersOnly?: boolean;
   onFoldersOnly?: (b: boolean) => void;
+  /** Current selected issue key (`${kind}-${index}`) — drives the
+   *  sticky selected state on the Issues tab card. Null = nothing. */
+  activeIssueKey?: string | null;
+  /** Called when the user clicks an issue card. The receiver wires
+   *  this into the canvas focus mode (#275). */
+  onIssueFocus?: (issue: Issue | null, key: string | null) => void;
 }
 
 export function SidePanel({
@@ -26,6 +32,8 @@ export function SidePanel({
   onScoreClick,
   foldersOnly,
   onFoldersOnly,
+  activeIssueKey,
+  onIssueFocus,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   const issuesCount =
@@ -65,6 +73,8 @@ export function SidePanel({
             onScope={onScope}
             onSelect={onSelect}
             onSpotFilter={onSpotFilter}
+            activeIssueKey={activeIssueKey ?? null}
+            onIssueFocus={onIssueFocus}
           />
         )}
         {tab === "Rules" && (
@@ -766,9 +776,18 @@ interface IssuesTabProps {
   onSpotFilter?: (
     f: "all" | "in-cycles" | "with-violations" | "gravity-wells",
   ) => void;
+  onIssueFocus?: (issue: Issue | null, key: string | null) => void;
+  activeIssueKey?: string | null;
 }
 
-function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
+function IssuesTab({
+  data,
+  onScope,
+  onSelect,
+  onSpotFilter,
+  onIssueFocus,
+  activeIssueKey,
+}: IssuesTabProps) {
   const items = useMemo(() => buildIssues(data), [data]);
 
   if (items.length === 0) {
@@ -781,32 +800,45 @@ function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
 
   return (
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {items.map((it, i) => (
-        <li key={`${it.kind}-${i}`}>
-          <button
-            onClick={() => {
-              switch (it.kind) {
-                case "violation":
-                  onSpotFilter?.("with-violations");
-                  onSelect?.(it.subject);
-                  break;
-                case "cycle":
-                  onSpotFilter?.("in-cycles");
-                  if (it.subject) onSelect?.(it.subject);
-                  break;
-                case "red-flag":
-                  if (it.scope) onScope?.(it.scope);
-                  if (it.subject) onSelect?.(it.subject);
-                  break;
-                case "gravity-well":
-                  onSpotFilter?.("gravity-wells");
-                  onSelect?.(it.subject);
-                  break;
+      {items.map((it, i) => {
+        const key = `${it.kind}-${i}`;
+        const selected = activeIssueKey === key;
+        return (
+          <li key={key}>
+            <button
+              aria-pressed={selected}
+              onClick={() => {
+                onIssueFocus?.(it, key);
+                // Keep the legacy hooks for tabs/canvas that still use
+                // the spot filter as the "narrow my view" lever.
+                switch (it.kind) {
+                  case "violation":
+                    onSpotFilter?.("with-violations");
+                    onSelect?.(it.subject);
+                    break;
+                  case "cycle":
+                    onSpotFilter?.("in-cycles");
+                    if (it.subject) onSelect?.(it.subject);
+                    break;
+                  case "red-flag":
+                    if (it.scope) onScope?.(it.scope);
+                    if (it.subject) onSelect?.(it.subject);
+                    break;
+                  case "gravity-well":
+                    onSpotFilter?.("gravity-wells");
+                    onSelect?.(it.subject);
+                    break;
+                }
+              }}
+              className={
+                "block w-full rounded-md border bg-canvas px-3 py-2 text-left hover:bg-canvas/60 hover:border-text/30 transition-colors " +
+                (selected
+                  ? "border-l-4 border-l-accent-domain border-border bg-canvas/80"
+                  : "border-border")
               }
-            }}
-            className="block w-full rounded-md border border-border bg-canvas px-3 py-2 text-left hover:bg-pill hover:text-pill-text"
-            title={it.description}
-          >
+              data-issue-key={key}
+              title={it.description}
+            >
             <div className="mb-0.5 flex items-center justify-between">
               <span
                 className={
@@ -830,14 +862,15 @@ function IssuesTab({ data, onScope, onSelect, onSpotFilter }: IssuesTabProps) {
             )}
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
 
 type IssueKind = "violation" | "cycle" | "red-flag" | "gravity-well";
 
-interface Issue {
+export interface Issue {
   kind: IssueKind;
   title: string;
   subtitle?: string;

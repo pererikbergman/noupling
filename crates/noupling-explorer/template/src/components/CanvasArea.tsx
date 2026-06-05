@@ -29,6 +29,8 @@ export interface CanvasAreaProps {
   onCancelPathFinder: () => void;
   pathHighlight: Set<string>;
   minCutHighlight: Set<string>;
+  issueFocusActive: boolean;
+  onCancelIssueFocus: () => void;
 }
 
 const ZOOM_STEP = 1.2;
@@ -53,6 +55,8 @@ export function CanvasArea({
   onCancelPathFinder,
   pathHighlight,
   minCutHighlight,
+  issueFocusActive,
+  onCancelIssueFocus,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
@@ -182,6 +186,25 @@ export function CanvasArea({
 
       {pathFinder.mode !== "idle" && (
         <PathFinderBanner pathFinder={pathFinder} onCancel={onCancelPathFinder} />
+      )}
+
+      {issueFocusActive && (
+        <div
+          role="status"
+          className="absolute left-4 right-4 top-12 z-20 flex items-center justify-between rounded-md border border-edge-violation/40 bg-edge-violation/10 px-3 py-2 text-[12px]"
+        >
+          <span>
+            <strong className="text-edge-violation">Issue focused.</strong>{" "}
+            Canvas scoped to the participants; offending edges highlighted.
+          </span>
+          <button
+            onClick={onCancelIssueFocus}
+            aria-label="Exit issue focus mode"
+            className="rounded-sm px-2 py-0.5 text-[11px] text-muted hover:bg-pill hover:text-pill-text"
+          >
+            Exit (Esc)
+          </button>
+        </div>
       )}
 
       {viewMode === "lsm" ? (
