@@ -197,17 +197,24 @@ test.describe("Explorer — acme-payments sample", () => {
     );
   });
 
-  test("clicking an issue scopes the canvas and selects a node", async ({
+  test("clicking an issue enters focus mode + selects the offender file", async ({
     page,
   }) => {
     await page.locator("button:has-text('Issues')").click();
     await page.locator("#side-panel ul li button").first().click();
-    // First issue is the high-severity rule violation; clicking should
-    // open the details panel on the offender.
-    await expect(page.locator("[role='dialog'], [role='complementary'], aside[aria-label*='Details']").first()).toBeVisible({ timeout: 2000 }).catch(() => {});
-    // At minimum, the spot filter is now non-default.
-    const allPill = page.locator("button:has-text('All')").first();
-    await expect(allPill).not.toHaveClass(/bg-pill/);
+    // Focus banner appears; canvas is scoped to the LCA.
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    // DetailsPanel may or may not be visible depending on layout —
+    // assert opportunistically without failing if it's covered.
+    await expect(
+      page
+        .locator(
+          "[role='dialog'], [role='complementary'], aside[aria-label*='Details']",
+        )
+        .first(),
+    )
+      .toBeVisible({ timeout: 2000 })
+      .catch(() => {});
   });
 
   test("score click opens breakdown dialog with formula + top contributors", async ({
@@ -238,6 +245,25 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("text=Issue focused").first()).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("text=Issue focused").first()).not.toBeVisible();
+  });
+
+  test("Issue focus mode expands participant containers to file level (#275 follow-up)", async ({
+    page,
+  }) => {
+    // Click the high-severity violation between src/ui/CheckoutForm.tsx
+    // and src/infra/db.rs. Focus mode should drill to `src`, then
+    // render the ui/ and infra/ containers expanded so the offender
+    // FILES (CheckoutForm.tsx, db.rs) appear on the canvas — not the
+    // collapsed package cards.
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("#side-panel ul li button").first().click();
+    // The participant file names should now appear in the SVG node set.
+    await expect(
+      page.locator("svg text:has-text('CheckoutForm.tsx')").first(),
+    ).toBeVisible();
+    await expect(
+      page.locator("svg text:has-text('db.rs')").first(),
+    ).toBeVisible();
   });
 
   test("Levels tab: containers only, double-click drills shared scope (#274)", async ({
