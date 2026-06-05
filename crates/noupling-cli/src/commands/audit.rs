@@ -7,8 +7,10 @@ pub fn run(
     use_baseline: bool,
     module_filter: Option<&str>,
 ) -> anyhow::Result<()> {
-    let db = super::find_db(path)?;
-    let snap_repo = noupling_core::storage::repository::SnapshotRepository::new(&db.conn);
+    let session = crate::db_session::DatabaseSession::open(path)?;
+    let snap_repo = session.snapshots();
+    let module_repo = session.modules();
+    let dep_repo = session.dependencies();
 
     let snapshot = match snapshot_id {
         Some(id) => snap_repo
@@ -18,9 +20,6 @@ pub fn run(
             .get_latest()?
             .ok_or_else(|| anyhow::anyhow!("No snapshots found. Run `noupling scan` first."))?,
     };
-
-    let module_repo = noupling_core::storage::repository::ModuleRepository::new(&db.conn);
-    let dep_repo = noupling_core::storage::repository::DependencyRepository::new(&db.conn);
 
     let modules = module_repo.get_by_snapshot(&snapshot.id)?;
     let dependencies = dep_repo.get_by_snapshot(&snapshot.id)?;
@@ -97,7 +96,7 @@ pub fn run(
     }
 
     let pipeline =
-        crate::audit_pipeline::AuditPipeline::new(Path::new(path), &db, &project_settings);
+        crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
     let crate::audit_pipeline::PipelineOutcome { mut result, .. } =
         pipeline.run(crate::audit_pipeline::PipelineOptions {
             snapshot_id: Some(&snapshot.id),
