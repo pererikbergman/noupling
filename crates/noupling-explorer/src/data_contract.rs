@@ -103,13 +103,25 @@ pub(crate) struct CycleEntry {
     pub id: String,
     pub size: usize,
     pub members: Vec<String>,
-    pub minimum_cut: Vec<EdgeRef>,
+    pub minimum_cut: Vec<CutEdge>,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct EdgeRef {
     pub from: String,
     pub to: String,
+}
+
+/// An edge in a cycle's minimum-cut set. Carries the cost of cutting
+/// it (`weight` = imports at this hop) and the heaviest other hop in
+/// the same cycle (`vs_weight`), so the UI can render
+/// `break: A → B (2 vs 14)` and justify the recommendation. Issue #277.
+#[derive(Debug, Serialize)]
+pub(crate) struct CutEdge {
+    pub from: String,
+    pub to: String,
+    pub weight: usize,
+    pub vs_weight: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -546,16 +558,39 @@ fn build_cycles(audit_result: &AuditResult) -> Vec<CycleEntry> {
         .iter()
         .filter(|v| v.is_circular)
         .enumerate()
-        .map(|(i, v)| CycleEntry {
-            id: format!("cycle-{}", i + 1),
-            size: v.cycle_order,
-            members: v.cycle_path.clone(),
-            minimum_cut: v
+        .map(|(i, v)| {
+            // `cycle_hop_counts[k]` is the import count crossing the k-th
+            // hop. `break_cost` already names the minimum; `vs_weight` is
+            // the heaviest *other* hop — what the user pays *not* to cut.
+            // For 2-node cycles this is exactly "the other way"; for
+            // longer cycles it's the strongest remaining segment, which
+            // is the comparison that makes the cut feel justified.
+            let vs_weight = v
+                .cycle_hop_counts
+                .iter()
+                .copied()
+                .filter(|&c| c != v.break_cost)
+                .max()
+                .unwrap_or(v.break_cost);
+            let minimum_cut = v
                 .weakest_link
                 .as_ref()
                 .and_then(|wl| parse_weakest_link(wl))
-                .map(|(f, t)| vec![EdgeRef { from: f, to: t }])
-                .unwrap_or_default(),
+                .map(|(f, t)| {
+                    vec![CutEdge {
+                        from: f,
+                        to: t,
+                        weight: v.break_cost,
+                        vs_weight,
+                    }]
+                })
+                .unwrap_or_default();
+            CycleEntry {
+                id: format!("cycle-{}", i + 1),
+                size: v.cycle_order,
+                members: v.cycle_path.clone(),
+                minimum_cut,
+            }
         })
         .collect()
 }

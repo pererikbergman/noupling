@@ -77,7 +77,7 @@
       "id": "cycle-1",
       "size": 2,
       "members": ["src/infra/email.rs", "src/domain/user.rs"],
-      "minimum_cut": [{ "from": "src/infra/email.rs", "to": "src/domain/user.rs" }]
+      "minimum_cut": [{ "from": "src/infra/email.rs", "to": "src/domain/user.rs", "weight": 2, "vs_weight": 14 }]
     }
   ],
   "violations": [

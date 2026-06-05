@@ -228,6 +228,9 @@ fn cycles_emit_from_circular_violations_with_id_and_members() {
             v.cycle_path = vec!["a".into(), "b".into(), "c".into()];
             v.cycle_order = 3;
             v.weakest_link = Some("c -> a (1 imports)".into());
+            // 3 hops: a→b=14, b→c=8, c→a=1 → break_cost=1, vs_weight=14.
+            v.cycle_hop_counts = vec![14, 8, 1];
+            v.break_cost = 1;
             v
         }])
         .build();
@@ -249,6 +252,13 @@ fn cycles_emit_from_circular_violations_with_id_and_members() {
     assert_eq!(cycles[0]["size"], 3);
     let members = cycles[0]["members"].as_array().unwrap();
     assert_eq!(members.len(), 3);
+    // #277: minimum_cut entries now carry weight + vs_weight so the UI
+    // can render `break: c → a (1 vs 14)`.
+    let cut = &cycles[0]["minimum_cut"][0];
+    assert_eq!(cut["from"], "c");
+    assert_eq!(cut["to"], "a");
+    assert_eq!(cut["weight"], 1);
+    assert_eq!(cut["vs_weight"], 14);
 }
 
 #[test]

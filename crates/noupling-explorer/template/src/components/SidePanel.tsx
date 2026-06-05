@@ -696,8 +696,14 @@ function buildIssues(data: DataContract): Issue[] {
   const cycles: Issue[] = data.cycles.map((c) => ({
     kind: "cycle",
     title: c.members.map(basename).join(" → "),
-    subtitle: c.members.join(" → "),
-    description: `Cycle of ${c.size} modules — break "${c.minimum_cut[0]?.from ?? c.members[0]} → ${c.minimum_cut[0]?.to ?? c.members[1] ?? ""}" to resolve`,
+    // Subtitle surfaces the *break* edge from the minimum cut, not the
+    // full traversal path — the full path used to imply that every
+    // hop was equally guilty (bug #277). The 2-vs-14 contrast tells
+    // you *why* the recommendation favours this side.
+    subtitle: cycleSubtitle(c),
+    // Tooltip carries the full traversal path so it isn't lost; the
+    // DetailsPanel cycle section is the proper home for it.
+    description: c.members.join(" → "),
     subject: c.members[0],
     metric: `size ${c.size}`,
   }));
@@ -752,6 +758,32 @@ function kindClass(kind: IssueKind, severity?: "low" | "medium" | "high"): strin
   if (kind === "cycle") return "bg-edge-cycle/20 text-edge-cycle";
   if (kind === "gravity-well") return "bg-accent-infra/20 text-accent-infra";
   return "bg-accent-ui/20 text-accent-ui";
+}
+
+/**
+ * Cycle-row subtitle. Renders the break edge with weight contrast
+ * (`break: A → B (2 vs 14)`) so the recommendation is justified.
+ * 2-node cycles where both directions are equally weighted render as
+ * `A ⇄ B (equal weight)` — the data doesn't support picking a side.
+ */
+function cycleSubtitle(c: {
+  members: string[];
+  minimum_cut: { from: string; to: string; weight: number; vs_weight: number }[];
+  size: number;
+}): string {
+  const cut = c.minimum_cut[0];
+  if (!cut) {
+    // No min-cut emitted (analyzer fallback path). Show the first hop.
+    return `break: ${basename(c.members[0])} → ${basename(c.members[1] ?? "")}`;
+  }
+  const from = basename(cut.from);
+  const to = basename(cut.to);
+  // 2-node cycle with equal weights either direction → don't fake a
+  // preference. cycle_order is the dir count; size==2 catches mutual.
+  if (c.size === 2 && cut.weight === cut.vs_weight) {
+    return `${from} ⇄ ${to} (equal weight)`;
+  }
+  return `break: ${from} → ${to} (${cut.weight} vs ${cut.vs_weight})`;
 }
 
 function humaniseFlag(flag: string): string {

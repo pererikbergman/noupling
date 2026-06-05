@@ -116,7 +116,14 @@ export interface CycleEntry {
   id: string;
   size: number;
   members: string[];
-  minimum_cut: Array<{ from: string; to: string }>;
+  minimum_cut: CutEdge[];
+}
+
+export interface CutEdge {
+  from: string;
+  to: string;
+  weight: number;
+  vs_weight: number;
 }
 
 export interface ViolationEntry {

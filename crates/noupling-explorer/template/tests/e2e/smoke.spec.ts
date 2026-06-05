@@ -179,6 +179,19 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("cycle issue row shows 'break: A → B (N vs M)', not full path (#277)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // Sample cycle's min-cut is email.rs → user.rs with weight 2 vs 14.
+    await expect(
+      page
+        .locator("#side-panel")
+        .locator("text=/break: .*\\(2 vs 14\\)/")
+        .first(),
+    ).toBeVisible();
+  });
+
   test("Info tab shows prominent score block above everything else (#272)", async ({
     page,
   }) => {
