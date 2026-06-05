@@ -44,6 +44,32 @@ pub struct RenderOptions {
     /// through so noupling-explorer doesn't depend on the storage
     /// layer directly.
     pub history: Vec<HistoryEntry>,
+    /// LLM-generated module enrichment loaded from
+    /// `.noupling/enrichment/modules.json` (PR #280). Keyed by module
+    /// path; merged into each node's `metrics.llm` block at render
+    /// time. Skipped (left as `None` on the node) for any module
+    /// whose enrichment is missing or stale.
+    pub module_enrichment: Vec<ModuleEnrichmentEntry>,
+}
+
+/// One per-container enrichment record written by a skill into
+/// `.noupling/enrichment/modules.json`. Schema versioned so the
+/// renderer can warn-and-ignore newer-version entries.
+#[derive(Debug, Clone)]
+pub struct ModuleEnrichmentEntry {
+    /// Module path the entry annotates — must match `NodeEntry.id`.
+    pub module_path: String,
+    /// One-line natural-language purpose ("Payment processing", etc.).
+    pub summary: Option<String>,
+    /// Longer responsibility description (multi-sentence).
+    pub responsibility: Option<String>,
+    /// Tags / classifications the skill chose (e.g. "domain", "test").
+    pub tags: Vec<String>,
+    /// ISO-8601 timestamp when the skill generated this entry. Used
+    /// by the Explorer to surface staleness.
+    pub generated_at: Option<String>,
+    /// LLM identifier (model name) — for provenance.
+    pub model: Option<String>,
 }
 
 /// One historical snapshot the Explorer's scrubber can navigate to.
@@ -62,6 +88,7 @@ impl Default for RenderOptions {
             include_history: true,
             layers_auto_detected: false,
             history: Vec::new(),
+            module_enrichment: Vec::new(),
         }
     }
 }

@@ -226,12 +226,19 @@ pub fn run(
                 })
                 .collect();
 
+            // #280: load optional per-module LLM enrichment from
+            // .noupling/enrichment/modules.json. Skipped entirely if
+            // the file doesn't exist; warn-and-skip on parse errors so
+            // a broken sidecar can't break report generation.
+            let module_enrichment = load_module_enrichment(Path::new(path));
+
             let mut options = noupling_explorer::RenderOptions {
                 editor: explorer_editor.map(str::to_string),
                 title: explorer_title.map(str::to_string),
                 include_history: !explorer_no_history,
                 layers_auto_detected: false,
                 history,
+                module_enrichment,
             };
             // Resolve the codebase root to an absolute path so the template's
             // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at
@@ -499,4 +506,95 @@ fn generate_single_format(
         _ => anyhow::bail!("unknown format"),
     }
     Ok(())
+}
+
+/// Read per-module LLM enrichment from
+/// `.noupling/enrichment/modules.json`. Returns an empty list if the
+/// file is absent or unparseable; logs a warning on parse failure so
+/// a broken sidecar doesn't block report generation (PR #280).
+///
+/// Schema:
+/// ```json
+/// {
+///   "schema_version": 1,
+///   "entries": [
+///     {
+///       "module_path": "src/payments",
+///       "summary": "Payment processing",
+///       "responsibility": "Drives Stripe / Adyen / cash flows…",
+///       "tags": ["domain"],
+///       "generated_at": "2026-06-05T10:32:01Z",
+///       "model": "claude-opus-4-7"
+///     }
+///   ]
+/// }
+/// ```
+fn load_module_enrichment(
+    project_path: &std::path::Path,
+) -> Vec<noupling_explorer::ModuleEnrichmentEntry> {
+    let path = project_path
+        .join(".noupling")
+        .join("enrichment")
+        .join("modules.json");
+    if !path.exists() {
+        return Vec::new();
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "warning: failed to read {}: {} — Composition view will use derived metadata only",
+                path.display(),
+                e
+            );
+            return Vec::new();
+        }
+    };
+    let parsed: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!(
+                "warning: {} is not valid JSON: {} — Composition view will use derived metadata only",
+                path.display(),
+                e
+            );
+            return Vec::new();
+        }
+    };
+    let entries = parsed
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    entries
+        .into_iter()
+        .filter_map(|e| {
+            let path = e.get("module_path")?.as_str()?.to_string();
+            Some(noupling_explorer::ModuleEnrichmentEntry {
+                module_path: path,
+                summary: e
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                responsibility: e
+                    .get("responsibility")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                tags: e
+                    .get("tags")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                generated_at: e
+                    .get("generated_at")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+                model: e.get("model").and_then(|v| v.as_str()).map(str::to_string),
+            })
+        })
+        .collect()
 }

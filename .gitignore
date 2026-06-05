@@ -17,5 +17,9 @@ Thumbs.db
 
 # Runtime
 .noupling/
+# Carve-out: LLM enrichment is meant to be committed (slow + paid to
+# regenerate; CI checkouts should pick it up). See #280 / the
+# noupling-describe-modules skill in docs/llm-prompts/.
+!.noupling/enrichment/
 .claude/
 docs/.DS_Store

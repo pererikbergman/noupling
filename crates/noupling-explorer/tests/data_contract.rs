@@ -581,6 +581,36 @@ fn score_breakdown_explains_the_health_score_math() {
 }
 
 #[test]
+fn module_enrichment_merges_into_node_metrics_llm_block() {
+    let (settings, snapshot) = default_inputs();
+    let audit = AuditResultBuilder::new().build();
+    let modules = vec![file("a.rs", "src/payments/a.rs")];
+    let options = RenderOptions {
+        module_enrichment: vec![noupling_explorer::ModuleEnrichmentEntry {
+            module_path: "src/payments".into(),
+            summary: Some("Payment processing core".into()),
+            responsibility: Some("Drives Stripe and Adyen flows.".into()),
+            tags: vec!["domain".into()],
+            generated_at: Some("2026-06-05T10:32:01Z".into()),
+            model: Some("claude-opus-4-7".into()),
+        }],
+        ..Default::default()
+    };
+
+    let html =
+        render(&modules, &[], &audit, &settings, &snapshot, &options).expect("render must succeed");
+    let contract = extract_data_contract(&html);
+    let nodes = contract["nodes"].as_array().unwrap();
+    let payments = nodes
+        .iter()
+        .find(|n| n["id"] == "src/payments")
+        .expect("package node must exist");
+    let llm = &payments["metrics"]["llm"];
+    assert_eq!(llm["summary"], "Payment processing core");
+    assert_eq!(llm["tags"][0], "domain");
+}
+
+#[test]
 fn codebase_counts_module_file_edge_from_inputs() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().with_total_modules(3).build();
