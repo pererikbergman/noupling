@@ -256,11 +256,17 @@ pub(crate) fn build(
                 recommendation: f.recommendation.clone(),
             })
             .collect(),
-        // `include_history` is plumbed for future use; for now the
-        // history block is always empty because we don't yet read prior
-        // snapshots from storage here. Wired in a later slice.
-        history: {
-            let _ = options.include_history;
+        history: if options.include_history {
+            options
+                .history
+                .iter()
+                .map(|h| HistoryEntry {
+                    snapshot_id: h.snapshot_id.clone(),
+                    taken_at: h.taken_at.clone(),
+                    health_score: h.health_score,
+                })
+                .collect()
+        } else {
             Vec::new()
         },
     }

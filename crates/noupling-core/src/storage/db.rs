@@ -38,7 +38,8 @@ impl Database {
                 root_path TEXT NOT NULL,
                 suppressed_count INTEGER NOT NULL DEFAULT 0,
                 diff_base TEXT,
-                diff_changed_files TEXT
+                diff_changed_files TEXT,
+                health_score REAL
             );
 
             CREATE TABLE IF NOT EXISTS modules (
@@ -75,6 +76,12 @@ impl Database {
         let _ = self
             .conn
             .execute_batch("ALTER TABLE snapshots ADD COLUMN diff_changed_files TEXT;");
+        // Health score is recorded after each audit so the Explorer's
+        // history scrubber (PRD §10.5) can render a trend without
+        // re-running audits on every prior snapshot.
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE snapshots ADD COLUMN health_score REAL;");
         Ok(())
     }
 }
@@ -141,7 +148,8 @@ mod tests {
                 "root_path",
                 "suppressed_count",
                 "diff_base",
-                "diff_changed_files"
+                "diff_changed_files",
+                "health_score",
             ]
         );
     }
