@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
+import { DrillBreadcrumb } from "./DrillBreadcrumb";
 
 type Tab = "Info" | "Files" | "Issues" | "Rules";
 
@@ -12,6 +13,8 @@ export interface SidePanelProps {
     f: "all" | "in-cycles" | "with-violations" | "gravity-wells",
   ) => void;
   onScoreClick?: () => void;
+  foldersOnly?: boolean;
+  onFoldersOnly?: (b: boolean) => void;
 }
 
 export function SidePanel({
@@ -21,6 +24,8 @@ export function SidePanel({
   onSelect,
   onSpotFilter,
   onScoreClick,
+  foldersOnly,
+  onFoldersOnly,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   const issuesCount =
@@ -42,6 +47,8 @@ export function SidePanel({
             scope={scope}
             onScope={onScope}
             onSelect={onSelect}
+            foldersOnly={foldersOnly ?? false}
+            onFoldersOnly={onFoldersOnly}
           />
         )}
         {tab === "Issues" && (
@@ -445,9 +452,18 @@ interface FilesTabProps {
   scope: string;
   onScope?: (scope: string) => void;
   onSelect?: (id: string) => void;
+  foldersOnly: boolean;
+  onFoldersOnly?: (b: boolean) => void;
 }
 
-function FilesTab({ data, scope, onScope, onSelect }: FilesTabProps) {
+function FilesTab({
+  data,
+  scope,
+  onScope,
+  onSelect,
+  foldersOnly,
+  onFoldersOnly,
+}: FilesTabProps) {
   const childrenByParent = useMemo(() => {
     const m = new Map<string | null, NodeEntry[]>();
     for (const n of data.nodes) {
@@ -470,26 +486,52 @@ function FilesTab({ data, scope, onScope, onSelect }: FilesTabProps) {
   // that's nodes with parent === null (top-level dirs + top-level files);
   // when drilled, it's nodes with parent === scope.
   const rootKey = scope === "" ? null : scope;
-  const roots = childrenByParent.get(rootKey) ?? [];
-  if (roots.length === 0) {
-    return (
-      <p className="m-0 text-[12px] text-muted">No files in this scope.</p>
-    );
-  }
+  const rawRoots = childrenByParent.get(rootKey) ?? [];
+  const roots = foldersOnly
+    ? rawRoots.filter((n) => n.kind !== "file")
+    : rawRoots;
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-      {roots.map((n) => (
-        <TreeRow
-          key={n.id}
-          node={n}
-          depth={0}
-          childrenByParent={childrenByParent}
-          onScope={onScope}
-          onSelect={onSelect}
-        />
-      ))}
-    </ul>
+    <div>
+      <DrillBreadcrumb scope={scope} onScope={(s) => onScope?.(s)} />
+      {onFoldersOnly && (
+        <div className="mb-2 flex items-center justify-between text-[11px]">
+          <span className="text-muted">
+            Showing {foldersOnly ? "folders only" : "files + folders"}
+          </span>
+          <button
+            onClick={() => onFoldersOnly(!foldersOnly)}
+            aria-pressed={foldersOnly}
+            className={
+              "rounded-sm border border-border px-2 py-0.5 hover:bg-pill " +
+              (foldersOnly ? "bg-pill text-pill-text" : "text-muted")
+            }
+            title="Toggle whether file leaves are shown"
+          >
+            {foldersOnly ? "Show files" : "Hide files"}
+          </button>
+        </div>
+      )}
+      {roots.length === 0 ? (
+        <p className="m-0 text-[12px] text-muted">
+          {foldersOnly ? "No folders in this scope." : "No files in this scope."}
+        </p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+          {roots.map((n) => (
+            <TreeRow
+              key={n.id}
+              node={n}
+              depth={0}
+              childrenByParent={childrenByParent}
+              onScope={onScope}
+              onSelect={onSelect}
+              foldersOnly={foldersOnly}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -499,27 +541,37 @@ function TreeRow({
   childrenByParent,
   onScope,
   onSelect,
+  foldersOnly,
 }: {
   node: NodeEntry;
   depth: number;
   childrenByParent: Map<string | null, NodeEntry[]>;
   onScope?: (scope: string) => void;
   onSelect?: (id: string) => void;
+  foldersOnly: boolean;
 }) {
   // Top-level rows default to expanded so users see the codebase shape
   // immediately; deeper rows default to collapsed so the tree doesn't
   // explode.
   const [expanded, setExpanded] = useState(depth === 0);
-  const children = childrenByParent.get(node.id) ?? [];
+  const rawChildren = childrenByParent.get(node.id) ?? [];
+  const children = foldersOnly
+    ? rawChildren.filter((n) => n.kind !== "file")
+    : rawChildren;
   const isLeaf = node.kind === "file";
   const label = basename(node.id);
 
+  // #273: body click expands inline (was: drills scope). Double-click
+  // is the deliberate drill gesture, so accidental drilling stops.
   function onActivate() {
     if (isLeaf) {
       onSelect?.(node.id);
     } else {
-      onScope?.(node.id);
+      setExpanded((e) => !e);
     }
+  }
+  function onDeepDrill() {
+    if (!isLeaf) onScope?.(node.id);
   }
 
   return (
@@ -527,6 +579,7 @@ function TreeRow({
       <div
         className="flex cursor-pointer items-center justify-between rounded-sm px-1.5 py-1 text-[12px] hover:bg-canvas"
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
+        onDoubleClick={onDeepDrill}
       >
         <button
           onClick={() => !isLeaf && setExpanded((e) => !e)}
@@ -537,7 +590,7 @@ function TreeRow({
         </button>
         <button
           onClick={onActivate}
-          title={node.id}
+          title={isLeaf ? node.id : `${node.id} — double-click to drill`}
           className="flex flex-1 min-w-0 items-center gap-2 text-left text-text"
         >
           <span
@@ -548,6 +601,16 @@ function TreeRow({
           />
           <span className="truncate">{label}</span>
         </button>
+        {!isLeaf && (
+          <button
+            onClick={onDeepDrill}
+            aria-label={`Drill into ${label}`}
+            title="Drill into this folder (changes shared scope)"
+            className="ml-1 rounded-sm px-1 text-[10px] text-muted hover:bg-pill hover:text-pill-text"
+          >
+            ↘
+          </button>
+        )}
         <span className="ml-2 text-[10px] text-muted">
           {node.kind === "file"
             ? "file"
@@ -566,6 +629,7 @@ function TreeRow({
               childrenByParent={childrenByParent}
               onScope={onScope}
               onSelect={onSelect}
+              foldersOnly={foldersOnly}
             />
           ))}
         </ul>

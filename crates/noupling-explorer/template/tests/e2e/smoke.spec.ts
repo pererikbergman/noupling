@@ -179,6 +179,40 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
   });
 
+  test("Files tab: double-click drills, in-tab breadcrumb navigates back, Hide files persists (#273)", async ({
+    page,
+    context,
+  }) => {
+    // Open Files tab; click a folder body (should expand, not drill);
+    // verify scope unchanged. Then double-click → drill.
+    await page.locator("button:has-text('Files')").click();
+    // The sample wraps under src/; first row is src.
+    const srcRow = page
+      .locator("#side-panel button[title*='double-click to drill']")
+      .first();
+    await srcRow.click(); // single click expands only — no drill
+    await expect(
+      page.locator("#side-panel button:has-text('Up to')"),
+    ).toHaveCount(0);
+    // Double-click drills the shared scope; breadcrumb appears.
+    await srcRow.dblclick();
+    await expect(
+      page.locator("#side-panel button[aria-label*='Up to']").first(),
+    ).toBeVisible();
+    // Folders-only toggle.
+    const toggle = page.locator("button:has-text('Hide files')").first();
+    await toggle.click();
+    await expect(
+      page.locator("button:has-text('Show files')").first(),
+    ).toBeVisible();
+    // Reload — toggle state persists.
+    await page.reload();
+    await page.locator("button:has-text('Files')").click();
+    await expect(
+      page.locator("button:has-text('Show files')").first(),
+    ).toBeVisible();
+  });
+
   test("DetailsPanel shows 'About this verdict' explainer + per-instance numbers (#276)", async ({
     page,
   }) => {
