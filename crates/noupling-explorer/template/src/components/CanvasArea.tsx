@@ -272,6 +272,7 @@ export function CanvasArea({
           <ForceView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
+            clusters={data.clusters}
             onNodeClick={onNodeClick}
           />
         </div>

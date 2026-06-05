@@ -23,6 +23,14 @@ export interface DataContract {
   gravity_wells: GravityWellEntry[];
   red_flags: RedFlagEntry[];
   history: HistoryEntry[];
+  /** Pre-computed Force-view module clusters (#278 follow-up).
+   *  Tightly coupled groups detected in Rust via label propagation. */
+  clusters: ClusterEntry[];
+}
+
+export interface ClusterEntry {
+  id: string;
+  members: string[];
 }
 
 export interface ScoreBreakdown {

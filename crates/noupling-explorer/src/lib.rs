@@ -15,10 +15,12 @@ use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::settings::Settings;
 
 mod auto_layers;
+mod clusters;
 mod data_contract;
 mod render;
 
 pub use auto_layers::detect_layers;
+pub use clusters::ClusterEntry as ComputedClusterEntry;
 
 /// Options controlling how the Explorer report is generated.
 ///
