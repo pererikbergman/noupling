@@ -222,49 +222,156 @@ pub(crate) fn build(
     snapshot: &Snapshot,
     options: &RenderOptions,
 ) -> DataContract {
-    DataContract {
-        format_version: 1,
-        noupling_version: env!("CARGO_PKG_VERSION").to_string(),
-        generated_at: snapshot.timestamp.clone(),
-        report_options: ReportOptions {
-            editor: options.editor.clone(),
-            title: options.title.clone(),
-        },
-        layers_auto_detected: options.layers_auto_detected,
-        codebase: build_codebase(modules, dependencies, audit_result, snapshot),
-        health_score: audit_result.score,
-        score_breakdown: build_score_breakdown(audit_result),
-        summary_counts: SummaryCounts {
-            violations: audit_result.violations.len(),
-            cycles: audit_result
+    ContractBuilder::new(
+        modules,
+        dependencies,
+        audit_result,
+        settings,
+        snapshot,
+        options,
+    )
+    .build()
+}
+
+/// Holds the six inputs the Data Contract needs once, then exposes a
+/// method per stage. Issue #303. The seam is "what fields the
+/// contract is built from" — invariant across stages, kept in one
+/// struct instead of plumbed through every helper signature.
+///
+/// Stages can be inspected in isolation in tests (`builder.score_breakdown()`)
+/// without re-running the full `build()` orchestrator.
+pub(crate) struct ContractBuilder<'a> {
+    modules: &'a [Module],
+    dependencies: &'a [Dependency],
+    audit_result: &'a AuditResult,
+    settings: &'a Settings,
+    snapshot: &'a Snapshot,
+    options: &'a RenderOptions,
+}
+
+impl<'a> ContractBuilder<'a> {
+    pub(crate) fn new(
+        modules: &'a [Module],
+        dependencies: &'a [Dependency],
+        audit_result: &'a AuditResult,
+        settings: &'a Settings,
+        snapshot: &'a Snapshot,
+        options: &'a RenderOptions,
+    ) -> Self {
+        Self {
+            modules,
+            dependencies,
+            audit_result,
+            settings,
+            snapshot,
+            options,
+        }
+    }
+
+    /// Run every stage and assemble the contract. The orchestration
+    /// order is explicit here, instead of implicit in a struct literal.
+    pub(crate) fn build(&self) -> DataContract {
+        DataContract {
+            format_version: 1,
+            noupling_version: env!("CARGO_PKG_VERSION").to_string(),
+            generated_at: self.snapshot.timestamp.clone(),
+            report_options: self.report_options(),
+            layers_auto_detected: self.options.layers_auto_detected,
+            codebase: self.codebase(),
+            health_score: self.audit_result.score,
+            score_breakdown: self.score_breakdown(),
+            summary_counts: self.summary_counts(),
+            layers: self.layers(),
+            dependency_rules: self.dependency_rules(),
+            effective_rules: self.effective_rules(),
+            nodes: self.nodes(),
+            edges: self.edges(),
+            cycles: self.cycles(),
+            violations: self.violations(),
+            gravity_wells: self.gravity_wells(),
+            red_flags: self.red_flags(),
+            history: self.history(),
+            clusters: self.clusters(),
+        }
+    }
+
+    pub(crate) fn report_options(&self) -> ReportOptions {
+        ReportOptions {
+            editor: self.options.editor.clone(),
+            title: self.options.title.clone(),
+        }
+    }
+
+    pub(crate) fn codebase(&self) -> Codebase {
+        build_codebase(
+            self.modules,
+            self.dependencies,
+            self.audit_result,
+            self.snapshot,
+        )
+    }
+
+    pub(crate) fn score_breakdown(&self) -> ScoreBreakdown {
+        build_score_breakdown(self.audit_result)
+    }
+
+    pub(crate) fn summary_counts(&self) -> SummaryCounts {
+        SummaryCounts {
+            violations: self.audit_result.violations.len(),
+            cycles: self
+                .audit_result
                 .violations
                 .iter()
                 .filter(|v| v.is_circular)
                 .count(),
-            gravity_wells: audit_result.gravity_wells.len(),
-            red_flags: audit_result.red_flags.len(),
-        },
-        layers: build_layers(&settings.layers, modules, dependencies),
-        dependency_rules: build_dependency_rules(&settings.dependency_rules),
-        effective_rules: build_effective_rules(
-            &settings.layers,
-            &settings.dependency_rules,
-            audit_result,
-        ),
-        nodes: merge_enrichment(
+            gravity_wells: self.audit_result.gravity_wells.len(),
+            red_flags: self.audit_result.red_flags.len(),
+        }
+    }
+
+    pub(crate) fn layers(&self) -> Vec<LayerEntry> {
+        build_layers(&self.settings.layers, self.modules, self.dependencies)
+    }
+
+    pub(crate) fn dependency_rules(&self) -> Vec<DependencyRuleEntry> {
+        build_dependency_rules(&self.settings.dependency_rules)
+    }
+
+    pub(crate) fn effective_rules(&self) -> Vec<EffectiveRuleEntry> {
+        build_effective_rules(
+            &self.settings.layers,
+            &self.settings.dependency_rules,
+            self.audit_result,
+        )
+    }
+
+    pub(crate) fn nodes(&self) -> Vec<NodeEntry> {
+        merge_enrichment(
             build_nodes(
-                &settings.layers,
-                modules,
-                dependencies,
-                audit_result,
-                &snapshot.root_path,
+                &self.settings.layers,
+                self.modules,
+                self.dependencies,
+                self.audit_result,
+                &self.snapshot.root_path,
             ),
-            &options.module_enrichment,
-        ),
-        edges: build_edges(modules, dependencies, audit_result),
-        cycles: build_cycles(audit_result),
-        violations: build_violations(audit_result),
-        gravity_wells: audit_result
+            &self.options.module_enrichment,
+        )
+    }
+
+    pub(crate) fn edges(&self) -> Vec<EdgeEntry> {
+        build_edges(self.modules, self.dependencies, self.audit_result)
+    }
+
+    pub(crate) fn cycles(&self) -> Vec<CycleEntry> {
+        build_cycles(self.audit_result)
+    }
+
+    pub(crate) fn violations(&self) -> Vec<ViolationEntry> {
+        build_violations(self.audit_result)
+    }
+
+    pub(crate) fn gravity_wells(&self) -> Vec<GravityWellEntry> {
+        self.audit_result
             .gravity_wells
             .iter()
             .map(|g| GravityWellEntry {
@@ -272,8 +379,11 @@ pub(crate) fn build(
                 total_rri: g.total_rri,
                 relationship_count: g.relationship_count,
             })
-            .collect(),
-        red_flags: audit_result
+            .collect()
+    }
+
+    pub(crate) fn red_flags(&self) -> Vec<RedFlagEntry> {
+        self.audit_result
             .red_flags
             .iter()
             .map(|f| RedFlagEntry {
@@ -282,27 +392,32 @@ pub(crate) fn build(
                 rri: f.rri,
                 recommendation: f.recommendation.clone(),
             })
-            .collect(),
-        history: if options.include_history {
-            options
-                .history
-                .iter()
-                .map(|h| HistoryEntry {
-                    snapshot_id: h.snapshot_id.clone(),
-                    taken_at: h.taken_at.clone(),
-                    health_score: h.health_score,
-                })
-                .collect()
-        } else {
-            Vec::new()
-        },
-        clusters: crate::clusters::detect_clusters(modules, dependencies)
+            .collect()
+    }
+
+    pub(crate) fn history(&self) -> Vec<HistoryEntry> {
+        if !self.options.include_history {
+            return Vec::new();
+        }
+        self.options
+            .history
+            .iter()
+            .map(|h| HistoryEntry {
+                snapshot_id: h.snapshot_id.clone(),
+                taken_at: h.taken_at.clone(),
+                health_score: h.health_score,
+            })
+            .collect()
+    }
+
+    pub(crate) fn clusters(&self) -> Vec<ClusterEntry> {
+        crate::clusters::detect_clusters(self.modules, self.dependencies)
             .into_iter()
             .map(|c| ClusterEntry {
                 id: c.id,
                 members: c.members,
             })
-            .collect(),
+            .collect()
     }
 }
 
@@ -897,5 +1012,92 @@ fn build_codebase(
         file_count: files.len(),
         edge_count: dependencies.len(),
         language_distribution,
+    }
+}
+
+#[cfg(test)]
+mod builder_tests {
+    //! Per-stage isolation tests for `ContractBuilder`. Each test
+    //! constructs a builder and asks for one stage — the previous
+    //! end-to-end style had to run all sixteen stages through
+    //! `render()` to assert on any single field.
+
+    use super::*;
+    use noupling_core::analyzer::{AuditResultBuilder, GravityWell, RedFlag, RedFlagType};
+    use noupling_core::core::Snapshot;
+
+    fn default_inputs() -> (Settings, Snapshot) {
+        let settings: Settings = serde_json::from_str("{}").expect("default settings");
+        let snapshot = Snapshot {
+            id: "snap".into(),
+            timestamp: "2026-06-05T00:00:00".into(),
+            root_path: "/tmp".into(),
+        };
+        (settings, snapshot)
+    }
+
+    #[test]
+    fn summary_counts_isolates_one_stage_without_running_the_rest() {
+        let (settings, snapshot) = default_inputs();
+        let audit = AuditResultBuilder::new()
+            .with_gravity_wells(vec![GravityWell {
+                module_path: "infra/db".into(),
+                total_rri: 12.0,
+                relationship_count: 4,
+                downward_rri: 0.0,
+                sibling_rri: 0.0,
+                upward_rri: 12.0,
+                circular_rri: 0.0,
+                direction_count: 1,
+            }])
+            .with_red_flags(vec![RedFlag {
+                flag_type: RedFlagType::FusedSibling,
+                modules: vec!["a".into(), "b".into()],
+                rri: 5.0,
+                recommendation: "merge".into(),
+            }])
+            .build();
+        let options = RenderOptions::default();
+        let builder = ContractBuilder::new(&[], &[], &audit, &settings, &snapshot, &options);
+
+        // No call to .build() — just one stage in isolation.
+        let counts = builder.summary_counts();
+        assert_eq!(counts.gravity_wells, 1);
+        assert_eq!(counts.red_flags, 1);
+        assert_eq!(counts.cycles, 0);
+    }
+
+    #[test]
+    fn history_stage_emits_empty_when_include_history_false() {
+        let (settings, snapshot) = default_inputs();
+        let audit = AuditResultBuilder::new().build();
+        let options = RenderOptions {
+            include_history: false,
+            history: vec![crate::HistoryEntry {
+                snapshot_id: "s1".into(),
+                taken_at: "t".into(),
+                health_score: 80.0,
+            }],
+            ..Default::default()
+        };
+        let builder = ContractBuilder::new(&[], &[], &audit, &settings, &snapshot, &options);
+
+        assert!(builder.history().is_empty());
+    }
+
+    #[test]
+    fn report_options_stage_passes_editor_and_title_through() {
+        let (settings, snapshot) = default_inputs();
+        let audit = AuditResultBuilder::new().build();
+        let options = RenderOptions {
+            editor: Some("vscode".into()),
+            title: Some("acme".into()),
+            ..Default::default()
+        };
+        let builder = ContractBuilder::new(&[], &[], &audit, &settings, &snapshot, &options);
+
+        let ro = builder.report_options();
+        assert_eq!(ro.editor.as_deref(), Some("vscode"));
+        assert_eq!(ro.title.as_deref(), Some("acme"));
     }
 }
