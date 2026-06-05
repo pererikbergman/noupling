@@ -50,7 +50,13 @@ export function SidePanel({
             onSpotFilter={onSpotFilter}
           />
         )}
-        {tab === "Rules" && <RulesTab data={data} onSpotFilter={onSpotFilter} />}
+        {tab === "Rules" && (
+          <RulesTab
+            data={data}
+            onSpotFilter={onSpotFilter}
+            onSelect={onSelect}
+          />
+        )}
       </div>
     </aside>
   );
@@ -568,11 +574,13 @@ function humaniseFlag(flag: string): string {
 function RulesTab({
   data,
   onSpotFilter,
+  onSelect,
 }: {
   data: DataContract;
   onSpotFilter?: (
     f: "all" | "in-cycles" | "with-violations" | "gravity-wells",
   ) => void;
+  onSelect?: (id: string) => void;
 }) {
   if (data.effective_rules.length === 0) {
     return (
@@ -601,7 +609,15 @@ function RulesTab({
           <li key={i}>
             <button
               onClick={() => {
-                if (broken) onSpotFilter?.("with-violations");
+                if (!broken) return;
+                onSpotFilter?.("with-violations");
+                // Jump to the first concrete offender of this rule so the
+                // user lands on something — not just "filter is now
+                // active, hunt around."
+                const first = data.violations.find(
+                  (v) => v.rule.from === r.from && v.rule.to === r.to,
+                );
+                if (first) onSelect?.(first.edge.from);
               }}
               disabled={!broken}
               className={
