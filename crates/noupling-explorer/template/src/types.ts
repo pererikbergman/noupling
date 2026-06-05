@@ -11,6 +11,7 @@ export interface DataContract {
   layers_auto_detected: boolean;
   codebase: Codebase;
   health_score: number;
+  score_breakdown: ScoreBreakdown;
   summary_counts: SummaryCounts;
   layers: LayerEntry[];
   dependency_rules: DependencyRule[];
@@ -22,6 +23,22 @@ export interface DataContract {
   gravity_wells: GravityWellEntry[];
   red_flags: RedFlagEntry[];
   history: HistoryEntry[];
+}
+
+export interface ScoreBreakdown {
+  total_modules: number;
+  total_severity: number;
+  points_lost: number;
+  cycles_severity: number;
+  coupling_severity: number;
+  top_contributors: ScoreContributor[];
+}
+
+export interface ScoreContributor {
+  from: string;
+  to: string;
+  severity: number;
+  kind: "cycle" | "coupling";
 }
 
 export interface GravityWellEntry {

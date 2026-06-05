@@ -5,7 +5,7 @@
 //! across versions; the template treats unknown keys as optional.
 
 use globset::Glob;
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, CouplingViolation};
 use noupling_core::core::{Dependency, Module, ModuleType, Snapshot};
 use noupling_core::settings::{DependencyRule, Layer, Settings};
 use serde::Serialize;
@@ -27,6 +27,7 @@ pub(crate) struct DataContract {
     pub layers_auto_detected: bool,
     pub codebase: Codebase,
     pub health_score: f64,
+    pub score_breakdown: ScoreBreakdown,
     pub summary_counts: SummaryCounts,
     pub layers: Vec<LayerEntry>,
     pub dependency_rules: Vec<DependencyRuleEntry>,
@@ -38,6 +39,31 @@ pub(crate) struct DataContract {
     pub gravity_wells: Vec<GravityWellEntry>,
     pub red_flags: Vec<RedFlagEntry>,
     pub history: Vec<HistoryEntry>,
+}
+
+/// Explains how `health_score` was derived. The score formula is
+/// `100 × (1 − Σ severity / total_modules)`, so the user-visible
+/// "82/100" is opaque without the inputs. The Explorer surfaces this
+/// breakdown behind a clickable score so users can see *why* the
+/// number is what it is.
+#[derive(Debug, Serialize)]
+pub(crate) struct ScoreBreakdown {
+    pub total_modules: usize,
+    pub total_severity: f64,
+    pub points_lost: f64,
+    pub cycles_severity: f64,
+    pub coupling_severity: f64,
+    /// Top contributors sorted by severity descending. Capped at 5
+    /// — anything longer is noise in a dialog the user reads once.
+    pub top_contributors: Vec<ScoreContributor>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ScoreContributor {
+    pub from: String,
+    pub to: String,
+    pub severity: f64,
+    pub kind: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -183,6 +209,7 @@ pub(crate) fn build(
         layers_auto_detected: options.layers_auto_detected,
         codebase: build_codebase(modules, dependencies, audit_result, snapshot),
         health_score: audit_result.score,
+        score_breakdown: build_score_breakdown(audit_result),
         summary_counts: SummaryCounts {
             violations: audit_result.violations.len(),
             cycles: audit_result
@@ -554,6 +581,48 @@ fn build_violations(audit_result: &AuditResult) -> Vec<ViolationEntry> {
             introduced_in: None,
         })
         .collect()
+}
+
+fn build_score_breakdown(audit_result: &AuditResult) -> ScoreBreakdown {
+    let mut cycles_severity = 0.0_f64;
+    let mut coupling_severity = 0.0_f64;
+    for v in &audit_result.violations {
+        if v.is_circular {
+            cycles_severity += v.severity;
+        } else {
+            coupling_severity += v.severity;
+        }
+    }
+    let total_severity = cycles_severity + coupling_severity;
+    let points_lost = (100.0 - audit_result.score).clamp(0.0, 100.0);
+
+    // Audit already returns violations sorted by severity desc, but
+    // re-sort defensively so we don't rely on that invariant.
+    let mut sorted: Vec<&CouplingViolation> = audit_result.violations.iter().collect();
+    sorted.sort_by(|a, b| {
+        b.severity
+            .partial_cmp(&a.severity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let top_contributors = sorted
+        .into_iter()
+        .take(5)
+        .map(|v| ScoreContributor {
+            from: v.from_module.clone(),
+            to: v.to_module.clone(),
+            severity: v.severity,
+            kind: if v.is_circular { "cycle" } else { "coupling" },
+        })
+        .collect();
+
+    ScoreBreakdown {
+        total_modules: audit_result.total_modules,
+        total_severity,
+        points_lost,
+        cycles_severity,
+        coupling_severity,
+        top_contributors,
+    }
 }
 
 fn severity_band(s: f64) -> &'static str {

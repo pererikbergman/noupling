@@ -5,6 +5,7 @@ import { SearchRow } from "./components/SearchRow";
 import { SidePanel } from "./components/SidePanel";
 import { CanvasArea } from "./components/CanvasArea";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { ScoreDialog } from "./components/ScoreDialog";
 import { useExplorerState, useNodeFilter, inScope } from "./state/explorerState";
 import { shortestPath, pathEdges, minCutEdges } from "./state/paths";
 
@@ -16,6 +17,7 @@ export function App({ data }: AppProps) {
   const [theme, setTheme] = useState<"dark" | "light">(
     (document.documentElement.getAttribute("data-theme") as "dark" | "light") ?? "dark",
   );
+  const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
@@ -92,6 +94,7 @@ export function App({ data }: AppProps) {
         onScope={state.setScope}
         onSelect={state.setSelected}
         onSpotFilter={state.setSpotFilter}
+        onScoreClick={() => setScoreDialogOpen(true)}
       />
       <CanvasArea
         data={visibleData}
@@ -111,6 +114,12 @@ export function App({ data }: AppProps) {
         onCancelPathFinder={() => state.setPathFinder({ mode: "idle" })}
         pathHighlight={pathHighlight}
         minCutHighlight={minCutHighlight}
+      />
+      <ScoreDialog
+        data={data}
+        open={scoreDialogOpen}
+        onClose={() => setScoreDialogOpen(false)}
+        onSelect={state.setSelected}
       />
       <DetailsPanel
         data={visibleData}
