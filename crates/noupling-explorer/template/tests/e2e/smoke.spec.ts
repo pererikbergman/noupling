@@ -104,6 +104,23 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(await circles.count()).toBeGreaterThan(0);
   });
 
+  test("Force view renders cluster boundary circles when contract carries clusters (#278 follow-up)", async ({
+    page,
+  }) => {
+    // Drill into src/ so the cluster members (src/ui, src/domain,
+    // src/infra) become visible as immediate children, then switch to
+    // Force. The simulation needs a moment to settle — give the
+    // boundary selector room to find the rendered hull.
+    await page.locator("g[role='button']").first().dblclick();
+    await page.keyboard.press("Escape");
+    await page.locator("button:has-text('Force')").click();
+    // Cluster boundary circles use a dashed stroke. Wait for at least
+    // one — d3-force settles within a couple of seconds.
+    await expect(
+      page.locator("svg circle[stroke-dasharray]").first(),
+    ).toBeVisible({ timeout: 10000 });
+  });
+
   test("Matrix aggregates file-level edges to visible packages (#290)", async ({
     page,
   }) => {

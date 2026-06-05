@@ -39,6 +39,18 @@ pub(crate) struct DataContract {
     pub gravity_wells: Vec<GravityWellEntry>,
     pub red_flags: Vec<RedFlagEntry>,
     pub history: Vec<HistoryEntry>,
+    /// Pre-computed module clusters for the Force view. Tightly
+    /// coupled groups detected via label propagation; the Force view
+    /// renders a faint boundary around each cluster's nodes so the
+    /// user sees the structure the force layout would otherwise
+    /// blur. Empty by default and never gates view rendering.
+    pub clusters: Vec<ClusterEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ClusterEntry {
+    pub id: String,
+    pub members: Vec<String>,
 }
 
 /// Explains how `health_score` was derived. The score formula is
@@ -284,6 +296,13 @@ pub(crate) fn build(
         } else {
             Vec::new()
         },
+        clusters: crate::clusters::detect_clusters(modules, dependencies)
+            .into_iter()
+            .map(|c| ClusterEntry {
+                id: c.id,
+                members: c.members,
+            })
+            .collect(),
     }
 }
 

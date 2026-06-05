@@ -92,5 +92,9 @@
   "history": [
     { "snapshot_id": "snap-001", "taken_at": "2026-05-30T12:00:00Z", "health_score": 78 },
     { "snapshot_id": "snap-002", "taken_at": "2026-06-04T14:55:42Z", "health_score": 82 }
+  ],
+  "clusters": [
+    { "id": "cluster-1", "members": ["src/ui", "src/domain"] },
+    { "id": "cluster-2", "members": ["src/domain", "src/infra"] }
   ]
 }

@@ -8,7 +8,7 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
-import type { NodeEntry, EdgeEntry } from "../types";
+import type { NodeEntry, EdgeEntry, ClusterEntry } from "../types";
 
 /**
  * Force-directed cluster view (#278 / PRD §10.3). Lays out the visible
@@ -28,6 +28,10 @@ import type { NodeEntry, EdgeEntry } from "../types";
 export interface ForceViewProps {
   nodes: NodeEntry[];
   edges: EdgeEntry[];
+  /** Pre-computed clusters from the full Data Contract. The view
+   *  filters to only those clusters whose members appear in the
+   *  current visible node set, then renders boundary tints. */
+  clusters?: ClusterEntry[];
   onNodeClick?: (id: string) => void;
 }
 
@@ -43,7 +47,7 @@ interface SimLink extends SimulationLinkDatum<SimNode> {
   violates: boolean;
 }
 
-export function ForceView({ nodes, edges, onNodeClick }: ForceViewProps) {
+export function ForceView({ nodes, edges, clusters, onNodeClick }: ForceViewProps) {
   // Avoid wasted work when the user hits the soft cap.
   if (nodes.length > NODE_CAP) {
     return (
@@ -113,6 +117,35 @@ export function ForceView({ nodes, edges, onNodeClick }: ForceViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim]);
 
+  // Resolve cluster boundaries against the currently visible node
+  // set. Clusters whose members are containers (e.g.
+  // `app/src/.../data`) match visible nodes when those visible nodes
+  // are the same path or a descendant. Recomputed every tick so the
+  // boundary follows the settling simulation.
+  const clusterPositions = (() => {
+    if (!clusters || clusters.length === 0) return [];
+    // Read `tick` so React's no-unused-vars doesn't trip; the value
+    // itself drives nothing — the memo runs every render anyway.
+    void tick;
+    const byId = new Map(sim.simNodes.map((n) => [n.id, n]));
+    return clusters
+      .map((c, i) => {
+        const points: SimNode[] = [];
+        for (const m of c.members) {
+          const exact = byId.get(m);
+          if (exact) {
+            points.push(exact);
+            continue;
+          }
+          for (const n of sim.simNodes) {
+            if (n.id.startsWith(m + "/")) points.push(n);
+          }
+        }
+        return { id: c.id, hue: clusterHue(i), points };
+      })
+      .filter((c) => c.points.length >= 2);
+  })();
+
   // Compute visible bounds for the SVG viewBox.
   const bounds = computeBounds(sim.simNodes);
 
@@ -124,6 +157,25 @@ export function ForceView({ nodes, edges, onNodeClick }: ForceViewProps) {
       role="img"
       aria-label={`Force-directed cluster view (${nodes.length} nodes)`}
     >
+      {/* Cluster boundaries — rendered first so nodes/edges sit on top. */}
+      <g>
+        {clusterPositions.map((c) => {
+          const c2 = computeClusterCentroid(c.points);
+          if (!c2) return null;
+          return (
+            <circle
+              key={c.id}
+              cx={c2.cx}
+              cy={c2.cy}
+              r={c2.radius + 12}
+              fill={`hsl(${c.hue}, 70%, 55%, 0.10)`}
+              stroke={`hsl(${c.hue}, 70%, 55%, 0.45)`}
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+          );
+        })}
+      </g>
       <g>
         {sim.simLinks.map((l, i) => {
           const s = l.source as SimNode;
@@ -180,6 +232,39 @@ export function ForceView({ nodes, edges, onNodeClick }: ForceViewProps) {
       </text>
     </svg>
   );
+}
+
+/** Distinct hues per cluster index — wraps around the colour wheel. */
+function clusterHue(i: number): number {
+  return (i * 67) % 360;
+}
+
+/** Centroid + radius of a point set so we can draw a single boundary
+ *  circle behind the cluster. Convex-hull rendering would look nicer
+ *  but adds 2–3 KB of code for a marginal visual improvement; the
+ *  bounding circle reads well at a glance. */
+function computeClusterCentroid(
+  points: SimNode[],
+): { cx: number; cy: number; radius: number } | null {
+  let cx = 0;
+  let cy = 0;
+  let count = 0;
+  for (const p of points) {
+    if (p.x === undefined || p.y === undefined) continue;
+    cx += p.x;
+    cy += p.y;
+    count += 1;
+  }
+  if (count === 0) return null;
+  cx /= count;
+  cy /= count;
+  let radius = 0;
+  for (const p of points) {
+    if (p.x === undefined || p.y === undefined) continue;
+    const d = Math.hypot(p.x - cx, p.y - cy);
+    if (d > radius) radius = d;
+  }
+  return { cx, cy, radius };
 }
 
 function layerFillColor(layer: string | null): string {
