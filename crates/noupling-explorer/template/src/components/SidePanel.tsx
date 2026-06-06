@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { DataContract } from "../types";
+import { totalIssueCount } from "../state/queries";
 import { FilesTab } from "./sidepanel/FilesTab";
 import { InfoTab } from "./sidepanel/InfoTab";
 import { IssuesTab, type Issue } from "./sidepanel/IssuesTab";
@@ -42,11 +43,7 @@ export function SidePanel({
   onIssueFocus,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
-  const issuesCount =
-    data.violations.length +
-    data.cycles.length +
-    data.gravity_wells.length +
-    data.red_flags.length;
+  const issuesCount = totalIssueCount(data);
   return (
     <aside
       id="side-panel"

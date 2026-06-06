@@ -1,5 +1,11 @@
 import { useMemo } from "react";
 import type { DataContract } from "../../types";
+import {
+  allCycles,
+  allGravityWells,
+  allRedFlags,
+  allViolations,
+} from "../../state/queries";
 import { basename } from "./shared";
 
 export type IssueKind = "violation" | "cycle" | "red-flag" | "gravity-well";
@@ -137,7 +143,7 @@ export function IssuesTab({
 function buildIssues(data: DataContract): Issue[] {
   const sevWeight = (s: "low" | "medium" | "high") =>
     s === "high" ? 3 : s === "medium" ? 2 : 1;
-  const violations: Issue[] = data.violations.map((v) => ({
+  const violations: Issue[] = allViolations(data).map((v) => ({
     kind: "violation",
     title: `${basename(v.edge.from)} → ${basename(v.edge.to)}`,
     subtitle: `${v.edge.from} → ${v.edge.to}`,
@@ -148,7 +154,7 @@ function buildIssues(data: DataContract): Issue[] {
   }));
   violations.sort((a, b) => sevWeight(b.severity!) - sevWeight(a.severity!));
 
-  const cycles: Issue[] = data.cycles.map((c) => ({
+  const cycles: Issue[] = allCycles(data).map((c) => ({
     kind: "cycle",
     title: c.members.map(basename).join(" → "),
     // Subtitle surfaces the *break* edge from the minimum cut, not the
@@ -164,7 +170,7 @@ function buildIssues(data: DataContract): Issue[] {
   }));
   cycles.sort((a, b) => (b.metric === a.metric ? 0 : b.metric! > a.metric! ? 1 : -1));
 
-  const wells: Issue[] = data.gravity_wells.map((g) => ({
+  const wells: Issue[] = allGravityWells(data).map((g) => ({
     kind: "gravity-well",
     title: basename(g.module_path),
     subtitle: g.module_path,
@@ -174,7 +180,7 @@ function buildIssues(data: DataContract): Issue[] {
   }));
   wells.sort((a, b) => parseFloat((b.metric ?? "0").replace(/[^\d.]/g, "")) - parseFloat((a.metric ?? "0").replace(/[^\d.]/g, "")));
 
-  const flags: Issue[] = data.red_flags.map((f) => ({
+  const flags: Issue[] = allRedFlags(data).map((f) => ({
     kind: "red-flag",
     title: `${humaniseFlag(f.flag_type)}: ${f.modules.map(basename).join(" + ")}`,
     subtitle: f.modules.join(" / "),
