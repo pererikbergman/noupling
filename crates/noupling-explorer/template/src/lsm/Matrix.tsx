@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { DataContract, NodeEntry } from "../types";
+import type { HighlightPolicy } from "../state/highlightPolicy";
 
 export interface MatrixProps {
   data: DataContract;
@@ -10,8 +11,11 @@ export interface MatrixProps {
    *  as double-clicking a card on the LSM. Keeps the views' selection
    *  + scope state in sync. */
   onNodeDoubleClick?: (id: string) => void;
-  /** Selected edge — gets a highlighted border on the matrix cell. */
-  selectedEdge?: { from: string; to: string } | null;
+  /** Canvas-wide highlight policy (#318). Matrix only consumes the
+   *  selected-edge slot today, but takes the whole policy for parity
+   *  with LSM so future accents (e.g. min-cut on cells) plug in here
+   *  without widening the prop list again. */
+  highlight: HighlightPolicy;
   /** Fired when a populated cell is clicked. Diagonal and empty
    *  cells stay inert. */
   onEdgeClick?: (from: string, to: string) => void;
@@ -40,9 +44,10 @@ export function Matrix({
   data,
   onNodeClick,
   onNodeDoubleClick,
-  selectedEdge,
+  highlight,
   onEdgeClick,
 }: MatrixProps) {
+  const selectedEdge = highlight.selectedEdge;
   const layout = useMemo(() => computeMatrixLayout(data), [data]);
 
   if (layout.nodes.length === 0) {
