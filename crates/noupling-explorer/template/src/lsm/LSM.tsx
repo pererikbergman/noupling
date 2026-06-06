@@ -1,26 +1,16 @@
 import { useMemo, useState } from "react";
 import type { DataContract } from "../types";
+import type { EdgeAccent, HighlightPolicy } from "../state/highlightPolicy";
 import { computeLSMLayout, type LayerBand, type PositionedEdge, type PositionedNode } from "./layout";
 
 export interface LSMProps {
   data: DataContract;
   onNodeClick?: (id: string) => void;
   onNodeDoubleClick?: (id: string) => void;
-  /** When false, violation edges render in the regular muted style. */
-  highlightViolations?: boolean;
-  /** When false, cycle edges + node cycle badges hide. */
-  highlightCycles?: boolean;
-  /** When true, render an extra layer-identity tint behind the bands. */
-  layerOverlay?: boolean;
-  /** Per-node cycle membership count, for the badge. */
-  cyclesByNode?: Map<string, number>;
-  /** Edge keys (`from→to`) to render in the path-finder accent colour. */
-  pathHighlight?: Set<string>;
-  /** Edge keys to render as the min-cut suggestion. */
-  minCutHighlight?: Set<string>;
-  /** Edge selected for inspection — shows the same accent treatment
-   *  as path-finder hits and pushes the edge to the top of the z-order. */
-  selectedEdgeKey?: string | null;
+  /** Canvas-wide highlight policy (#318). Owns the precedence rule
+   *  between path / min-cut / violation / cycle / selected accents
+   *  plus the per-node cycle badge counts. */
+  highlight: HighlightPolicy;
   /** Click handler for edges. Invoked with the edge's from/to ids. */
   onEdgeClick?: (from: string, to: string) => void;
 }
@@ -38,15 +28,10 @@ export function LSM({
   data,
   onNodeClick,
   onNodeDoubleClick,
-  highlightViolations = true,
-  highlightCycles = true,
-  layerOverlay = false,
-  cyclesByNode,
-  pathHighlight,
-  minCutHighlight,
-  selectedEdgeKey,
+  highlight,
   onEdgeClick,
 }: LSMProps) {
+  const layerOverlay = highlight.layerOverlay;
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -107,17 +92,18 @@ export function LSM({
       {/* Edges */}
       <g>
         {layout.edges.map((e) => {
-          const key = `${e.from}→${e.to}`;
+          const accent = highlight.edgeAccent(
+            e.from,
+            e.to,
+            e.isViolation,
+            e.isCycle,
+          );
           return (
             <EdgePath
               key={`${e.from}->${e.to}`}
               edge={e}
               dimmed={directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))}
-              highlightViolations={highlightViolations}
-              highlightCycles={highlightCycles}
-              isOnPath={pathHighlight?.has(key) ?? false}
-              isMinCut={minCutHighlight?.has(key) ?? false}
-              isSelected={selectedEdgeKey === key}
+              accent={accent}
               onClick={
                 onEdgeClick ? () => onEdgeClick(e.from, e.to) : undefined
               }
@@ -133,9 +119,7 @@ export function LSM({
             key={n.id}
             node={n}
             dimmed={directDeps !== null && !directDeps.has(n.id)}
-            cycleBadgeCount={
-              highlightCycles ? (cyclesByNode?.get(n.id) ?? 0) : 0
-            }
+            cycleBadgeCount={highlight.cycleBadgeCount(n.id)}
             onMouseEnter={() => setHovered(n.id)}
             onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
             onClick={() => onNodeClick?.(n.id)}
@@ -204,48 +188,27 @@ function layerOverlayTint(name: string): string {
 function EdgePath({
   edge,
   dimmed,
-  highlightViolations,
-  highlightCycles,
-  isOnPath,
-  isMinCut,
-  isSelected,
+  accent,
   onClick,
 }: {
   edge: PositionedEdge;
   dimmed: boolean;
-  highlightViolations: boolean;
-  highlightCycles: boolean;
-  isOnPath: boolean;
-  isMinCut: boolean;
-  isSelected: boolean;
+  accent: EdgeAccent;
   onClick?: () => void;
 }) {
-  const showViolation = edge.isViolation && highlightViolations;
-  const showCycle = edge.isCycle && highlightCycles;
-  // Selection takes top priority — explicit user pick should win
-  // over heuristic highlights so the user knows what they clicked.
-  const stroke = isSelected
-    ? "rgb(var(--accent-domain))"
-    : isOnPath
-      ? "rgb(var(--accent-ui))"
-      : isMinCut
-        ? "rgb(var(--accent-infra))"
-        : showViolation
-          ? "rgb(var(--edge-violation))"
-          : showCycle
-            ? "rgb(var(--edge-cycle))"
-            : "rgb(var(--text-muted))";
-  const dash = isMinCut ? "4 4" : showViolation ? "6 4" : "0";
+  const stroke = ACCENT_STROKE[accent];
+  const dash = accent === "minCut" ? "4 4" : accent === "violation" ? "6 4" : "0";
+  const isPriority =
+    accent === "selected" || accent === "path" || accent === "minCut";
   const opacity = dimmed
     ? 0.18
-    : isSelected || isOnPath || isMinCut
+    : isPriority
       ? 1
-      : showCycle || showViolation
+      : accent === "cycle" || accent === "violation"
         ? 0.95
         : 0.55;
   const baseWidth = 1 + Math.min(edge.weight, 4) * 0.4;
-  const strokeWidth =
-    isSelected || isOnPath || isMinCut ? baseWidth + 1.5 : baseWidth;
+  const strokeWidth = isPriority ? baseWidth + 1.5 : baseWidth;
   const midY = (edge.y1 + edge.y2) / 2;
   const d = `M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`;
   return (
@@ -261,7 +224,7 @@ function EdgePath({
         strokeWidth={strokeWidth}
         strokeDasharray={dash}
         opacity={opacity}
-        markerEnd={`url(#${showCycle ? "lsm-arrow-cycle" : "lsm-arrow"})`}
+        markerEnd={`url(#${accent === "cycle" ? "lsm-arrow-cycle" : "lsm-arrow"})`}
       >
         {edge.isViolation && edge.violationMessage ? (
           <title>{edge.violationMessage}</title>
@@ -285,6 +248,15 @@ function EdgePath({
     </g>
   );
 }
+
+const ACCENT_STROKE: Record<EdgeAccent, string> = {
+  selected: "rgb(var(--accent-domain))",
+  path: "rgb(var(--accent-ui))",
+  minCut: "rgb(var(--accent-infra))",
+  violation: "rgb(var(--edge-violation))",
+  cycle: "rgb(var(--edge-cycle))",
+  default: "rgb(var(--text-muted))",
+};
 
 function NodeCard({
   node,
