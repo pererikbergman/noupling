@@ -40,92 +40,30 @@ pub fn run(
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
 
-    // The six simple formats (string + file + print) are now adapters
-    // behind a single registry (#301). Anything that matches an
-    // adapter returns here; complex formats — markdown, html, bundle,
-    // dashboard, pr, explorer, strategy, all — keep their bespoke
-    // arms below because their input shapes differ.
+    // Eleven of the thirteen formats run through one registry
+    // (#317 widens the #301 seam). Only `strategy` (needs the
+    // session/repo triad for its history walk) and `explorer`
+    // (carries an option struct that would balloon
+    // FormatterContext for no gain) keep bespoke arms.
+    let (prev_score, prev_violation_count) =
+        previous_snapshot_deltas(&snap_repo, &module_repo, &dep_repo, &snapshot, &project_settings);
     let registry = crate::report_formatter::builtin_formatters();
     let ctx = crate::report_formatter::FormatterContext {
         modules: &report_modules,
+        deps: &report_deps,
         result: &result,
         snapshot: &snapshot,
         report_dir: &report_dir,
+        settings: &project_settings,
+        prev_score,
+        prev_violation_count,
     };
     if let Some(out) = crate::report_formatter::dispatch(format, &ctx, &registry)? {
-        std::fs::write(&out.file_path, &out.content)?;
-        println!("Report saved to {}", out.file_path.display());
-        if let Some(tail) = out.success_tail {
-            println!("{}", tail);
-        }
+        crate::report_formatter::write(&out)?;
         return Ok(());
     }
 
     match format {
-        "md" => {
-            let md_dir = report_dir.join("report-md");
-            crate::reporter::generate_markdown_report(
-                &report_modules,
-                &result,
-                &snapshot.id,
-                &md_dir,
-            )?;
-            println!("Report saved to {}/README.md", md_dir.display());
-        }
-        "html" => {
-            let html_dir = report_dir.join("report");
-            crate::reporter::generate_html_report(
-                &report_modules,
-                &result,
-                &snapshot.id,
-                &html_dir,
-                &project_settings,
-            )?;
-            println!("Report saved to {}/index.html", html_dir.display());
-        }
-        "bundle" => {
-            let file_path = report_dir.join("bundle.html");
-            crate::reporter::generate_bundle_report(
-                &report_modules,
-                &report_deps,
-                &result,
-                &file_path,
-            )?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "dashboard" => {
-            let file_path = report_dir.join("dashboard.html");
-            crate::reporter::generate_dashboard(
-                &report_modules,
-                &report_deps,
-                &result,
-                &file_path,
-            )?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "pr" => {
-            // Compute deltas from previous snapshot if available.
-            let all = snap_repo.get_all()?;
-            let prev = all.iter().rfind(|s| s.id != snapshot.id).cloned();
-            let (prev_score, prev_count) = if let Some(prev_snap) = prev {
-                let prev_modules = module_repo.get_by_snapshot(&prev_snap.id)?;
-                let prev_deps = dep_repo.get_by_snapshot(&prev_snap.id)?;
-                let prev_result = noupling_core::analyzer::audit_with_settings(
-                    &prev_modules,
-                    &prev_deps,
-                    &[],
-                    &project_settings,
-                );
-                (Some(prev_result.score), Some(prev_result.violations.len()))
-            } else {
-                (None, None)
-            };
-
-            let content = crate::reporter::format_pr(&result, prev_score, prev_count, None, None);
-            let file_path = report_dir.join("pr.md");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
         "explorer" => {
             // Load all prior snapshots with recorded scores so the
             // history scrubber has a trend to render. Cheap: small,
@@ -262,40 +200,38 @@ pub fn run(
             println!("Report saved to {}", file_path.display());
         }
         "all" => {
-            let formats = [
-                "json",
-                "xml",
-                "md",
-                "html",
-                "sonar",
-                "mermaid",
-                "dot",
-                "bundle",
-                "dashboard",
-                "pr",
-                "briefing",
-            ];
-            let mut succeeded = 0;
-            let mut failed = 0;
-            for f in formats {
-                let r = generate_single_format(
-                    f,
-                    &report_dir,
-                    &report_modules,
-                    &report_deps,
-                    &result,
-                    &snapshot,
-                    &project_settings,
-                );
-                match r {
-                    Ok(()) => succeeded += 1,
+            // Enumerate the registry instead of a hardcoded list — a
+            // new adapter (#317 added md/html/bundle/dashboard/pr to
+            // the existing six) automatically participates here.
+            let mut succeeded = 0usize;
+            let mut failed = 0usize;
+            for adapter in &registry {
+                match adapter.render(&ctx) {
+                    Ok(out) => {
+                        if let Err(e) = crate::report_formatter::write(&out) {
+                            eprintln!(
+                                "Warning: failed to write '{}' report: {}",
+                                adapter.name(),
+                                e
+                            );
+                            failed += 1;
+                        } else {
+                            succeeded += 1;
+                        }
+                    }
                     Err(e) => {
-                        eprintln!("Warning: failed to generate '{}' report: {}", f, e);
+                        eprintln!(
+                            "Warning: failed to generate '{}' report: {}",
+                            adapter.name(),
+                            e
+                        );
                         failed += 1;
                     }
                 }
             }
-            // Strategy needs snapshot history — handle separately.
+            // Strategy needs snapshot history + repos — handle
+            // separately. Same bespoke shape as the focused `strategy`
+            // arm.
             let strategy_path = report_dir.join("strategy.html");
             match crate::reporter::generate_strategy_report(
                 &snap_repo,
@@ -335,71 +271,40 @@ pub fn run(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn generate_single_format(
-    format: &str,
-    report_dir: &Path,
-    modules: &[noupling_core::core::Module],
-    deps: &[noupling_core::core::Dependency],
-    result: &noupling_core::analyzer::AuditResult,
-    snapshot: &noupling_core::core::Snapshot,
+/// Compute the previous-snapshot deltas the `pr` adapter needs.
+/// Returns `(None, None)` when no prior snapshot exists or the
+/// query fails — the PR report falls back to current-state-only
+/// rendering. Generic over the repository borrow lifetime so the
+/// caller can pass references straight out of `DatabaseSession`.
+fn previous_snapshot_deltas<'a>(
+    snap_repo: &noupling_core::storage::repository::SnapshotRepository<'a>,
+    module_repo: &noupling_core::storage::repository::ModuleRepository<'a>,
+    dep_repo: &noupling_core::storage::repository::DependencyRepository<'a>,
+    current: &noupling_core::core::Snapshot,
     settings: &noupling_core::settings::Settings,
-) -> anyhow::Result<()> {
-    // Try the simple-format registry first — six of the eleven `all`
-    // arms (json, xml, sonar, mermaid, dot, briefing) go through it.
-    let registry = crate::report_formatter::builtin_formatters();
-    let ctx = crate::report_formatter::FormatterContext {
-        modules,
-        result,
-        snapshot,
-        report_dir,
+) -> (Option<f64>, Option<usize>) {
+    let all = match snap_repo.get_all() {
+        Ok(v) => v,
+        Err(_) => return (None, None),
     };
-    if let Some(out) = crate::report_formatter::dispatch(format, &ctx, &registry)? {
-        std::fs::write(&out.file_path, &out.content)?;
-        println!("Report saved to {}", out.file_path.display());
-        // The success-tail messages are noisy in `all`-mode; suppress
-        // them and only print on the focused arms.
-        return Ok(());
-    }
-
-    // Complex formats that don't fit the simple seam yet.
-    match format {
-        "md" => {
-            let md_dir = report_dir.join("report-md");
-            crate::reporter::generate_markdown_report(modules, result, &snapshot.id, &md_dir)?;
-            println!("Report saved to {}/README.md", md_dir.display());
-        }
-        "html" => {
-            let html_dir = report_dir.join("report");
-            crate::reporter::generate_html_report(
-                modules,
-                result,
-                &snapshot.id,
-                &html_dir,
-                settings,
-            )?;
-            println!("Report saved to {}/index.html", html_dir.display());
-        }
-        "bundle" => {
-            let file_path = report_dir.join("bundle.html");
-            crate::reporter::generate_bundle_report(modules, deps, result, &file_path)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "dashboard" => {
-            let file_path = report_dir.join("dashboard.html");
-            crate::reporter::generate_dashboard(modules, deps, result, &file_path)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        "pr" => {
-            // Without snapshot history context, generate a simple current-state PR report.
-            let content = crate::reporter::format_pr(result, None, None, None, None);
-            let file_path = report_dir.join("pr.md");
-            std::fs::write(&file_path, &content)?;
-            println!("Report saved to {}", file_path.display());
-        }
-        _ => anyhow::bail!("unknown format"),
-    }
-    Ok(())
+    let Some(prev_snap) = all.iter().rfind(|s| s.id != current.id).cloned() else {
+        return (None, None);
+    };
+    let prev_modules = match module_repo.get_by_snapshot(&prev_snap.id) {
+        Ok(v) => v,
+        Err(_) => return (None, None),
+    };
+    let prev_deps = match dep_repo.get_by_snapshot(&prev_snap.id) {
+        Ok(v) => v,
+        Err(_) => return (None, None),
+    };
+    let prev_result = noupling_core::analyzer::audit_with_settings(
+        &prev_modules,
+        &prev_deps,
+        &[],
+        settings,
+    );
+    (Some(prev_result.score), Some(prev_result.violations.len()))
 }
 
 /// Read per-module LLM enrichment from
