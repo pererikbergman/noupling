@@ -10,8 +10,8 @@ import {
   type SpotFilter,
   type ViewMode,
   type PathFinder,
-  shouldHighlightViolations,
 } from "../state/explorerState";
+import type { HighlightPolicy } from "../state/highlightPolicy";
 
 export interface CanvasAreaProps {
   data: DataContract;
@@ -22,25 +22,14 @@ export interface CanvasAreaProps {
   onNodeClick?: (id: string) => void;
   spotFilter: SpotFilter;
   onSpotFilter: (f: SpotFilter) => void;
-  layerOverlay: boolean;
   onToggleLayerOverlay: () => void;
-  cycleHighlight: boolean;
   onToggleCycleHighlight: () => void;
   viewMode: ViewMode;
   pathFinder: PathFinder;
   onCancelPathFinder: () => void;
-  pathHighlight: Set<string>;
-  minCutHighlight: Set<string>;
-  issueFocusActive: boolean;
   onCancelIssueFocus: () => void;
-  /** Issue-focus mode: containers to render *expanded* — their
-   *  participant files appear inline instead of the container card. */
-  expandedContainers: Set<string>;
-  /** Issue-focus mode: the actual participant file ids to surface
-   *  when a container is expanded (keeps the canvas tight). */
-  participantFiles: Set<string>;
-  /** Currently selected edge for inspection (LSM clicks). */
-  selectedEdge: { from: string; to: string } | null;
+  /** Resolved canvas highlight rules built once in App.tsx. */
+  highlight: HighlightPolicy;
   /** Click handler invoked when the user clicks an LSM edge. */
   onEdgeClick: (from: string, to: string) => void;
 }
@@ -48,6 +37,9 @@ export interface CanvasAreaProps {
 const ZOOM_STEP = 1.2;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
+// Stable empty Set so issue-focus-off renders don't churn child memos
+// keyed on identity.
+const EMPTY_STRING_SET: Set<string> = new Set();
 
 export function CanvasArea({
   data,
@@ -58,24 +50,22 @@ export function CanvasArea({
   onNodeClick,
   spotFilter,
   onSpotFilter,
-  layerOverlay,
   onToggleLayerOverlay,
-  cycleHighlight,
   onToggleCycleHighlight,
   viewMode,
   pathFinder,
   onCancelPathFinder,
-  pathHighlight,
-  minCutHighlight,
-  issueFocusActive,
   onCancelIssueFocus,
-  expandedContainers,
-  participantFiles,
-  selectedEdge,
+  highlight,
   onEdgeClick,
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
+  const expandedContainers =
+    highlight.issueFocus?.expandedContainers ?? EMPTY_STRING_SET;
+  const participantFiles =
+    highlight.issueFocus?.participantFiles ?? EMPTY_STRING_SET;
+  const issueFocusActive = highlight.issueFocus !== null;
 
   // The LSM shows immediate children of the scope so the canvas reads
   // like a composition diagram; the Matrix shows the full scoped set.
@@ -171,13 +161,6 @@ export function CanvasArea({
     onScope(node.id);
   }
 
-  const cyclesByNode = new Map<string, number>();
-  for (const c of data.cycles) {
-    for (const id of c.members) {
-      cyclesByNode.set(id, (cyclesByNode.get(id) ?? 0) + 1);
-    }
-  }
-
   return (
     <main id="root-canvas" className="relative overflow-hidden bg-canvas">
       {/* Spot-filter pills overlay on the canvas (PRD F5.5). Sits
@@ -271,17 +254,7 @@ export function CanvasArea({
               data={lsmData}
               onNodeClick={onNodeClick}
               onNodeDoubleClick={onNodeDoubleClick}
-              highlightViolations={shouldHighlightViolations(spotFilter)}
-              highlightCycles={cycleHighlight}
-              layerOverlay={layerOverlay}
-              cyclesByNode={cyclesByNode}
-              pathHighlight={pathHighlight}
-              minCutHighlight={minCutHighlight}
-              selectedEdgeKey={
-                selectedEdge
-                  ? `${selectedEdge.from}→${selectedEdge.to}`
-                  : null
-              }
+              highlight={highlight}
               onEdgeClick={onEdgeClick}
             />
           </div>
@@ -293,7 +266,7 @@ export function CanvasArea({
             data={lsmData}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
-            selectedEdge={selectedEdge}
+            highlight={highlight}
             onEdgeClick={onEdgeClick}
           />
         </div>
@@ -342,17 +315,17 @@ export function CanvasArea({
           ⛶
         </ZoomBtn>
         <ZoomBtn
-          title={layerOverlay ? "Hide layer overlay" : "Show layer overlay"}
-          ariaLabel={layerOverlay ? "Hide layer-identity overlay" : "Show layer-identity overlay"}
-          active={layerOverlay}
+          title={highlight.layerOverlay ? "Hide layer overlay" : "Show layer overlay"}
+          ariaLabel={highlight.layerOverlay ? "Hide layer-identity overlay" : "Show layer-identity overlay"}
+          active={highlight.layerOverlay}
           onClick={onToggleLayerOverlay}
         >
           L
         </ZoomBtn>
         <ZoomBtn
-          title={cycleHighlight ? "Hide cycle highlights" : "Show cycle highlights"}
-          ariaLabel={cycleHighlight ? "Hide cycle highlights" : "Show cycle highlights"}
-          active={cycleHighlight}
+          title={highlight.highlightCycles ? "Hide cycle highlights" : "Show cycle highlights"}
+          ariaLabel={highlight.highlightCycles ? "Hide cycle highlights" : "Show cycle highlights"}
+          active={highlight.highlightCycles}
           onClick={onToggleCycleHighlight}
         >
           ⊚

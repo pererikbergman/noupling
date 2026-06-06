@@ -8,9 +8,18 @@ import { DetailsPanel } from "./components/DetailsPanel";
 import { EdgeDetailsPanel } from "./components/EdgeDetailsPanel";
 import { ScoreDialog } from "./components/ScoreDialog";
 import type { Issue } from "./components/SidePanel";
-import { useExplorerStore, useNodeFilter, inScope } from "./state/explorerState";
+import {
+  useExplorerStore,
+  useNodeFilter,
+  inScope,
+  shouldHighlightViolations,
+} from "./state/explorerState";
 import { shortestPath, pathEdges, minCutEdges } from "./state/paths";
 import { computeIssueFocus, type IssueFocus } from "./state/issueFocus";
+import {
+  buildHighlightPolicy,
+  cycleMembershipCounts,
+} from "./state/highlightPolicy";
 
 export interface AppProps {
   data: DataContract;
@@ -60,6 +69,34 @@ export function App({ data }: AppProps) {
     }
     return base;
   }, [state.minCutShown, visibleData, issueFocus]);
+
+  // Bundle every highlight-related input into one policy so CanvasArea
+  // and the LSM stop carrying eight separately-threaded props each.
+  // #318 — the policy owns the precedence rule (selected > path >
+  // minCut > violation > cycle > default); EdgePath just asks it.
+  const highlight = useMemo(
+    () =>
+      buildHighlightPolicy({
+        pathEdges: pathHighlight,
+        minCutEdges: minCutHighlight,
+        cyclesByNode: cycleMembershipCounts(visibleData),
+        selectedEdge: state.selectedEdge,
+        highlightViolations: shouldHighlightViolations(state.spotFilter),
+        highlightCycles: state.cycleHighlight,
+        layerOverlay: state.layerOverlay,
+        issueFocus,
+      }),
+    [
+      pathHighlight,
+      minCutHighlight,
+      visibleData,
+      state.selectedEdge,
+      state.spotFilter,
+      state.cycleHighlight,
+      state.layerOverlay,
+      issueFocus,
+    ],
+  );
 
   function startPathFinder() {
     state.setState({ pathFinder: { mode: "pick-from" } });
@@ -156,24 +193,17 @@ export function App({ data }: AppProps) {
         onNodeClick={onNodePicked}
         spotFilter={state.spotFilter}
         onSpotFilter={(spotFilter) => state.setState({ spotFilter })}
-        layerOverlay={state.layerOverlay}
         onToggleLayerOverlay={() =>
           state.setState({ layerOverlay: !state.layerOverlay })
         }
-        cycleHighlight={state.cycleHighlight}
         onToggleCycleHighlight={() =>
           state.setState({ cycleHighlight: !state.cycleHighlight })
         }
         viewMode={state.viewMode}
         pathFinder={state.pathFinder}
         onCancelPathFinder={() => state.setState({ pathFinder: { mode: "idle" } })}
-        pathHighlight={pathHighlight}
-        minCutHighlight={minCutHighlight}
-        issueFocusActive={!!issueFocus}
         onCancelIssueFocus={() => setIssueFocus(null)}
-        expandedContainers={issueFocus?.expandedContainers ?? new Set()}
-        participantFiles={issueFocus?.participantFiles ?? new Set()}
-        selectedEdge={state.selectedEdge}
+        highlight={highlight}
         onEdgeClick={(from, to) =>
           state.setState({ selectedEdge: { from, to }, selected: null })
         }
