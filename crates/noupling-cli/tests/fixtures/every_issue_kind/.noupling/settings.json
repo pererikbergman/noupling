@@ -1,0 +1,15 @@
+{
+  "layers": [
+    { "name": "ui", "pattern": "**/ui/**" },
+    { "name": "domain", "pattern": "**/domain/**" },
+    { "name": "infra", "pattern": "**/infra/**" }
+  ],
+  "dependency_rules": [
+    {
+      "from": "**/plugins/**",
+      "to": "**/legacy/**",
+      "allow": false,
+      "message": "plugins must not reach into legacy; go through domain."
+    }
+  ]
+}
