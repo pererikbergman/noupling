@@ -196,7 +196,7 @@ mod tests {
             id: format!("id-{path}"),
             snapshot_id: "snap".into(),
             parent_id: None,
-            name: path.split('/').last().unwrap_or(path).to_string(),
+            name: path.split('/').next_back().unwrap_or(path).to_string(),
             path: path.into(),
             module_type: ModuleType::File,
             depth: path.matches('/').count() as i32,
