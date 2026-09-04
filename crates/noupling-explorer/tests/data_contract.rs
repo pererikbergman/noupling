@@ -376,7 +376,11 @@ fn dependency_rules_and_effective_rules_carry_source_chip() {
         ]
     }"#;
     let settings: Settings = serde_json::from_str(settings_json).unwrap();
-    let audit = AuditResultBuilder::new().build();
+    // Layers reach the contract through the audit result (ADR 0001), not
+    // straight from settings.
+    let audit = AuditResultBuilder::new()
+        .with_layers(settings.layers.clone(), false)
+        .build();
 
     let html = render(
         &[],
@@ -439,7 +443,9 @@ fn layers_carry_settings_fields_plus_derived_metrics() {
         dep("b.rs", "d.rs"), // ui → infra
         dep("c.rs", "d.rs"), // domain → infra
     ];
-    let audit = AuditResultBuilder::new().build();
+    let audit = AuditResultBuilder::new()
+        .with_layers(settings.layers.clone(), false)
+        .build();
 
     let html = render(
         &modules,

@@ -515,3 +515,119 @@ fn audit_with_settings_populates_abstractness_from_type_counts() {
     assert_eq!(src.concrete_count, 1);
     assert!((src.abstractness - 0.5).abs() < 1e-9);
 }
+
+// ── Layer inference in the shared pipeline (ADR 0001, #341) ──
+
+/// Nine files under ui/domain/data — enough for `detect_layers` to fire —
+/// plus one upward import (data → ui) and one sibling import inside ui.
+fn layered_by_path_project() -> (Vec<Module>, Vec<Dependency>) {
+    let modules = vec![
+        make_module("u1", "app/ui/home/Home.kt"),
+        make_module("u2", "app/ui/login/Login.kt"),
+        make_module("u3", "app/ui/settings/Settings.kt"),
+        make_module("d1", "app/domain/CartUseCase.kt"),
+        make_module("d2", "app/domain/OrderUseCase.kt"),
+        make_module("d3", "app/domain/UserUseCase.kt"),
+        make_module("r1", "app/data/CartRepository.kt"),
+        make_module("r2", "app/data/OrderRepository.kt"),
+        make_module("r3", "app/data/Api.kt"),
+    ];
+    let deps = vec![
+        // data reaches up into ui: a Layer Violation once layers exist.
+        make_dep("r1", "u1", 1),
+        // sibling coupling inside ui: a strict-mode violation, informational in actionable mode.
+        make_dep("u1", "u2", 2),
+        make_dep("u1", "u2", 3),
+        make_dep("u1", "u2", 4),
+    ];
+    (modules, deps)
+}
+
+#[test]
+fn audit_with_settings_infers_layers_when_none_configured() {
+    let (modules, deps) = layered_by_path_project();
+    let settings = crate::settings::Settings::default();
+    assert!(
+        settings.layers.is_empty(),
+        "precondition: no layers configured"
+    );
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(
+        result.layers_auto_detected,
+        "flag must be set when inference fired"
+    );
+    let names: Vec<&str> = result.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, vec!["presentation", "domain", "data"]);
+    // Layer Violations are checked against the inferred layers.
+    assert_eq!(
+        result.layer_violations.len(),
+        1,
+        "data → ui is a Layer Violation"
+    );
+    assert_eq!(result.layer_violations[0].from_layer, "data");
+    assert_eq!(result.layer_violations[0].to_layer, "presentation");
+    // Inferred layers switch the audit to actionable mode: the ui sibling
+    // pair is informational, not a violation.
+    assert!(
+        result.violations.iter().all(|v| v.is_circular),
+        "sibling coupling must not count as a violation in actionable mode: {:?}",
+        result.violations
+    );
+    // Two sibling pairs became informational: ui/home ↔ ui/login and
+    // app/data ↔ app/ui (the layer-violating edge is also a sibling pair).
+    assert_eq!(result.coupling_metrics_count, 2);
+}
+
+#[test]
+fn audit_with_settings_keeps_explicit_layers_and_never_infers() {
+    let (modules, deps) = layered_by_path_project();
+    let settings: crate::settings::Settings = serde_json::from_str(
+        r#"{"layers":[{"name":"top","pattern":"app/ui/**"},{"name":"bottom","pattern":"app/data/**"}]}"#,
+    )
+    .unwrap();
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(!result.layers_auto_detected);
+    let names: Vec<&str> = result.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, vec!["top", "bottom"]);
+    // Explicit layers leave the coupling mode alone (strict by default), so
+    // the ui sibling pair stays a violation.
+    assert!(
+        result.violations.iter().any(|v| !v.is_circular),
+        "strict mode keeps sibling coupling as a violation"
+    );
+}
+
+#[test]
+fn audit_with_settings_explicit_coupling_mode_wins_over_inference() {
+    let (modules, deps) = layered_by_path_project();
+    let settings: crate::settings::Settings =
+        serde_json::from_str(r#"{"coupling_mode":"strict"}"#).unwrap();
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(result.layers_auto_detected, "layers are still inferred");
+    assert!(
+        result.violations.iter().any(|v| !v.is_circular),
+        "an explicit coupling_mode is honoured even when layers were inferred"
+    );
+}
+
+#[test]
+fn audit_with_settings_leaves_flag_unset_when_nothing_detectable() {
+    let modules = vec![
+        make_module("a", "src/alpha/mod.rs"),
+        make_module("b", "src/beta/mod.rs"),
+    ];
+    let deps = vec![make_dep("a", "b", 1)];
+    let settings = crate::settings::Settings::default();
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(!result.layers_auto_detected);
+    assert!(result.layers.is_empty());
+    assert!(result.layer_violations.is_empty());
+}

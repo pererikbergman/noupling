@@ -424,6 +424,52 @@ mod tests {
     }
 
     #[test]
+    fn text_format_notes_inferred_layers_once_and_names_them() {
+        use noupling_core::settings::Layer;
+        let layer = |name: &str, pattern: &str| Layer {
+            name: name.into(),
+            pattern: pattern.into(),
+            allow_sibling: false,
+            max_sibling_density: None,
+            reduced_sibling_weight: 2.5,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(9)
+            .with_layers(
+                vec![
+                    layer("presentation", "**/ui/**"),
+                    layer("data", "**/data/**"),
+                ],
+                true,
+            )
+            .build();
+
+        let text = format_text(&result);
+
+        let note = text
+            .lines()
+            .find(|l| l.starts_with("Layers: inferred"))
+            .unwrap_or_else(|| panic!("missing inferred-layers note:\n{text}"));
+        assert!(note.contains("presentation, data"), "{note}");
+        assert!(
+            note.contains("settings.json"),
+            "must say how to opt out: {note}"
+        );
+        assert_eq!(
+            text.matches("Layers: inferred").count(),
+            1,
+            "one line, not a section"
+        );
+    }
+
+    #[test]
+    fn text_format_omits_layer_note_when_layers_are_configured() {
+        let result = AuditResultBuilder::new().with_total_modules(3).build();
+        let text = format_text(&result);
+        assert!(!text.contains("Layers:"), "{text}");
+    }
+
+    #[test]
     fn text_format_includes_stability_violations() {
         use noupling_core::analyzer::StabilityViolation;
         let result = AuditResultBuilder::new()

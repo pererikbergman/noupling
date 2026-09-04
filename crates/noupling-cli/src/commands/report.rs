@@ -90,11 +90,10 @@ pub fn run(
             // a broken sidecar can't break report generation.
             let module_enrichment = load_module_enrichment(Path::new(path));
 
-            let mut options = noupling_explorer::RenderOptions {
+            let options = noupling_explorer::RenderOptions {
                 editor: explorer_editor.map(str::to_string),
                 title: explorer_title.map(str::to_string),
                 include_history: !explorer_no_history,
-                layers_auto_detected: false,
                 history,
                 module_enrichment,
             };
@@ -111,74 +110,15 @@ pub fn run(
                 ..snapshot.clone()
             };
 
-            // When the project has no configured layers, infer a sensible
-            // set from common path-segment patterns (Android `ui/domain/data`,
-            // Spring `controller/service/repository`, etc.) and re-run audit
-            // so the Explorer reflects the inferred architecture. The
-            // user-written settings.json is left untouched on disk.
-            let auto_detected = if project_settings.layers.is_empty() {
-                let d = noupling_explorer::detect_layers(&report_modules);
-                if d.is_empty() {
-                    None
-                } else {
-                    Some(d)
-                }
-            } else {
-                None
-            };
-
-            // Owns the re-audited result when auto-detection fired; left
-            // empty otherwise so we can hand the original `result` to the
-            // renderer by reference.
-            let mut explorer_settings = project_settings.clone();
-            let re_audited_holder;
-            let result_for_render: &noupling_core::analyzer::AuditResult = if let Some(layers) =
-                auto_detected
-            {
-                options.layers_auto_detected = true;
-                explorer_settings.layers = layers;
-                // Auto-detected layers are by definition coarse (`**/ui/**`
-                // etc.), so every sibling coupling inside one of them gets
-                // counted as a strict-mode violation and the score plummets
-                // to 0 with no actionable signal. Switch the audit to
-                // "actionable" mode so only circular deps count as
-                // violations; siblings become informational. The user can
-                // override by adding their own `coupling_mode` to settings.
-                if explorer_settings.coupling_mode.is_none() {
-                    explorer_settings.coupling_mode = Some("actionable".to_string());
-                }
-                let type_counts =
-                    noupling_core::scanner::recompute_type_counts(Path::new(path), &report_modules);
-                let mut re_audited = noupling_core::analyzer::audit_with_settings(
-                    &report_modules,
-                    &report_deps,
-                    &type_counts,
-                    &explorer_settings,
-                );
-                re_audited.rule_violations = noupling_core::analyzer::check_dependency_rules(
-                    &report_modules,
-                    &report_deps,
-                    &explorer_settings.dependency_rules,
-                );
-                re_audited.layer_violations = noupling_core::analyzer::check_layer_rules(
-                    &report_modules,
-                    &report_deps,
-                    &explorer_settings.layers,
-                );
-                re_audited.suppressed_count = result.suppressed_count;
-                re_audited.external_deps = result.external_deps.clone();
-                re_audited.total_external_imports = result.total_external_imports;
-                re_audited_holder = re_audited;
-                &re_audited_holder
-            } else {
-                &result
-            };
-
+            // The Explorer is a view over the same AuditResult every other
+            // format reads (ADR 0001). Inferred layers and the actionable
+            // fallback already happened inside the pipeline; the result
+            // carries `layers` + `layers_auto_detected` for the banner.
             let html = noupling_explorer::render(
                 &report_modules,
                 &report_deps,
-                result_for_render,
-                &explorer_settings,
+                &result,
+                &project_settings,
                 &resolved_snapshot,
                 &options,
             )?;

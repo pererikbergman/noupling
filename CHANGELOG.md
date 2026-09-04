@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Upgrade notes:** projects with no `layers` in `.noupling/settings.json` will see their score change (usually upward) and may gain Layer Violations. Layer inference and the actionable coupling-mode fallback, which only the Explorer applied before, now run inside the shared audit pipeline, so `audit`, every report format, and the CI gate see the same layers and the same Issues (ADR 0001, #341). To opt out, set `layers` (even an empty-pattern list of your own) or an explicit `coupling_mode` in settings; either disables the fallback exactly as it did for the Explorer.
+
+### Changed
+
+- **One audit per snapshot** (#341, ADR 0001): layer inference moved from `noupling-explorer` to `noupling-core` and into `audit_with_settings`; the audit result now records the effective `layers` and a `layers_auto_detected` flag. The Explorer no longer re-audits with its own settings, the text report prints a one-line "Layers: inferred from path names (…)" note, and the strategy report runs each snapshot through the same pipeline instead of its own ladder. Inferred layer globs now match the path segments that produced them (`**/{ui,screens}/**`) instead of the catalogue name (`**/presentation/**`), which matched nothing.
+
 ## [0.8.0] - 2026-09-04
 
 This release ships the **Explorer** — a new interactive HTML report format for reading an architecture, not just scoring it — on top of a **Cargo workspace split** into `noupling-core` / `noupling` (cli) / `noupling-explorer`. It also completes Robert C. Martin's package-metric trio (Abstractness, Instability, Distance from Main Sequence), reworks cohesion around logical nodes, and closes a deepening pass over the reporter and Explorer state. Distribution is now Homebrew + GitHub Releases only.

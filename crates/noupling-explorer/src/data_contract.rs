@@ -20,10 +20,10 @@ pub(crate) struct DataContract {
     pub noupling_version: String,
     pub generated_at: String,
     pub report_options: ReportOptions,
-    /// True when the cli auto-detected `layers` from path-segment
+    /// True when the audit inferred `layers` from path-segment
     /// patterns because the project's settings.json had no
-    /// configured layers. The template surfaces a banner so the user
-    /// knows the layers aren't authoritative.
+    /// configured layers (ADR 0001). The template surfaces a banner so
+    /// the user knows the layers aren't authoritative.
     pub layers_auto_detected: bool,
     pub codebase: Codebase,
     pub health_score: f64,
@@ -276,7 +276,7 @@ impl<'a> ContractBuilder<'a> {
             noupling_version: env!("CARGO_PKG_VERSION").to_string(),
             generated_at: self.snapshot.timestamp.clone(),
             report_options: self.report_options(),
-            layers_auto_detected: self.options.layers_auto_detected,
+            layers_auto_detected: self.audit_result.layers_auto_detected,
             codebase: self.codebase(),
             health_score: self.audit_result.score,
             score_breakdown: self.score_breakdown(),
@@ -330,7 +330,7 @@ impl<'a> ContractBuilder<'a> {
     }
 
     pub(crate) fn layers(&self) -> Vec<LayerEntry> {
-        build_layers(&self.settings.layers, self.modules, self.dependencies)
+        build_layers(&self.audit_result.layers, self.modules, self.dependencies)
     }
 
     pub(crate) fn dependency_rules(&self) -> Vec<DependencyRuleEntry> {
@@ -339,7 +339,7 @@ impl<'a> ContractBuilder<'a> {
 
     pub(crate) fn effective_rules(&self) -> Vec<EffectiveRuleEntry> {
         build_effective_rules(
-            &self.settings.layers,
+            &self.audit_result.layers,
             &self.settings.dependency_rules,
             self.audit_result,
         )
@@ -348,7 +348,7 @@ impl<'a> ContractBuilder<'a> {
     pub(crate) fn nodes(&self) -> Vec<NodeEntry> {
         merge_enrichment(
             build_nodes(
-                &self.settings.layers,
+                &self.audit_result.layers,
                 self.modules,
                 self.dependencies,
                 self.audit_result,

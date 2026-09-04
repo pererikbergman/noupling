@@ -34,6 +34,14 @@ pub fn format_text(result: &AuditResult) -> String {
         ));
     }
 
+    if result.layers_auto_detected {
+        let names: Vec<&str> = result.layers.iter().map(|l| l.name.as_str()).collect();
+        output.push_str(&format!(
+            "Layers: inferred from path names ({}) — set `layers` in .noupling/settings.json to override\n",
+            names.join(", ")
+        ));
+    }
+
     if result.total_external_imports > 0 {
         output.push_str(&format!(
             "External Imports: {} across {} modules\n",

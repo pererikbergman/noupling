@@ -7,6 +7,7 @@ use crate::core::{Dependency, Module};
 
 mod abstractness;
 mod actions;
+mod auto_layers;
 mod cohesion;
 mod coupling;
 mod critical_path;
@@ -29,6 +30,7 @@ pub use abstractness::{compute_abstractness, AbstractnessMetric};
 pub use actions::compute_top_actions;
 #[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
 pub use actions::TopAction;
+pub use auto_layers::detect_layers;
 pub use cohesion::{compute_cohesion, CohesionMetrics, DirectoryKind};
 pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
@@ -102,6 +104,13 @@ pub struct AuditResult {
     pub stability_violations: Vec<StabilityViolation>,
     /// Per-directory Distance from Main Sequence (Martin's D = |A + I − 1|).
     pub distance: Vec<DistanceMetric>,
+    /// The layers this audit ran with: the configured `layers`, or the
+    /// inferred set when none were configured (ADR 0001). Every format
+    /// draws layers from here, never from settings directly.
+    pub layers: Vec<crate::settings::Layer>,
+    /// True when `layers` were inferred from path names rather than read
+    /// from settings. Formats use it to say "these layers were inferred".
+    pub layers_auto_detected: bool,
 }
 
 /// Test-only builder for `AuditResult` with sensible defaults.
@@ -151,6 +160,8 @@ impl AuditResultBuilder {
                 instability: Vec::new(),
                 stability_violations: Vec::new(),
                 distance: Vec::new(),
+                layers: Vec::new(),
+                layers_auto_detected: false,
             },
         }
     }
@@ -242,6 +253,11 @@ impl AuditResultBuilder {
     }
     pub fn with_stability_violations(mut self, v: Vec<StabilityViolation>) -> Self {
         self.inner.stability_violations = v;
+        self
+    }
+    pub fn with_layers(mut self, v: Vec<crate::settings::Layer>, auto_detected: bool) -> Self {
+        self.inner.layers = v;
+        self.inner.layers_auto_detected = auto_detected;
         self
     }
     pub fn build(self) -> AuditResult {
@@ -421,6 +437,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             instability: Vec::new(),
             stability_violations: Vec::new(),
             distance: Vec::new(),
+            layers: Vec::new(),
+            layers_auto_detected: false,
         };
     }
 
@@ -481,36 +499,77 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         // Distance is computed in audit_with_settings once abstractness is populated.
         // audit() leaves it empty because it has no type-counts input.
         distance: Vec::new(),
+        layers: Vec::new(),
+        layers_auto_detected: false,
     }
 }
 
 /// Audit a snapshot and apply all settings-driven transformations in one call.
 ///
-/// Wraps [`audit`] with the deterministic 5-step pipeline that every command
-/// previously had to spell out: severity filtering, coupling-mode adjustment,
-/// risk-weight RRI computation, layer-weight reductions, and layer filtering.
+/// Wraps [`audit`] with the deterministic pipeline that every command
+/// previously had to spell out: layer resolution, severity filtering,
+/// coupling-mode adjustment, risk-weight RRI computation, layer-weight
+/// reductions, layer filtering, and the rule / layer violation checks.
 /// Call order matters and is fixed here so callers can't get it wrong.
 ///
-/// Command-specific augmentations (violation age, rule violations, layer
-/// violations, sidecar metadata, diff filtering) are intentionally left out
-/// — they vary per command and stay as separate post-hoc operations.
+/// **One audit per snapshot (ADR 0001).** When `settings.layers` is empty
+/// the layers are inferred from path names ([`detect_layers`]); if that
+/// produces anything, the audit switches to `actionable` coupling mode
+/// unless the settings name a `coupling_mode` explicitly. The result records
+/// the effective `layers` and `layers_auto_detected` so every format sees
+/// the same Issues and score without re-auditing.
+///
+/// Command-specific augmentations (violation age, sidecar metadata, diff
+/// filtering) are intentionally left out — they vary per command and stay
+/// as separate post-hoc operations.
 pub fn audit_with_settings(
     modules: &[Module],
     dependencies: &[Dependency],
     type_counts: &[crate::core::ModuleTypeCounts],
     settings: &crate::settings::Settings,
 ) -> AuditResult {
+    let (layers, layers_auto_detected) = resolve_layers(modules, settings);
+    // Auto-detected layers are by definition coarse (`**/ui/**` etc.), so
+    // every sibling coupling inside one of them would count as a strict-mode
+    // violation and the score would collapse with no actionable signal.
+    // Switch to "actionable" so only cycles count; siblings stay
+    // informational. An explicit `coupling_mode` in settings wins.
+    let coupling_mode = if layers_auto_detected && settings.coupling_mode.is_none() {
+        "actionable"
+    } else {
+        settings.effective_coupling_mode()
+    };
+
     let mut result = audit(modules, dependencies);
     result.abstractness = compute_abstractness(modules, type_counts);
     // Distance composes A (just populated) with I (populated in audit()).
     // 0.5 is the conventional cutoff: anything more than halfway off the main sequence.
     result.distance = compute_distance(&result.abstractness, &result.instability, 0.5);
     result.filter_by_severity(settings.thresholds.minimum_severity);
-    result.apply_coupling_mode(settings.effective_coupling_mode());
+    result.apply_coupling_mode(coupling_mode);
     result.apply_risk_weights(&settings.risk_weights);
-    result.apply_layer_weights(&settings.layers);
-    result.filter_by_layers(&settings.layers);
+    result.apply_layer_weights(&layers);
+    result.filter_by_layers(&layers);
+    result.rule_violations =
+        check_dependency_rules(modules, dependencies, &settings.dependency_rules);
+    result.layer_violations = check_layer_rules(modules, dependencies, &layers);
+    result.layers = layers;
+    result.layers_auto_detected = layers_auto_detected;
     result
+}
+
+/// The layers an audit runs with: the configured ones, or an inferred set
+/// when none are configured. Returns `(layers, auto_detected)`.
+fn resolve_layers(
+    modules: &[Module],
+    settings: &crate::settings::Settings,
+) -> (Vec<crate::settings::Layer>, bool) {
+    if !settings.layers.is_empty() {
+        return (settings.layers.clone(), false);
+    }
+    let inferred = detect_layers(modules);
+    let auto = !inferred.is_empty();
+    (inferred, auto)
 }
 
 #[cfg(test)]
