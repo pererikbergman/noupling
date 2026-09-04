@@ -57,7 +57,7 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 
 ```bash
 # Install
-cargo install --path .
+cargo install --path crates/noupling-cli
 
 # Scan your project
 noupling scan /path/to/project
@@ -85,7 +85,7 @@ brew install noupling
 ```bash
 git clone https://github.com/pererikbergman/noupling.git
 cd noupling
-cargo install --path .
+cargo install --path crates/noupling-cli
 ```
 
 ### Prebuilt binaries
@@ -152,7 +152,7 @@ Scans the full project for import resolution but filters results to changed file
 
 ```yaml
 - name: Install noupling
-  run: cargo install --path .
+  run: cargo install --path crates/noupling-cli
 
 - name: Scan (diff mode)
   run: noupling scan . --diff-base origin/main

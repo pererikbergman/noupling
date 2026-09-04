@@ -13,6 +13,9 @@ authors = ["Per-Erik Bergman"]
 license = "MIT"
 repository = "https://github.com/pererikbergman/noupling"
 homepage = "https://github.com/pererikbergman/noupling"
+# Distribution is Homebrew + GitHub Releases only; none of the crates are
+# published to crates.io (decided while closing out #229).
+publish = false
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
