@@ -21,5 +21,12 @@ Thumbs.db
 # regenerate; CI checkouts should pick it up). See #280 / the
 # noupling-describe-modules skill in docs/llm-prompts/.
 !.noupling/enrichment/
+# Carve-out: integration fixtures ship their own settings.json (#339).
+# Un-ignore the fixture's .noupling dir, re-ignore its contents, then
+# allow just the settings file, so a local `noupling scan` on the fixture
+# never commits a history.db.
+!crates/noupling-cli/tests/fixtures/*/.noupling/
+crates/noupling-cli/tests/fixtures/*/.noupling/*
+!crates/noupling-cli/tests/fixtures/*/.noupling/settings.json
 .claude/
 docs/.DS_Store
