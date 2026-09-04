@@ -38,6 +38,7 @@ fn violation(from: &str, to: &str, circular: bool) -> CouplingViolation {
         cycle_hop_counts: vec![],
         weakest_link: None,
         break_cost: 0,
+        score_impact: 0.0,
     }
 }
 
