@@ -29,7 +29,7 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 - **16 languages**: C#, Dart, Elixir, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Scala, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **12 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy (or `all` to generate every format)
+- **13 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy, Explorer (or `all` to generate every format)
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
 - **Sunburst visualization**: Zoomable D3.js dependency graph with animated drill-down
 - **Technical Leader Dashboard**: Single-page executive view with all metrics, sortable scorecard, risk matrix
@@ -130,6 +130,7 @@ noupling report /path/to/project --format mermaid   # Mermaid flowchart diagram
 noupling report /path/to/project --format dot       # GraphViz DOT graph
 noupling report /path/to/project --format bundle    # Zoomable sunburst with dependency edges
 noupling report /path/to/project --format dashboard # Interactive Technical Leader Dashboard
+noupling report /path/to/project --format explorer  # Interactive Explorer: layered map, drill-down, issues, click-to-source
 noupling report /path/to/project --format all       # Generate every format above in one command
 ```
 

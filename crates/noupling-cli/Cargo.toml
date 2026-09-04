@@ -16,13 +16,13 @@ name = "noupling"
 path = "src/main.rs"
 
 [dependencies]
-noupling-core = { path = "../noupling-core", version = "0.7.0" }
-noupling-explorer = { path = "../noupling-explorer", version = "0.7.0" }
+noupling-core = { path = "../noupling-core" }
+noupling-explorer = { path = "../noupling-explorer" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 
 [dev-dependencies]
-noupling-core = { path = "../noupling-core", version = "0.7.0", features = ["test-utils"] }
+noupling-core = { path = "../noupling-core", features = ["test-utils"] }
 tempfile = { workspace = true }

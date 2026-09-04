@@ -17,7 +17,7 @@
       <li><a href="docs.html">Docs</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.7.0</span></li>
+      <li><span class="badge">v0.8.0</span></li>
     </ul>
   </div>
 </nav>
@@ -31,6 +31,44 @@
     </p>
 
     <!-- ── v0.7.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.8.0 &mdash; The Explorer Release</h2>
+      <div class="date">September 2026</div>
+
+      <h3><span class="tag tag-feat">feat</span> Explorer: <code>noupling report --format explorer</code> (<a href="https://github.com/pererikbergman/noupling/issues/228">#228</a>)</h3>
+      <p><strong>The friction:</strong> Every existing report answers "how healthy is this codebase?" with a number and a list. None of them let you <em>read</em> the architecture: see the layers, follow an edge, drill into a package, and understand why a specific dependency is a problem. Onboarding developers, architects reviewing an unfamiliar system, and anyone weighing a refactor were all left to reconstruct the picture from tables.</p>
+      <p><strong>The implementation:</strong> A new <code>noupling-explorer</code> crate serializes a versioned Data Contract (modules, edges, cycles, violations, gravity wells, red flags, per-file LOC / Ca / Ce / I / blast radius, score breakdown, snapshot history) and embeds it in a single self-contained HTML file built from a React + Tailwind template that CI drift-checks. Roughly seventy PRs (<a href="https://github.com/pererikbergman/noupling/pull/244">#244</a>&ndash;<a href="https://github.com/pererikbergman/noupling/pull/300">#300</a>) across the summer:</p>
+      <ul>
+        <li><strong>Layered Structure Map</strong> &mdash; the primary canvas. Packages and files by layer, edges between them, distinct accents for violations, cycles, and selection. Click to select, double-click to drill, breadcrumb to scope out. Unlayered codebases get synthetic tiers; if <code>.noupling/settings.json</code> has no <code>layers</code>, they're auto-detected and a banner offers a copy-paste config snippet (<a href="https://github.com/pererikbergman/noupling/issues/260">#260</a>, <a href="https://github.com/pererikbergman/noupling/issues/266">#266</a>, <a href="https://github.com/pererikbergman/noupling/issues/267">#267</a>).</li>
+        <li><strong>Side panel</strong> &mdash; <em>Info</em> (score front and centre), <em>Issues</em> (every problem in scope as an actionable list with focus mode, <a href="https://github.com/pererikbergman/noupling/issues/265">#265</a>, <a href="https://github.com/pererikbergman/noupling/issues/275">#275</a>), <em>Rules</em> (click a broken rule to filter, again to jump to the first offender, <a href="https://github.com/pererikbergman/noupling/issues/268">#268</a>, <a href="https://github.com/pererikbergman/noupling/issues/269">#269</a>), <em>Files</em> (expand-on-click tree with in-tab breadcrumb, <a href="https://github.com/pererikbergman/noupling/issues/273">#273</a>), <em>Levels</em> (Finder-style one-level drill-down, <a href="https://github.com/pererikbergman/noupling/issues/274">#274</a>).</li>
+        <li><strong>Details inlay</strong> &mdash; selecting a node or edge opens an inlay column with metrics, an "About this verdict" explainer (<a href="https://github.com/pererikbergman/noupling/issues/276">#276</a>), cycle break edges with weight contrast (<a href="https://github.com/pererikbergman/noupling/issues/277">#277</a>), and click-to-source links honouring <code>--editor vscode|jetbrains|sublime|cursor</code>.</li>
+        <li><strong>Alternate views</strong> &mdash; Matrix (bounded at &le;200 nodes, clickable cells), Force (d3-force with Rust-precomputed cluster boundaries, <a href="https://github.com/pererikbergman/noupling/issues/278">#278</a>), Composition (<a href="https://github.com/pererikbergman/noupling/issues/279">#279</a>), plus path-finder and min-cut overlays.</li>
+        <li><strong>Score breakdown dialog</strong> (<a href="https://github.com/pererikbergman/noupling/issues/270">#270</a>) and a <strong>history scrubber</strong> over up to 12 snapshots (<a href="https://github.com/pererikbergman/noupling/issues/271">#271</a>; <code>--no-history</code> to shrink the file).</li>
+        <li><strong>LLM enrichment v1</strong> (<a href="https://github.com/pererikbergman/noupling/issues/280">#280</a>) &mdash; optional per-module summaries from <code>.noupling/enrichment/modules.json</code>.</li>
+      </ul>
+      <p><strong>The ripple effect:</strong> The repo became a Cargo workspace &mdash; <code>noupling-core</code> / <code>noupling</code> (cli) / <code>noupling-explorer</code> &mdash; with the dependency direction enforced both by the compiler and by noupling's own <code>dependency_rules</code> (<a href="https://github.com/pererikbergman/noupling/issues/229">#229</a>). Known gaps from a critical review are tracked in <a href="https://github.com/pererikbergman/noupling/issues/315">#315</a>; this is the v1 "interactive readme", with sandbox editing (v2) still to come.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Martin's package metrics: A, I, and D (<a href="https://github.com/pererikbergman/noupling/issues/69">#69</a>, <a href="https://github.com/pererikbergman/noupling/issues/68">#68</a>, <a href="https://github.com/pererikbergman/noupling/issues/70">#70</a>)</h3>
+      <p>Per-directory <strong>Abstractness</strong> (<code>A = abstract / (abstract + concrete)</code>, from trait/interface/abstract-class counts in Rust, Java, Kotlin, TypeScript), <strong>Instability</strong> (<code>I = Ce / (Ca + Ce)</code>), and <strong>Distance from the Main Sequence</strong> (<code>D = |A + I &minus; 1|</code>). Directories with <code>D &gt; 0.5</code> are flagged as <em>Zone of Pain</em> (stable + concrete) or <em>Zone of Uselessness</em> (abstract + unstable). New <strong>Stable Dependencies Principle</strong> violations flag a more-stable directory depending on a less-stable one. All three surface in text, JSON, and HTML reports.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Cohesion, reworked around logical nodes (<a href="https://github.com/pererikbergman/noupling/issues/223">#223</a>)</h3>
+      <p>Directories are now classified as <strong>Container</strong> (only subdirectories; cohesion is <code>null</code>) or <strong>Package</strong> (has files). For Packages, each direct child &mdash; file or subdirectory &mdash; is one logical node and cohesion is the fraction of file-level edges crossing between them, so grouping folders stop being mis-flagged as low-cohesion. Implemented behind a reusable <code>LogicalNodeIndex</code>. <strong>JSON consumers:</strong> handle <code>"cohesion": null</code> and the new <code>kind</code> field.</p>
+
+      <h3><span class="tag tag-refactor">refactor</span> Deepening pass over the reporter and Explorer state</h3>
+      <p>Twelve behaviour-preserving PRs (<a href="https://github.com/pererikbergman/noupling/pull/309">#309</a>&ndash;<a href="https://github.com/pererikbergman/noupling/pull/327">#327</a>): the audit pipeline folded into one module, a <code>DatabaseSession</code> seam, a <code>ReportFormatter</code> trait + registry that now covers every non-bespoke format (the <code>all</code> arm simply enumerates it), <code>data::Report</code> carved out with each format as its own sibling file, and on the template side <code>state/queries.ts</code>, an <code>IssueFocus</code> module, a <code>HighlightPolicy</code> behind the canvas, and <code>SidePanel</code> split per tab.</p>
+
+      <h3>Also in this release:</h3>
+      <ul>
+        <li><span class="tag tag-fix">fix</span> Layered source &rarr; unlayered target is now reported as a violation with <code>to_layer = "&lt;unlayered&gt;"</code> instead of being silently dropped (<a href="https://github.com/pererikbergman/noupling/issues/220">#220</a>). Existing <code>layers</code> configs may surface new violations after upgrading.</li>
+        <li><span class="tag tag-fix">fix</span> Import resolvers matched on path-segment boundaries instead of substrings; <code>import re</code> no longer produces a phantom <code>structure.py &rarr; structure.py</code> self-edge (<a href="https://github.com/pererikbergman/noupling/issues/212">#212</a>).</li>
+        <li><span class="tag tag-infra">infra</span> Distribution is Homebrew + GitHub Releases only; crates.io publishing dropped (<a href="https://github.com/pererikbergman/noupling/pull/329">#329</a>). Build from source with <code>cargo install --path crates/noupling-cli</code>.</li>
+        <li><span class="tag tag-infra">infra</span> <code>release.yml</code> now chains into the Homebrew tap update via <code>repository_dispatch</code> (<a href="https://github.com/pererikbergman/noupling/issues/210">#210</a>).</li>
+        <li><span class="tag tag-test">tests</span> Playwright smoke suite for the Explorer template runs in CI; a manual regression suite targets real codebases (<a href="https://github.com/pererikbergman/noupling/issues/261">#261</a>). 310 tests total.</li>
+        <li><span class="tag tag-docs">docs</span> <code>llms.txt</code> moved to <code>docs/</code> so it's served at the canonical Pages URL.</li>
+      </ul>
+    </article>
+
+
     <article class="release">
       <h2>v0.7.0 &mdash; Architectural Deepening + Elixir/Scala</h2>
       <div class="date">May 2026</div>

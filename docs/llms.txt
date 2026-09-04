@@ -30,7 +30,7 @@ C#, Dart, Elixir, Go, Haskell, Java, JavaScript (+ JSX), Kotlin (+ KTS), PHP, Py
 - `init` — Create `.noupling/settings.json` with defaults.
 - `scan` — Discover source files, parse imports, persist dependency graph to SQLite.
 - `audit` — Compute health score (0-100), list coupling violations and circular dependencies. Use `--fail-below N` for CI gating.
-- `report` — Generate output in one of 12 formats: `json`, `xml`, `md`, `html`, `sonar`, `mermaid`, `dot`, `bundle`, `dashboard`, `pr`, `briefing`, `strategy` (or `all`).
+- `report` — Generate output in one of 13 formats: `json`, `xml`, `md`, `html`, `sonar`, `mermaid`, `dot`, `bundle`, `dashboard`, `pr`, `briefing`, `strategy`, `explorer` (or `all`).
 - `trend` — Show health score history across snapshots with delta.
 - `baseline` — Save a violation baseline; `audit --baseline` only fails on new violations.
 - `hook` — Install/uninstall a pre-commit hook that blocks commits introducing violations.

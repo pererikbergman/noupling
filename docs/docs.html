@@ -17,7 +17,7 @@
       <li><a href="docs.html" class="active">Docs</a></li>
       <li><a href="changelog.html">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.7.0</span></li>
+      <li><span class="badge">v0.8.0</span></li>
     </ul>
   </div>
 </nav>
@@ -158,7 +158,7 @@ noupling audit . --fail-below 80</code></pre>
       <h2 id="cmd-report">report</h2>
       <p>Generate a report file from the latest snapshot.</p>
 <pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME]</code></pre>
-      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>, <code>dashboard</code>, <code>all</code>. See <a href="#report-formats">Report Formats</a>.</p>
+      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>, <code>dashboard</code>, <code>pr</code>, <code>briefing</code>, <code>strategy</code>, <code>explorer</code>, <code>all</code>. See <a href="#report-formats">Report Formats</a>.</p>
 
 
       <h2 id="cmd-trend">trend</h2>
@@ -394,6 +394,10 @@ noupling audit .</code></pre>
           <tr><td><code>dot</code></td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
           <tr><td><code>bundle</code></td><td><code>.noupling/bundle.html</code></td><td>Zoomable sunburst with dependency edges</td></tr>
           <tr><td><code>dashboard</code></td><td><code>.noupling/dashboard.html</code></td><td>Executive dashboard with all metrics, scorecard, risk matrix</td></tr>
+          <tr><td><code>pr</code></td><td><code>.noupling/pr.md</code></td><td>Tight Markdown summary to post as a PR comment</td></tr>
+          <tr><td><code>briefing</code></td><td><code>.noupling/briefing.md</code></td><td>Sprint planning: top 10 ROI-ranked refactorings</td></tr>
+          <tr><td><code>strategy</code></td><td><code>.noupling/strategy.html</code></td><td>Multi-snapshot trend report for executive review (<code>--last N</code>)</td></tr>
+          <tr><td><code>explorer</code></td><td><code>.noupling/explorer.html</code></td><td>Interactive single-file Explorer: layered structure map, drill-down, issues, matrix/force views, click-to-source (<code>--editor</code>, <code>--title</code>, <code>--no-history</code>, <code>--output</code>)</td></tr>
           <tr><td><code>all</code></td><td><em>all of the above</em></td><td>One command to generate every report format</td></tr>
         </tbody>
       </table>
