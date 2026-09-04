@@ -1,6 +1,6 @@
 //! Executive strategy report: multi-snapshot trends and trajectory.
 
-use noupling_core::analyzer::{audit, AuditResult};
+use noupling_core::analyzer::{audit_with_settings, AuditResult};
 use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::settings::Settings;
 use noupling_core::storage::repository::{
@@ -74,15 +74,15 @@ pub fn generate_strategy_report(
         all_snapshots.iter().collect()
     };
 
-    // Compute audit per snapshot
+    // One audit per snapshot through the shared pipeline (ADR 0001), so
+    // the trend's per-snapshot scores match what `audit` printed for
+    // each of them. Type counts are unavailable for historical
+    // snapshots; abstractness-derived Metrics are not plotted here.
     let mut snapshot_results: Vec<SnapshotResult> = Vec::new();
     for snap in &snapshots {
         let modules = module_repo.get_by_snapshot(&snap.id)?;
         let dependencies = dep_repo.get_by_snapshot(&snap.id)?;
-        let mut result = audit(&modules, &dependencies);
-        result.filter_by_severity(settings.thresholds.minimum_severity);
-        result.apply_coupling_mode(&settings.thresholds.coupling_mode);
-        result.filter_by_layers(&settings.layers);
+        let result = audit_with_settings(&modules, &dependencies, &[], settings);
         snapshot_results.push((
             snap.id.clone(),
             snap.timestamp.clone(),

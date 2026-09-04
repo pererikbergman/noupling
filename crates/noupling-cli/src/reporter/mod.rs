@@ -424,7 +424,53 @@ mod tests {
     }
 
     #[test]
-    fn text_format_includes_stability_violations() {
+    fn text_format_notes_inferred_layers_once_and_names_them() {
+        use noupling_core::settings::Layer;
+        let layer = |name: &str, pattern: &str| Layer {
+            name: name.into(),
+            pattern: pattern.into(),
+            allow_sibling: false,
+            max_sibling_density: None,
+            reduced_sibling_weight: 2.5,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(9)
+            .with_layers(
+                vec![
+                    layer("presentation", "**/ui/**"),
+                    layer("data", "**/data/**"),
+                ],
+                true,
+            )
+            .build();
+
+        let text = format_text(&result);
+
+        let note = text
+            .lines()
+            .find(|l| l.starts_with("Layers: inferred"))
+            .unwrap_or_else(|| panic!("missing inferred-layers note:\n{text}"));
+        assert!(note.contains("presentation, data"), "{note}");
+        assert!(
+            note.contains("settings.json"),
+            "must say how to opt out: {note}"
+        );
+        assert_eq!(
+            text.matches("Layers: inferred").count(),
+            1,
+            "one line, not a section"
+        );
+    }
+
+    #[test]
+    fn text_format_omits_layer_note_when_layers_are_configured() {
+        let result = AuditResultBuilder::new().with_total_modules(3).build();
+        let text = format_text(&result);
+        assert!(!text.contains("Layers:"), "{text}");
+    }
+
+    #[test]
+    fn text_format_renders_stability_violation_as_an_issue_card() {
         use noupling_core::analyzer::StabilityViolation;
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
@@ -437,14 +483,98 @@ mod tests {
             .build();
         let text = format_text(&result);
         assert!(
-            text.contains("Stability Violations:"),
-            "missing header: {}",
+            text.contains("[MEDIUM] Stability Violation: src/stable -> src/unstable"),
+            "missing card header: {}",
             text
         );
-        assert!(text.contains("src/stable"), "missing from_dir");
-        assert!(text.contains("src/unstable"), "missing to_dir");
         assert!(text.contains("0.17"), "missing from_i");
         assert!(text.contains("0.83"), "missing to_i");
+    }
+
+    /// The Issue cards are the text report's Issue sections: every card
+    /// carries kind, band, subject, reason and recommendation, in
+    /// `issues()` order, under one "Issues (N)" heading.
+    #[test]
+    fn text_format_renders_issue_cards_from_issues_in_canonical_order() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
+        let sibling = CouplingViolation {
+            dir_a: "src/a".into(),
+            dir_b: "src/b".into(),
+            from_module: "src/a/x.rs".into(),
+            to_module: "src/b/y.rs".into(),
+            line_number: 3,
+            depth: 1,
+            weight: 2,
+            severity: 1.0,
+            direction: DependencyDirection::Sibling,
+            rri: 8.0,
+            is_circular: false,
+            cycle_path: vec![],
+            cycle_hop_files: vec![],
+            cycle_order: 0,
+            cycle_hop_counts: vec![],
+            weakest_link: None,
+            break_cost: 0,
+        };
+        let cycle = CouplingViolation {
+            dir_a: "src/p".into(),
+            dir_b: "src/q".into(),
+            from_module: "src/p".into(),
+            to_module: "src/q".into(),
+            line_number: 0,
+            depth: 1,
+            weight: 0,
+            severity: 0.1,
+            direction: DependencyDirection::Circular,
+            rri: 20.0,
+            is_circular: true,
+            cycle_path: vec!["src/p".into(), "src/q".into(), "src/p".into()],
+            cycle_hop_files: vec![],
+            cycle_order: 2,
+            cycle_hop_counts: vec![1, 3],
+            weakest_link: Some("src/p -> src/q (1 import)".into()),
+            break_cost: 1,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_violations(vec![cycle, sibling])
+            .build();
+
+        let text = format_text(&result);
+
+        assert!(text.contains("Issues (2)"), "{text}");
+        let coupling_at = text
+            .find("[CRITICAL] Coupling Violation: src/a/x.rs -> src/b/y.rs")
+            .unwrap_or_else(|| panic!("coupling card missing:\n{text}"));
+        let cycle_at = text
+            .find("[MEDIUM] Cycle: src/p -> src/q -> src/p")
+            .unwrap_or_else(|| panic!("cycle card missing:\n{text}"));
+        assert!(
+            coupling_at < cycle_at,
+            "critical must come before medium:\n{text}"
+        );
+        assert!(
+            text.contains("Reason: src/a/x.rs imports across sibling"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Recommendation: Move the shared code"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Recommendation: Cut the cycle at src/p -> src/q"),
+            "{text}"
+        );
+        // The old per-kind sections are gone.
+        assert!(!text.contains("Stability Violations:"));
+        assert!(!text.contains("Red Flags ("));
+    }
+
+    #[test]
+    fn text_format_has_no_issues_heading_when_there_are_none() {
+        let result = AuditResultBuilder::new().with_total_modules(4).build();
+        let text = format_text(&result);
+        assert!(!text.contains("Issues ("), "{text}");
     }
 
     #[test]
@@ -517,10 +647,9 @@ mod tests {
 
         let text = format_text(&result);
 
-        assert!(text.contains("Low Cohesion:"), "section must appear");
         assert!(
-            text.contains("src/scanner"),
-            "package with low cohesion must appear"
+            text.contains("[LOW] Low Cohesion: src/scanner"),
+            "package with low cohesion must appear as a card: {text}"
         );
         assert!(
             !text.contains("src/features"),

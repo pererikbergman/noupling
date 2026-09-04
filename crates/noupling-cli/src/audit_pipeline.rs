@@ -10,9 +10,7 @@
 //! diff filter interacts with external deps), it changes once.
 
 use anyhow::{Context, Result};
-use noupling_core::analyzer::{
-    self, check_dependency_rules, check_layer_rules, AuditResult, ExternalDepMetric,
-};
+use noupling_core::analyzer::{self, AuditResult, ExternalDepMetric};
 use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::scanner;
 use noupling_core::settings::Settings;
@@ -91,7 +89,10 @@ impl<'a> AuditPipeline<'a> {
             options.module_filter,
         )?;
 
-        // (3) Audit — single-project pipeline through the analyzer.
+        // (3) Audit — single-project pipeline through the analyzer. Layer
+        // resolution (configured or inferred, ADR 0001) and the rule /
+        // layer violation checks live inside `audit_with_settings`, so
+        // every caller sees the same Issues.
         let type_counts = scanner::recompute_type_counts(self.project_path, &filtered_modules);
         let mut result = analyzer::audit_with_settings(
             &filtered_modules,
@@ -99,13 +100,6 @@ impl<'a> AuditPipeline<'a> {
             &type_counts,
             self.settings,
         );
-        result.rule_violations = check_dependency_rules(
-            &filtered_modules,
-            &filtered_deps,
-            &self.settings.dependency_rules,
-        );
-        result.layer_violations =
-            check_layer_rules(&filtered_modules, &filtered_deps, &self.settings.layers);
 
         // (4) Enrich with scan-time metadata (suppressed count + external
         // deps) recorded at scan time.

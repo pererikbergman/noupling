@@ -289,3 +289,113 @@ fn report_explorer_no_history_strips_history_block() {
         std::fs::read_to_string(project.join(".noupling").join("explorer.html")).expect("read");
     assert!(html.contains(r#""history":[]"#));
 }
+
+// ── One audit per snapshot (ADR 0001, #341) ───────────────────────────────
+
+/// A Rust project with no `layers` configured whose directories follow
+/// the ui / domain / data convention, so layer inference fires. One
+/// import reaches upward (data → ui) and one sibling pair sits inside ui.
+fn create_unlayered_by_settings_fixture() -> tempfile::TempDir {
+    let fixture = tempfile::tempdir().expect("tempdir");
+    let src = fixture.path().join("src");
+    let write = |rel: &str, body: &str| {
+        let p = src.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    };
+    write(
+        "main.rs",
+        "mod ui; mod domain; mod data;\nfn main() { ui::home::show(); }\n",
+    );
+    write(
+        "ui/mod.rs",
+        "pub mod home; pub mod login; pub mod settings;\n",
+    );
+    write(
+        "ui/home.rs",
+        "use crate::ui::login;\nuse crate::domain::cart;\npub fn show() { login::form(); cart::total(); }\n",
+    );
+    write("ui/login.rs", "pub fn form() {}\n");
+    write("ui/settings.rs", "pub fn page() {}\n");
+    write(
+        "domain/mod.rs",
+        "pub mod cart; pub mod order; pub mod user;\n",
+    );
+    write(
+        "domain/cart.rs",
+        "use crate::data::cart_repo;\npub fn total() -> u32 { cart_repo::load() }\n",
+    );
+    write("domain/order.rs", "pub fn place() {}\n");
+    write("domain/user.rs", "pub fn name() {}\n");
+    write(
+        "data/mod.rs",
+        "pub mod cart_repo; pub mod order_repo; pub mod api;\n",
+    );
+    write(
+        "data/cart_repo.rs",
+        "use crate::ui::settings;\npub fn load() -> u32 { settings::page(); 1 }\n",
+    );
+    write("data/order_repo.rs", "pub fn save() {}\n");
+    write("data/api.rs", "pub fn get() {}\n");
+    fixture
+}
+
+fn health_score_line(text: &str) -> &str {
+    text.lines()
+        .find(|l| l.starts_with("Health Score:"))
+        .unwrap_or_else(|| panic!("no Health Score line in:\n{text}"))
+}
+
+/// With no `layers` in settings, `audit` (the text format) and the
+/// Explorer read one audit: same inferred layers, same score, and the
+/// text output says the layers were inferred.
+#[test]
+fn unlayered_project_gets_the_same_inferred_audit_in_audit_text_and_explorer() {
+    let fixture = create_unlayered_by_settings_fixture();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    scan(project);
+
+    let audit = run_noupling(&["audit", root]);
+    assert!(
+        audit.status.success(),
+        "{}",
+        String::from_utf8_lossy(&audit.stderr)
+    );
+    let audit_text = String::from_utf8_lossy(&audit.stdout).into_owned();
+    assert!(
+        audit_text.contains("Layers: inferred from path names (presentation, domain, data)"),
+        "audit must say the layers were inferred:\n{audit_text}"
+    );
+    assert!(
+        audit_text.contains("Layer Violations (1)") || audit_text.contains("Layer Violation"),
+        "data → ui must surface as a Layer Violation against the inferred layers:\n{audit_text}"
+    );
+
+    let explorer = run_noupling(&["report", root, "--format", "explorer"]);
+    assert!(
+        explorer.status.success(),
+        "{}",
+        String::from_utf8_lossy(&explorer.stderr)
+    );
+    let html = std::fs::read_to_string(project.join(".noupling").join("explorer.html")).unwrap();
+    let open = r#"<script id="noupling-data" type="application/json">"#;
+    let start = html.find(open).expect("data block") + open.len();
+    let end = start + html[start..].find("</script>").expect("closed");
+    let contract: serde_json::Value = serde_json::from_str(&html[start..end]).unwrap();
+
+    assert_eq!(contract["layers_auto_detected"], true);
+    let layer_names: Vec<&str> = contract["layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(layer_names, vec!["presentation", "domain", "data"]);
+    let explorer_score = contract["health_score"].as_f64().unwrap();
+    assert_eq!(
+        health_score_line(&audit_text),
+        format!("Health Score: {:.1}/100", explorer_score),
+        "audit and explorer disagree on the score"
+    );
+}

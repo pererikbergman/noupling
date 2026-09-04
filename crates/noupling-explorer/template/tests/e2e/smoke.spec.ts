@@ -100,8 +100,11 @@ test.describe("Explorer — acme-payments sample", () => {
       "svg[aria-label*='Force-directed cluster view']",
     );
     await expect(svg).toBeVisible();
+    // The SVG mounts before the d3-force simulation has emitted its
+    // first tick, so a one-shot count() can race the render and see
+    // zero circles (flaky on CI). Poll until the nodes are in the DOM.
     const circles = svg.locator("circle");
-    expect(await circles.count()).toBeGreaterThan(0);
+    await expect.poll(() => circles.count(), { timeout: 10000 }).toBeGreaterThan(0);
   });
 
   test("Force view renders cluster boundary circles when contract carries clusters (#278 follow-up)", async ({

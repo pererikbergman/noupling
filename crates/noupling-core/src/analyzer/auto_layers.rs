@@ -1,23 +1,24 @@
-//! Heuristic layer detection for codebases that ship the Explorer without a
-//! configured `.noupling/settings.json` layers array.
+//! Heuristic layer detection for codebases whose `.noupling/settings.json`
+//! declares no `layers` array (ADR 0001, #341).
 //!
 //! Walks every file path looking for well-known directory-name keywords and
 //! buckets files by the first keyword that matches. Returns a `Vec<Layer>`
-//! the cli can splice into a clone of the project settings before re-running
-//! audit + rendering the Explorer. The layers themselves are
-//! marker-only (a single `**/<keyword>/**` glob each) — good enough for
-//! the LSM to read as tiered, not a substitute for hand-written architecture
-//! rules.
+//! that [`super::audit_with_settings`] uses in place of the empty configured
+//! set, so `audit`, every report format, and the CI gate see the same
+//! layers. The layers themselves are marker-only (a single `**/<keyword>/**`
+//! glob each) — good enough to read as tiered, not a substitute for
+//! hand-written architecture rules. The user's settings.json is never
+//! touched.
 //!
 //! The detection is intentionally conservative: a keyword has to claim at
 //! least `MIN_FILES_PER_LAYER` files to count, and the synthesized layer
 //! set must cover at least `MIN_COVERAGE_PERCENT` of all source files
 //! before it's emitted. If nothing reasonable is detected we return an
-//! empty `Vec` and the cli leaves the settings alone.
+//! empty `Vec` and the audit runs unlayered.
 
-use noupling_core::core::{Module, ModuleType};
-use noupling_core::settings::Layer;
-use std::collections::BTreeMap;
+use crate::core::{Module, ModuleType};
+use crate::settings::Layer;
+use std::collections::{BTreeMap, BTreeSet};
 
 const MIN_FILES_PER_LAYER: usize = 3;
 const MIN_COVERAGE_PERCENT: f64 = 30.0;
@@ -130,12 +131,20 @@ pub fn detect_layers(modules: &[Module]) -> Vec<Layer> {
         return Vec::new();
     }
 
-    // Bucket files by the first matching keyword in priority order.
+    // Bucket files by the first matching keyword in priority order, and
+    // remember the directory segments (original case) each layer was seen
+    // through so the emitted glob matches the real paths (`ui`, `Screens`),
+    // not the catalogue name (`presentation`).
     let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let mut seen_segments: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
     let mut total_matched = 0usize;
     for f in &files {
-        if let Some(layer_name) = classify(&f.path) {
+        if let Some((layer_name, segment)) = classify(&f.path) {
             *counts.entry(layer_name).or_insert(0) += 1;
+            seen_segments
+                .entry(layer_name)
+                .or_default()
+                .insert(segment.to_string());
             total_matched += 1;
         }
     }
@@ -154,9 +163,16 @@ pub fn detect_layers(modules: &[Module]) -> Vec<Layer> {
             if count < MIN_FILES_PER_LAYER {
                 return None;
             }
+            let segments = seen_segments.get(*name)?;
+            let pattern = if segments.len() == 1 {
+                format!("**/{}/**", segments.iter().next()?)
+            } else {
+                let alternatives: Vec<&str> = segments.iter().map(String::as_str).collect();
+                format!("**/{{{}}}/**", alternatives.join(","))
+            };
             Some(Layer {
                 name: (*name).to_string(),
-                pattern: format!("**/{}/**", name),
+                pattern,
                 allow_sibling: false,
                 max_sibling_density: None,
                 reduced_sibling_weight: 2.5,
@@ -165,21 +181,18 @@ pub fn detect_layers(modules: &[Module]) -> Vec<Layer> {
         .collect()
 }
 
-/// Return the catalogue layer name a path falls under, or `None` when no
-/// path segment matches.
-fn classify(path: &str) -> Option<&'static str> {
-    let segments: Vec<&str> = path
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.trim_end_matches(".kt").trim_end_matches(".rs"))
-        .collect();
+/// Return the catalogue layer name a path falls under, plus the directory
+/// segment (as written) that placed it there, or `None` when no directory
+/// segment matches. The file name is never considered: the emitted glob
+/// `**/<segment>/**` can only match a directory.
+fn classify(path: &str) -> Option<(&'static str, &str)> {
+    let mut segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    segments.pop(); // the file name
     for (layer_name, keywords) in KEYWORDS {
         for seg in &segments {
             let lower = seg.to_ascii_lowercase();
-            for kw in *keywords {
-                if &lower == kw {
-                    return Some(*layer_name);
-                }
+            if keywords.contains(&lower.as_str()) {
+                return Some((*layer_name, seg));
             }
         }
     }
@@ -189,7 +202,6 @@ fn classify(path: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use noupling_core::core::ModuleType;
 
     fn file(path: &str) -> Module {
         Module {
@@ -219,6 +231,83 @@ mod tests {
         let layers = detect_layers(&modules);
         let names: Vec<&str> = layers.iter().map(|l| l.name.as_str()).collect();
         assert_eq!(names, vec!["presentation", "domain", "data"]);
+    }
+
+    #[test]
+    fn inferred_patterns_match_the_paths_that_produced_them() {
+        // The catalogue name ("presentation") is not a path segment; the
+        // pattern has to be built from the keywords actually seen ("ui",
+        // "screens") or the layer matches nothing downstream.
+        let modules = vec![
+            file("app/ui/Home.kt"),
+            file("app/ui/Login.kt"),
+            file("app/screens/Settings.kt"),
+            file("app/domain/CartUseCase.kt"),
+            file("app/domain/OrderUseCase.kt"),
+            file("app/domain/UserUseCase.kt"),
+        ];
+        let layers = detect_layers(&modules);
+        let presentation = layers
+            .iter()
+            .find(|l| l.name == "presentation")
+            .expect("presentation layer");
+        let matcher = globset::Glob::new(&presentation.pattern)
+            .unwrap()
+            .compile_matcher();
+        assert!(
+            matcher.is_match("app/ui/Home.kt"),
+            "{}",
+            presentation.pattern
+        );
+        assert!(
+            matcher.is_match("app/screens/Settings.kt"),
+            "{}",
+            presentation.pattern
+        );
+        assert!(!matcher.is_match("app/domain/CartUseCase.kt"));
+        assert!(
+            !matcher.is_match("app/view/Other.kt"),
+            "keywords nobody uses stay out of the pattern: {}",
+            presentation.pattern
+        );
+    }
+
+    #[test]
+    fn file_names_never_count_as_layer_segments() {
+        // `src/db.rs`, `src/api.rs`, `src/storage.rs` are files, not
+        // directories; the emitted glob `**/db/**` could never match them,
+        // so they must not trigger inference.
+        let modules = vec![
+            file("src/main.rs"),
+            file("src/db.rs"),
+            file("src/api.rs"),
+            file("src/storage.rs"),
+        ];
+        assert!(detect_layers(&modules).is_empty());
+    }
+
+    #[test]
+    fn emitted_globs_keep_the_directory_case() {
+        let modules = vec![
+            file("src/Controllers/A.kt"),
+            file("src/Controllers/B.kt"),
+            file("src/Views/C.kt"),
+        ];
+        let layers = detect_layers(&modules);
+        let presentation = layers.iter().find(|l| l.name == "presentation").unwrap();
+        let matcher = globset::Glob::new(&presentation.pattern)
+            .unwrap()
+            .compile_matcher();
+        assert!(
+            matcher.is_match("src/Controllers/A.kt"),
+            "{}",
+            presentation.pattern
+        );
+        assert!(
+            matcher.is_match("src/Views/C.kt"),
+            "{}",
+            presentation.pattern
+        );
     }
 
     #[test]

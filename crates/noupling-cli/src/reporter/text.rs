@@ -2,7 +2,7 @@
 //! stdout. Also owns the monorepo-aware variant used when audit
 //! discovers per-module configs.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, Issue, SeverityBand};
 
 use super::VERSION;
 
@@ -31,6 +31,14 @@ pub fn format_text(result: &AuditResult) -> String {
             } else {
                 "s"
             }
+        ));
+    }
+
+    if result.layers_auto_detected {
+        let names: Vec<&str> = result.layers.iter().map(|l| l.name.as_str()).collect();
+        output.push_str(&format!(
+            "Layers: inferred from path names ({}) — set `layers` in .noupling/settings.json to override\n",
+            names.join(", ")
         ));
     }
 
@@ -68,39 +76,8 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
-    if !result.violations.is_empty() {
-        output.push('\n');
-        for v in &result.violations {
-            let dir_label = match v.direction {
-                noupling_core::analyzer::DependencyDirection::Downward => "\u{2193}",
-                noupling_core::analyzer::DependencyDirection::Sibling => "\u{2194}",
-                noupling_core::analyzer::DependencyDirection::Upward => "\u{2191}",
-                noupling_core::analyzer::DependencyDirection::External => "\u{2197}",
-                noupling_core::analyzer::DependencyDirection::Transitive => "\u{21dd}",
-                noupling_core::analyzer::DependencyDirection::Circular => "\u{21bb}",
-            };
-            let rri_label = if v.rri > 0.0 {
-                format!(" RRI:{:.0}", v.rri)
-            } else {
-                String::new()
-            };
-            let weight_label = if v.is_circular {
-                " CIRCULAR".to_string()
-            } else if v.weight > 1 {
-                format!(" x{}", v.weight)
-            } else {
-                String::new()
-            };
-            output.push_str(&format!(
-                "  [{:.2}]{}{} {} {} -> {} (depth {})\n",
-                v.severity, weight_label, rri_label, dir_label, v.from_module, v.to_module, v.depth
-            ));
-            output.push_str(&format!("         {} <> {}\n", v.dir_a, v.dir_b));
-            if let Some(ref wl) = v.weakest_link {
-                output.push_str(&format!("         Weakest link: {}\n", wl));
-            }
-        }
-    }
+    // Issues — every kind, as Issue cards, in issues() order (#340).
+    output.push_str(&format_issue_cards(result));
 
     // Hotspots (top 10 most-imported modules)
     let top_hotspots: Vec<_> = result
@@ -154,53 +131,6 @@ pub fn format_text(result: &AuditResult) -> String {
         }
     }
 
-    // Rule violations
-    if !result.rule_violations.is_empty() {
-        output.push_str(&format!(
-            "\nRule Violations ({}):\n",
-            result.rule_violations.len()
-        ));
-        for rv in &result.rule_violations {
-            output.push_str(&format!(
-                "  {} -> {} (line {})\n    {}\n",
-                rv.from_module, rv.to_module, rv.line_number, rv.message
-            ));
-        }
-    }
-
-    // Layer violations
-    if !result.layer_violations.is_empty() {
-        output.push_str(&format!(
-            "\nLayer Violations ({}):\n",
-            result.layer_violations.len()
-        ));
-        for lv in &result.layer_violations {
-            output.push_str(&format!(
-                "  {} ({}) -> {} ({}) (line {})\n",
-                lv.from_module, lv.from_layer, lv.to_module, lv.to_layer, lv.line_number
-            ));
-        }
-    }
-
-    // Cohesion (low cohesion directories — Packages only; Containers have
-    // undefined cohesion by design, so they never appear in this section).
-    let low_cohesion: Vec<_> = result
-        .cohesion
-        .iter()
-        .filter_map(|c| c.cohesion.map(|val| (c, val)))
-        .filter(|(c, val)| *val < 0.1 && c.n_children >= 3)
-        .take(10)
-        .collect();
-    if !low_cohesion.is_empty() {
-        output.push_str("\nLow Cohesion:\n");
-        for (c, val) in &low_cohesion {
-            output.push_str(&format!(
-                "  {:.2} {} ({} files, {} internal deps)\n",
-                val, c.dir, c.n_children, c.internal_deps
-            ));
-        }
-    }
-
     // Abstractness per directory
     if !result.abstractness.is_empty() {
         output.push_str("\nAbstractness:\n");
@@ -236,19 +166,6 @@ pub fn format_text(result: &AuditResult) -> String {
             output.push_str(&format!(
                 "  D={:.2} {} (A={:.2}, I={:.2}){}\n",
                 d.distance, d.dir, d.abstractness, d.instability, zone_tag
-            ));
-        }
-    }
-
-    // Stable Dependencies Principle violations
-    if !result.stability_violations.is_empty() {
-        output.push_str("\nStability Violations:\n");
-        output
-            .push_str("  (a more-stable directory depends on a less-stable one — Martin's SDP)\n");
-        for v in result.stability_violations.iter().take(10) {
-            output.push_str(&format!(
-                "  {} (I={:.2}) -> {} (I={:.2})\n",
-                v.from_dir, v.from_instability, v.to_dir, v.to_instability
             ));
         }
     }
@@ -305,35 +222,80 @@ pub fn format_text(result: &AuditResult) -> String {
         ));
     }
 
-    // Gravity Wells
-    if !result.gravity_wells.is_empty() {
-        output.push_str(&format!(
-            "\nGravity Wells ({}):\n",
-            result.gravity_wells.len()
-        ));
-        for g in result.gravity_wells.iter().take(10) {
-            output.push_str(&format!(
-                "  [RRI:{:.0}] {} ({} relationships)\n",
-                g.total_rri, g.module_path, g.relationship_count
-            ));
-        }
-    }
-
-    // Red Flags
-    if !result.red_flags.is_empty() {
-        output.push_str(&format!("\nRed Flags ({}):\n", result.red_flags.len()));
-        for f in result.red_flags.iter().take(10) {
-            let flag_icon = match f.flag_type {
-                noupling_core::analyzer::RedFlagType::FusedSibling => "\u{26a0}",
-                noupling_core::analyzer::RedFlagType::TrappedChild => "\u{26d4}",
-            };
-            output.push_str(&format!("  {} {}\n", flag_icon, f.recommendation));
-        }
-    }
-
     output.push_str(&format!("\n{}\n", VERSION));
 
     output
+}
+
+/// Render every Issue as an Issue card (`CONTEXT.md` § Issue card):
+/// kind, severity band, subject, reason, recommendation. The match is
+/// exhaustive on purpose — a new kind must be handled here to compile.
+fn format_issue_cards(result: &AuditResult) -> String {
+    let issues = result.issues();
+    if issues.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    let band_count = |band: SeverityBand| issues.iter().filter(|i| i.severity() == band).count();
+    out.push_str(&format!(
+        "\nIssues ({}): {} critical, {} high, {} medium, {} low\n",
+        issues.len(),
+        band_count(SeverityBand::Critical),
+        band_count(SeverityBand::High),
+        band_count(SeverityBand::Medium),
+        band_count(SeverityBand::Low),
+    ));
+    for issue in &issues {
+        // Per-kind extra line: the number formats have always shown next
+        // to the subject and that the card's one-sentence reason omits.
+        let extra: Option<String> = match issue {
+            Issue::CouplingViolation(v) => Some(format!(
+                "{} <> {} (depth {}, line {})",
+                v.dir_a, v.dir_b, v.depth, v.line_number
+            )),
+            Issue::Cycle(v) => v
+                .weakest_link
+                .as_ref()
+                .map(|wl| format!("Weakest link: {}", wl)),
+            Issue::RuleViolation(r) => Some(format!("line {}", r.line_number)),
+            Issue::LayerViolation(l) => Some(format!(
+                "{} -> {} (line {})",
+                l.from_layer, l.to_layer, l.line_number
+            )),
+            Issue::GravityWell(g) => Some(format!(
+                "RRI {:.0} across {} relationships",
+                g.total_rri, g.relationship_count
+            )),
+            Issue::RedFlag(f) => Some(format!("RRI {:.0}", f.rri)),
+            Issue::StabilityViolation(s) => Some(format!(
+                "I={:.2} -> I={:.2}",
+                s.from_instability, s.to_instability
+            )),
+            Issue::ZoneFlag(d) => Some(format!(
+                "D={:.2} (A={:.2}, I={:.2})",
+                d.distance, d.abstractness, d.instability
+            )),
+            Issue::LowCohesion(c) => Some(format!(
+                "{} children, {} internal deps",
+                c.n_children, c.internal_deps
+            )),
+        };
+        out.push_str(&format!(
+            "\n  [{}] {}: {}\n",
+            issue.severity().name().to_uppercase(),
+            issue.kind(),
+            issue.subject()
+        ));
+        if let Some(extra) = extra {
+            out.push_str(&format!("      {}\n", extra));
+        }
+        out.push_str(&format!("      Reason: {}\n", issue.reason()));
+        out.push_str(&format!(
+            "      Recommendation: {}\n",
+            issue.recommendation()
+        ));
+    }
+    out
 }
 
 pub fn format_monorepo_text(monorepo: &noupling_core::analyzer::MonorepoResult) -> String {
