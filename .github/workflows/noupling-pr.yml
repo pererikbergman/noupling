@@ -42,13 +42,13 @@ jobs:
         run: |
           # Full audit for overall score
           FULL_OUTPUT=$(noupling audit . 2>&1 || true)
-          SCORE=$(echo "$FULL_OUTPUT" | grep "Health Score" | sed 's/Health Score: \(.*\)\/100/\1/')
-          VIOLATIONS=$(echo "$FULL_OUTPUT" | grep "Violations:" | sed 's/Violations: //')
+          SCORE=$(echo "$FULL_OUTPUT" | grep "^Health Score" | sed 's/Health Score: \(.*\)\/100/\1/')
+          VIOLATIONS=$(echo "$FULL_OUTPUT" | grep "^Violations:" | sed 's/Violations: //')
 
           # Diff audit for new violations only
           noupling scan . --diff-base origin/${{ github.base_ref }}
           DIFF_OUTPUT=$(noupling audit . 2>&1 || true)
-          NEW_VIOLATIONS=$(echo "$DIFF_OUTPUT" | grep "Violations:" | sed 's/Violations: //')
+          NEW_VIOLATIONS=$(echo "$DIFF_OUTPUT" | grep "^Violations:" | sed 's/Violations: //')
 
           echo "score=$SCORE" >> $GITHUB_OUTPUT
           echo "violations=$VIOLATIONS" >> $GITHUB_OUTPUT
