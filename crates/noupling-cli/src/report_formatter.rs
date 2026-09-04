@@ -241,12 +241,7 @@ mod adapters {
         }
         fn render(&self, ctx: &FormatterContext<'_>) -> Result<Output> {
             let md_dir = ctx.report_dir.join("report-md");
-            reporter::generate_markdown_report(
-                ctx.modules,
-                ctx.result,
-                &ctx.snapshot.id,
-                &md_dir,
-            )?;
+            reporter::generate_markdown_report(ctx.modules, ctx.result, &ctx.snapshot.id, &md_dir)?;
             // The previous bespoke arm printed `…/report-md/README.md`;
             // we render the same path so the user sees no diff.
             Ok(Output::Directory {
@@ -395,8 +390,17 @@ mod tests {
     fn registry_includes_every_non_bespoke_format() {
         let names: Vec<&'static str> = builtin_formatters().iter().map(|f| f.name()).collect();
         for expected in [
-            "json", "xml", "sonar", "mermaid", "dot", "briefing", "md", "html", "bundle",
-            "dashboard", "pr",
+            "json",
+            "xml",
+            "sonar",
+            "mermaid",
+            "dot",
+            "briefing",
+            "md",
+            "html",
+            "bundle",
+            "dashboard",
+            "pr",
         ] {
             assert!(
                 names.contains(&expected),
