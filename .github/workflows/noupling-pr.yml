@@ -67,12 +67,27 @@ jobs:
             const newViolations = '${{ steps.audit.outputs.new_violations }}';
             const diffOutput = fs.readFileSync('/tmp/noupling-diff.txt', 'utf8');
 
-            // Build violation details (match severity like [0.33] but not hotspots like [12 in,])
+            // Build issue details: each Issue card starts with a band
+            // header like `  [HIGH] Coupling Violation: a -> b` and is
+            // followed by deeper-indented detail lines (reason,
+            // recommendation, score impact). Hotspot lines look like
+            // `  [12 in, 3 out] ...` and never match the band header.
             let details = '';
             const lines = diffOutput.split('\n');
-            const violationLines = lines.filter(l => /^\s+\[\d+\.\d+\]/.test(l));
-            if (violationLines.length > 0) {
-              details = '\n\n### New Violations\n\n```\n' + violationLines.join('\n') + '\n```';
+            const cardLines = [];
+            let inCard = false;
+            for (const l of lines) {
+              if (/^\s+\[(CRITICAL|HIGH|MEDIUM|LOW)\] /.test(l)) {
+                inCard = true;
+                cardLines.push(l);
+              } else if (inCard && /^\s{6}\S/.test(l)) {
+                cardLines.push(l);
+              } else {
+                inCard = false;
+              }
+            }
+            if (cardLines.length > 0) {
+              details = '\n\n### Issues\n\n```\n' + cardLines.join('\n') + '\n```';
             }
 
             const body = `## noupling Architecture Report

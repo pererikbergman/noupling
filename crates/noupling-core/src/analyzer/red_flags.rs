@@ -13,6 +13,12 @@ pub struct RedFlag {
     pub modules: Vec<String>,
     /// The RRI that triggered this flag.
     pub rri: f64,
+    /// Imports between the two modules' directories (the density that
+    /// tripped a Fused Sibling; 0 for other flag types).
+    pub imports: usize,
+    /// Median sibling density the flag was compared against (0.0 when not
+    /// applicable).
+    pub median_density: f64,
     /// Actionable recommendation to fix the issue.
     pub recommendation: String,
 }
@@ -52,6 +58,8 @@ pub fn compute_red_flags(
                     flag_type: RedFlagType::FusedSibling,
                     modules: vec![v.from_module.clone(), v.to_module.clone()],
                     rri: v.rri,
+                    imports: v.weight,
+                    median_density,
                     recommendation: format!(
                         "{} and {} have {} imports between them (median: {:.0}). \
                          Consider merging them or extracting a shared abstraction.",
@@ -74,6 +82,8 @@ pub fn compute_red_flags(
             flag_type: RedFlagType::TrappedChild,
             modules: vec![v.from_module.clone(), v.to_module.clone()],
             rri: v.rri,
+            imports: v.weight,
+            median_density: 0.0,
             recommendation: format!(
                 "{} imports from parent {}. This module cannot be reused \
                  without its parent. Invert the dependency or use an interface.",

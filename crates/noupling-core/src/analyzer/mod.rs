@@ -535,7 +535,10 @@ pub fn audit_with_settings(
     // every sibling coupling inside one of them would count as a strict-mode
     // violation and the score would collapse with no actionable signal.
     // Switch to "actionable" so only cycles count; siblings stay
-    // informational. An explicit `coupling_mode` in settings wins.
+    // informational. Only the top-level `coupling_mode` alias counts as an
+    // explicit choice: `thresholds.coupling_mode` is always present in the
+    // file `noupling init` writes, so it cannot tell "user chose strict"
+    // from "default".
     let coupling_mode = if layers_auto_detected && settings.coupling_mode.is_none() {
         "actionable"
     } else {
@@ -555,6 +558,14 @@ pub fn audit_with_settings(
     result.rule_violations =
         check_dependency_rules(modules, dependencies, &settings.dependency_rules);
     result.layer_violations = check_layer_rules(modules, dependencies, &layers);
+    if layers_auto_detected {
+        // Inferred layers are coarse and may cover only 30% of files; an
+        // import into an unlayered file is ordinary there, not a violation
+        // (it is one for hand-written layers, #220).
+        result
+            .layer_violations
+            .retain(|l| l.to_layer != "<unlayered>");
+    }
     result.layers = layers;
     result.layers_auto_detected = layers_auto_detected;
     result

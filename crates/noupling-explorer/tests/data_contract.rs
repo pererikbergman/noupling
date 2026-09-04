@@ -527,6 +527,8 @@ fn health_score_and_summary_counts_come_from_audit() {
             flag_type: RedFlagType::FusedSibling,
             modules: vec!["a".into(), "b".into()],
             rri: 5.0,
+            imports: 0,
+            median_density: 0.0,
             recommendation: "merge".into(),
         }])
         .build();

@@ -359,8 +359,12 @@ impl Issue {
                 );
                 match f.flag_type {
                     RedFlagType::FusedSibling => format!(
-                        "Fused sibling: {} and {} are bound far tighter than their peers (RRI {:.0}).",
-                        a, b, f.rri
+                        "Fused sibling: {} and {} have {} between their directories (median {:.0}, RRI {:.0}), far tighter than their peers.",
+                        a,
+                        b,
+                        plural(f.imports, "import"),
+                        f.median_density,
+                        f.rri
                     ),
                     RedFlagType::TrappedChild => format!(
                         "Trapped child: {} imports its parent {} and cannot be reused without it (RRI {:.0}).",
@@ -729,6 +733,19 @@ mod tests {
             .collect();
         let first: Vec<String> = issues.iter().map(|i| i.subject().to_string()).collect();
         assert_eq!(first, again);
+    }
+
+    #[test]
+    fn fused_sibling_reason_carries_the_import_count_and_median() {
+        // fused/left ↔ fused/right: 6 imports, median 1 (fixture README).
+        let issues = fixture_issues();
+        let flag = issues
+            .iter()
+            .find(|i| i.kind() == IssueKind::RedFlag)
+            .expect("fixture has a Red Flag");
+        let reason = flag.reason();
+        assert!(reason.contains("6 imports"), "{reason}");
+        assert!(reason.contains("median 1"), "{reason}");
     }
 
     #[test]

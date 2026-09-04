@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Upgrade notes:** projects with no `layers` in `.noupling/settings.json` will see their score change (usually upward) and may gain Layer Violations. Layer inference and the actionable coupling-mode fallback, which only the Explorer applied before, now run inside the shared audit pipeline, so `audit`, every report format, and the CI gate see the same layers and the same Issues (ADR 0001, #341). To opt out, set `layers` (even an empty-pattern list of your own) or an explicit `coupling_mode` in settings; either disables the fallback exactly as it did for the Explorer.
+**Upgrade notes:** projects with no `layers` in `.noupling/settings.json` will see their score change (usually upward) and may gain Layer Violations. Layer inference and the actionable coupling-mode fallback, which only the Explorer applied before, now run inside the shared audit pipeline, so `audit`, every report format, and the CI gate see the same layers and the same Issues (ADR 0001, #341). To keep your own layers, declare at least one entry in `layers` (an empty array counts as unset, which is what `noupling init` writes); to keep strict coupling, set the top-level `coupling_mode` (`thresholds.coupling_mode` is always written by `init`, so it cannot serve as the explicit opt-out). Inferred layers never produce `<unlayered>` Layer Violations.
 
 ### Added
 

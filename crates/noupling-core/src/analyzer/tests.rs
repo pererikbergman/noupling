@@ -581,6 +581,34 @@ fn audit_with_settings_infers_layers_when_none_configured() {
 }
 
 #[test]
+fn inferred_layers_never_flag_imports_of_unlayered_files() {
+    // Inferred layers are coarse and cover as little as 30% of files, so a
+    // layered file importing an ordinary unlayered file is not a Layer
+    // Violation (it is for hand-written layers, bug #220).
+    let (mut modules, mut deps) = layered_by_path_project();
+    modules.push(make_module("cfg", "app/config.kt"));
+    deps.push(make_dep("u1", "cfg", 9));
+    let settings = crate::settings::Settings::default();
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(result.layers_auto_detected);
+    assert!(
+        result
+            .layer_violations
+            .iter()
+            .all(|l| l.to_layer != "<unlayered>"),
+        "{:?}",
+        result.layer_violations
+    );
+    assert_eq!(
+        result.layer_violations.len(),
+        1,
+        "data → ui is still reported"
+    );
+}
+
+#[test]
 fn audit_with_settings_keeps_explicit_layers_and_never_infers() {
     let (modules, deps) = layered_by_path_project();
     let settings: crate::settings::Settings = serde_json::from_str(
