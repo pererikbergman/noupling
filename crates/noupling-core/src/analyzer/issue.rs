@@ -474,6 +474,24 @@ impl Issue {
         }
     }
 
+    /// The points this Issue takes off the project score. Zero for kinds
+    /// that do not score (Rule / Layer / Stability Violation, Gravity Well,
+    /// Red Flag, Zone Flag, Low Cohesion). A Cycle's impact includes the
+    /// ring hops folded into it, so the sum over all Issues equals
+    /// `100 − score`.
+    pub fn score_impact(&self) -> f64 {
+        match self {
+            Issue::CouplingViolation(v) | Issue::Cycle(v) => v.score_impact,
+            Issue::RuleViolation(_)
+            | Issue::LayerViolation(_)
+            | Issue::GravityWell(_)
+            | Issue::RedFlag(_)
+            | Issue::StabilityViolation(_)
+            | Issue::ZoneFlag(_)
+            | Issue::LowCohesion(_) => 0.0,
+        }
+    }
+
     /// Canonical order: band descending, then kind, then subject path.
     fn canonical_cmp(&self, other: &Issue) -> Ordering {
         other
@@ -494,18 +512,23 @@ impl AuditResult {
     /// Circular pairs surface once, as a [`Issue::Cycle`], and their hop
     /// edges are never also emitted as Coupling Violations.
     pub fn issues(&self) -> Vec<Issue> {
-        let cycles: Vec<&CouplingViolation> =
-            self.violations.iter().filter(|v| v.is_circular).collect();
+        let mut cycles: Vec<CouplingViolation> = self
+            .violations
+            .iter()
+            .filter(|v| v.is_circular)
+            .cloned()
+            .collect();
 
         let mut issues: Vec<Issue> = Vec::new();
 
-        for v in &self.violations {
-            if v.is_circular {
-                issues.push(Issue::Cycle(v.clone()));
-            } else if !is_hop_of_any_cycle(v, &cycles) {
-                issues.push(Issue::CouplingViolation(v.clone()));
+        for v in self.violations.iter().filter(|v| !v.is_circular) {
+            match hop_of_cycle(v, &cycles) {
+                // A ring hop belongs to its Cycle, points included.
+                Some(idx) => cycles[idx].score_impact += v.score_impact,
+                None => issues.push(Issue::CouplingViolation(v.clone())),
             }
         }
+        issues.extend(cycles.into_iter().map(Issue::Cycle));
         issues.extend(
             self.rule_violations
                 .iter()
@@ -549,10 +572,10 @@ impl AuditResult {
     }
 }
 
-/// True when the sibling pair `v` is one of the hops of some detected
-/// cycle, in either direction. Such an edge belongs to the Cycle.
-fn is_hop_of_any_cycle(v: &CouplingViolation, cycles: &[&CouplingViolation]) -> bool {
-    cycles.iter().any(|c| {
+/// The index of the detected cycle that `v` is a hop of (in either
+/// direction), if any. Such an edge belongs to the Cycle.
+fn hop_of_cycle(v: &CouplingViolation, cycles: &[CouplingViolation]) -> Option<usize> {
+    cycles.iter().position(|c| {
         c.cycle_path.windows(2).any(|hop| {
             (hop[0] == v.dir_a && hop[1] == v.dir_b) || (hop[0] == v.dir_b && hop[1] == v.dir_a)
         })
@@ -765,5 +788,70 @@ mod tests {
         );
         assert_eq!(of(IssueKind::ZoneFlag).severity(), SeverityBand::Medium);
         assert_eq!(of(IssueKind::LowCohesion).severity(), SeverityBand::Low);
+    }
+
+    // ── Score impact (#342) ──
+
+    #[test]
+    fn score_impacts_sum_to_the_points_lost_on_the_fixture() {
+        let result = fixture_audit();
+        let issues = result.issues();
+        let lost = 100.0 - result.score;
+        let sum: f64 = issues.iter().map(|i| i.score_impact()).sum();
+        assert!(lost > 1.0, "fixture must actually lose points: {lost}");
+        assert!(
+            (sum - lost).abs() < 1e-6,
+            "sum of score impacts {sum} != points lost {lost}"
+        );
+    }
+
+    #[test]
+    fn non_scoring_kinds_report_exactly_zero_impact() {
+        let issues = fixture_issues();
+        for issue in &issues {
+            match issue.kind() {
+                IssueKind::CouplingViolation | IssueKind::Cycle => {
+                    assert!(issue.score_impact() > 0.0, "{} must score", issue.kind())
+                }
+                _ => assert_eq!(issue.score_impact(), 0.0, "{} must not score", issue.kind()),
+            }
+        }
+    }
+
+    #[test]
+    fn a_folded_ring_hop_charges_its_points_to_the_cycle() {
+        // alpha ↔ beta: the detector emits a circular violation plus the two
+        // sibling edges; all three carry points, but issues() shows one Cycle.
+        let modules = vec![
+            file("a", "src/ring/alpha/a.rs"),
+            file("b", "src/ring/beta/b.rs"),
+        ];
+        let deps = vec![dep("a", "b", 1), dep("b", "a", 1)];
+        let result = audit_with_settings(&modules, &deps, &[], &Settings::default());
+
+        let issues = result.issues();
+        assert_eq!(kinds(&issues), vec![IssueKind::Cycle]);
+        let lost = 100.0 - result.score;
+        assert!(
+            (issues[0].score_impact() - lost).abs() < 1e-6,
+            "cycle impact {} must equal points lost {}",
+            issues[0].score_impact(),
+            lost
+        );
+    }
+
+    #[test]
+    fn impacts_still_add_up_when_the_score_is_clamped_at_zero() {
+        // One module, many heavy sibling imports: raw loss far exceeds 100.
+        let modules = vec![file("a", "src/x/a.rs"), file("b", "src/y/b.rs")];
+        let deps: Vec<Dependency> = (1..=200).map(|i| dep("a", "b", i)).collect();
+        let result = audit_with_settings(&modules, &deps, &[], &Settings::default());
+        assert_eq!(result.score, 0.0, "precondition: clamped");
+
+        let sum: f64 = result.issues().iter().map(|i| i.score_impact()).sum();
+        assert!(
+            (sum - 100.0).abs() < 1e-6,
+            "sum {sum} must equal the 100 points lost"
+        );
     }
 }

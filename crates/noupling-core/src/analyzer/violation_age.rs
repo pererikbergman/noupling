@@ -72,6 +72,7 @@ mod tests {
             cycle_hop_counts: Vec::new(),
             weakest_link: None,
             break_cost: 0,
+            score_impact: 0.0,
         }];
         // No historical snapshots
         let age = compute_violation_age(&violations, &[]);
@@ -100,6 +101,7 @@ mod tests {
             cycle_hop_counts: Vec::new(),
             weakest_link: None,
             break_cost: 0,
+            score_impact: 0.0,
         }];
         // Same violation in 6 historical snapshots -> chronic
         let fp = vec![("src/a/main.rs".to_string(), "src/b/lib.rs".to_string())];

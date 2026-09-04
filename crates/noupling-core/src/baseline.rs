@@ -134,6 +134,7 @@ mod tests {
             cycle_hop_counts: Vec::new(),
             weakest_link: None,
             break_cost: 0,
+            score_impact: 0.0,
         }
     }
 
