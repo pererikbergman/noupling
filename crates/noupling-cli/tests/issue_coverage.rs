@@ -21,6 +21,11 @@ use std::process::Command;
 // current per-format wording (text headings, JSON keys, explorer
 // contract fields). Once Issue cards exist (#340) every listing format
 // prints the glossary kind name, and these can tighten to that.
+//
+// Coupling Violation covers the `sibling` direction only. #339 also
+// asked for `upward`, but the coupling detector never emits that
+// direction today (it produces sibling and circular), so no fixture can
+// trigger it. Add an `upward` marker here when the detector does.
 
 const KINDS: &[(&str, &[&str])] = &[
     ("coupling_violation", &["sibling", "\u{2194}"]),
@@ -60,21 +65,19 @@ const KINDS: &[(&str, &[&str])] = &[
     ("low_cohesion", &["low cohesion", "low_cohesion"]),
 ];
 
-const ALL_KINDS: &[&str] = &[
-    "coupling_violation",
-    "cycle",
-    "rule_violation",
-    "layer_violation",
-    "gravity_well",
-    "red_flag",
-    "stability_violation",
-    "zone_flag",
-    "low_cohesion",
-];
+/// Every kind, in `KINDS` order. Derived so a new kind is added in one place.
+fn all_kinds() -> Vec<&'static str> {
+    KINDS.iter().map(|(kind, _)| *kind).collect()
+}
+
+/// Sentinel for an `EXPECTED` row that covers every kind.
+const ALL_KINDS: &[&str] = &["*"];
 
 // ── Expected coverage per format ─────────────────────────────────────────
 //
 // One row per format. Flip a row to `ALL_KINDS` when its ticket lands.
+// Every format must produce a non-empty artifact; an empty row means
+// "renders, but mentions no Issue kind", never "did not render".
 
 const EXPECTED: &[(&str, &[&str])] = &[
     ("text", ALL_KINDS),
@@ -148,7 +151,7 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-fn noupling(args: &[&str]) -> String {
+fn run_noupling(args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_noupling"))
         .args(args)
         .output()
@@ -162,32 +165,59 @@ fn noupling(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// Read one report artifact, failing loudly if the format did not produce it.
+fn read_artifact(path: &Path) -> String {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("report artifact {} was not produced: {e}", path.display()));
+    assert!(
+        !content.is_empty(),
+        "report artifact {} is empty",
+        path.display()
+    );
+    content
+}
+
+/// Concatenate every file under a directory-style report (md, html).
 fn read_tree(dir: &Path) -> String {
+    assert!(
+        dir.is_dir(),
+        "report directory {} was not produced",
+        dir.display()
+    );
     let mut buf = String::new();
-    if !dir.exists() {
-        return buf;
-    }
     for entry in std::fs::read_dir(dir).expect("read report dir") {
         let entry = entry.expect("dir entry");
         if entry.file_type().expect("file type").is_dir() {
             buf.push_str(&read_tree(&entry.path()));
         } else {
-            buf.push_str(&std::fs::read_to_string(entry.path()).unwrap_or_default());
+            buf.push_str(&read_artifact(&entry.path()));
         }
     }
+    assert!(
+        !buf.is_empty(),
+        "report directory {} is empty",
+        dir.display()
+    );
     buf
+}
+
+/// Copy the fixture into a fresh tempdir so scans never touch the tracked tree.
+fn prepare_fixture() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    copy_dir(&fixture_source(), tmp.path());
+    tmp
 }
 
 /// Scan + audit + every format. Returns format name → output text.
 fn render_all_formats(project: &Path) -> BTreeMap<&'static str, String> {
     let root = project.to_str().unwrap();
-    noupling(&["scan", root]);
-    let text = noupling(&["audit", root]);
-    noupling(&["report", "--format", "all", root]);
-    noupling(&["report", "--format", "explorer", root]);
+    run_noupling(&["scan", root]);
+    let text = run_noupling(&["audit", root]);
+    run_noupling(&["report", "--format", "all", root]);
+    run_noupling(&["report", "--format", "explorer", root]);
 
     let out = project.join(".noupling");
-    let file = |name: &str| std::fs::read_to_string(out.join(name)).unwrap_or_default();
+    let file = |name: &str| read_artifact(&out.join(name));
 
     let mut outputs = BTreeMap::new();
     outputs.insert("text", text);
@@ -212,17 +242,15 @@ fn render_all_formats(project: &Path) -> BTreeMap<&'static str, String> {
 /// Data Contract so the row reflects data, not documentation.
 fn explorer_contract(html: &str) -> String {
     let open = r#"<script id="noupling-data" type="application/json">"#;
-    let start = html.find(open).map(|i| i + open.len());
-    match start {
-        Some(i) => {
-            let end = html[i..]
-                .find("</script>")
-                .map(|j| i + j)
-                .unwrap_or(html.len());
-            html[i..end].to_string()
-        }
-        None => String::new(),
-    }
+    let start = html
+        .find(open)
+        .map(|i| i + open.len())
+        .expect("explorer.html carries an embedded noupling-data contract");
+    let end = html[start..]
+        .find("</script>")
+        .map(|j| start + j)
+        .expect("noupling-data script is closed");
+    html[start..end].to_string()
 }
 
 fn kinds_mentioned(output: &str) -> Vec<&'static str> {
@@ -234,20 +262,19 @@ fn kinds_mentioned(output: &str) -> Vec<&'static str> {
         .collect()
 }
 
-fn render_matrix(actual: &BTreeMap<&str, Vec<&str>>) -> String {
-    let mut s = String::from("format      ");
-    for k in ALL_KINDS {
-        s.push_str(&format!("{:<10}", &k[..k.len().min(9)]));
+fn format_matrix(actual: &BTreeMap<&str, Vec<&str>>) -> String {
+    const COL: usize = 10;
+    let kinds = all_kinds();
+    let mut s = format!("{:<12}", "format");
+    for k in &kinds {
+        s.push_str(&format!("{:<COL$}", &k[..k.len().min(COL - 1)]));
     }
     s.push('\n');
-    for (fmt, kinds) in actual {
-        s.push_str(&format!("{:<12}", fmt));
-        for k in ALL_KINDS {
-            s.push_str(if kinds.contains(k) {
-                "X         "
-            } else {
-                ".         "
-            });
+    for (fmt, mentioned) in actual {
+        s.push_str(&format!("{fmt:<12}"));
+        for k in &kinds {
+            let mark = if mentioned.contains(k) { "X" } else { "." };
+            s.push_str(&format!("{mark:<COL$}"));
         }
         s.push('\n');
     }
@@ -259,14 +286,16 @@ fn render_matrix(actual: &BTreeMap<&str, Vec<&str>>) -> String {
 /// The fixture's contract: `audit` surfaces every Issue kind.
 #[test]
 fn fixture_audit_surfaces_every_issue_kind() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    copy_dir(&fixture_source(), tmp.path());
+    let tmp = prepare_fixture();
     let root = tmp.path().to_str().unwrap();
-    noupling(&["scan", root]);
-    let text = noupling(&["audit", root]);
+    run_noupling(&["scan", root]);
+    let text = run_noupling(&["audit", root]);
 
     let found = kinds_mentioned(&text);
-    let missing: Vec<_> = ALL_KINDS.iter().filter(|k| !found.contains(k)).collect();
+    let missing: Vec<_> = all_kinds()
+        .into_iter()
+        .filter(|k| !found.contains(k))
+        .collect();
     assert!(
         missing.is_empty(),
         "audit output is missing Issue kinds {:?}\n--- audit output ---\n{}",
@@ -278,8 +307,7 @@ fn fixture_audit_surfaces_every_issue_kind() {
 /// The coverage matrix: which Issue kinds each format mentions.
 #[test]
 fn every_format_matches_the_expected_issue_kind_coverage() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    copy_dir(&fixture_source(), tmp.path());
+    let tmp = prepare_fixture();
     let outputs = render_all_formats(tmp.path());
 
     let actual: BTreeMap<&str, Vec<&str>> = outputs
@@ -292,7 +320,11 @@ fn every_format_matches_the_expected_issue_kind_coverage() {
         let got = actual
             .get(fmt)
             .unwrap_or_else(|| panic!("format {fmt} was not rendered"));
-        let mut expected_sorted: Vec<&str> = expected.to_vec();
+        let mut expected_sorted: Vec<&str> = if *expected == ALL_KINDS {
+            all_kinds()
+        } else {
+            expected.to_vec()
+        };
         expected_sorted.sort_unstable();
         let mut got_sorted = got.clone();
         got_sorted.sort_unstable();
@@ -312,6 +344,6 @@ fn every_format_matches_the_expected_issue_kind_coverage() {
         mismatches.is_empty(),
         "Issue-kind coverage drifted from EXPECTED:\n{}\n\nactual matrix:\n{}",
         mismatches.join("\n"),
-        render_matrix(&actual)
+        format_matrix(&actual)
     );
 }
