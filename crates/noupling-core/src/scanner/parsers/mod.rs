@@ -76,34 +76,6 @@ pub trait LanguageParser: Send + Sync {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::ends_with_segment;
-
-    #[test]
-    fn ends_with_segment_matches_exact_path() {
-        assert!(ends_with_segment("foo.py", "foo.py"));
-    }
-
-    #[test]
-    fn ends_with_segment_matches_slash_boundary() {
-        assert!(ends_with_segment("src/pkg/foo.py", "pkg/foo.py"));
-        assert!(ends_with_segment("src/pkg/foo.py", "foo.py"));
-    }
-
-    #[test]
-    fn ends_with_segment_rejects_mid_segment_suffix() {
-        assert!(!ends_with_segment("src/structure.py", "re.py"));
-        assert!(!ends_with_segment("src/chaos.py", "os.py"));
-        assert!(!ends_with_segment("src/figure.py", "re.py"));
-    }
-
-    #[test]
-    fn ends_with_segment_rejects_partial_segment_match() {
-        assert!(!ends_with_segment("xfoo/bar.py", "foo/bar.py"));
-    }
-}
-
 /// Maps each supported file extension to its language adapter.
 ///
 /// Extensions that share an adapter (e.g., `js`/`jsx` both use `JavaScriptParser`)
@@ -132,4 +104,32 @@ pub fn registry() -> Vec<(&'static str, Box<dyn LanguageParser>)> {
         ("scala", Box::new(scala::ScalaParser)),
         ("sc", Box::new(scala::ScalaParser)),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ends_with_segment;
+
+    #[test]
+    fn ends_with_segment_matches_exact_path() {
+        assert!(ends_with_segment("foo.py", "foo.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_matches_slash_boundary() {
+        assert!(ends_with_segment("src/pkg/foo.py", "pkg/foo.py"));
+        assert!(ends_with_segment("src/pkg/foo.py", "foo.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_rejects_mid_segment_suffix() {
+        assert!(!ends_with_segment("src/structure.py", "re.py"));
+        assert!(!ends_with_segment("src/chaos.py", "os.py"));
+        assert!(!ends_with_segment("src/figure.py", "re.py"));
+    }
+
+    #[test]
+    fn ends_with_segment_rejects_partial_segment_match() {
+        assert!(!ends_with_segment("xfoo/bar.py", "foo/bar.py"));
+    }
 }

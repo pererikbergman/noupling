@@ -115,6 +115,13 @@ pub struct AuditResultBuilder {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+impl Default for AuditResultBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
 #[allow(dead_code)] // setters exercised across crate + downstream test crates
 impl AuditResultBuilder {
     pub fn new() -> Self {
