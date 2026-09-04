@@ -13,11 +13,11 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-noupling-core = { path = "../noupling-core", version = "0.7.0" }
+noupling-core = { path = "../noupling-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 globset = { workspace = true }
 
 [dev-dependencies]
-noupling-core = { path = "../noupling-core", version = "0.7.0", features = ["test-utils"] }
+noupling-core = { path = "../noupling-core", features = ["test-utils"] }
