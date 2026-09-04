@@ -52,7 +52,7 @@ export function SearchRow({
         </div>
       </div>
       <span className="text-[12px] text-muted">
-        {data.codebase.module_count} modules · {data.codebase.file_count} files
+        {plural(data.codebase.module_count, "module")} · {plural(data.codebase.file_count, "file")}
       </span>
     </div>
   );
@@ -78,4 +78,8 @@ function ModeBtn({
       {children}
     </button>
   );
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

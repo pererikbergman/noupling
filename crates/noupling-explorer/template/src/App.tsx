@@ -118,7 +118,10 @@ export function App({ data }: AppProps) {
       return;
     }
     const focus = computeIssueFocus(issue, key, data);
-    if (focus.lca !== state.scope) state.setState({ scope: focus.lca });
+    // Drop any lingering edge selection: the EdgeDetailsPanel from an
+    // earlier edge click is unrelated to the issue being focused and
+    // would otherwise sit under the Issues list for the whole session.
+    state.setState({ scope: focus.lca, selectedEdge: null });
     setIssueFocus(focus);
   }
 
