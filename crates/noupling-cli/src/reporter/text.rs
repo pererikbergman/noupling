@@ -2,7 +2,7 @@
 //! stdout. Also owns the monorepo-aware variant used when audit
 //! discovers per-module configs.
 
-use noupling_core::analyzer::{AuditResult, Issue, SeverityBand};
+use noupling_core::analyzer::{AuditResult, Issue, IssueKind, SeverityBand};
 
 use super::VERSION;
 
@@ -245,6 +245,27 @@ fn format_issue_cards(result: &AuditResult) -> String {
         band_count(SeverityBand::Medium),
         band_count(SeverityBand::Low),
     ));
+    // Points lost, per scoring kind, in IssueKind order. Sums to
+    // 100 − score because score impact is assigned in core (#342).
+    let total_lost: f64 = issues.iter().map(Issue::score_impact).sum();
+    if total_lost > 0.0 {
+        let per_kind: Vec<String> = IssueKind::ALL
+            .iter()
+            .filter_map(|kind| {
+                let lost: f64 = issues
+                    .iter()
+                    .filter(|i| i.kind() == *kind)
+                    .map(Issue::score_impact)
+                    .sum();
+                (lost > 0.0).then(|| format!("{} {:.1}", kind, lost))
+            })
+            .collect();
+        out.push_str(&format!(
+            "Points lost: {:.1} ({})\n",
+            total_lost,
+            per_kind.join(", ")
+        ));
+    }
     for issue in &issues {
         // Per-kind extra line: the number formats have always shown next
         // to the subject and that the card's one-sentence reason omits.
@@ -294,6 +315,12 @@ fn format_issue_cards(result: &AuditResult) -> String {
             "      Recommendation: {}\n",
             issue.recommendation()
         ));
+        let impact = issue.score_impact();
+        if impact > 0.0 {
+            out.push_str(&format!("      Score impact: {:.1}\n", impact));
+        } else {
+            out.push_str("      Score impact: 0 (does not score)\n");
+        }
     }
     out
 }

@@ -264,6 +264,7 @@ mod tests {
             cycle_hop_counts: Vec::new(),
             weakest_link: None,
             break_cost: 0,
+            score_impact: 0.0,
             line_number: 0,
             weight: 0,
         }
@@ -515,6 +516,7 @@ mod tests {
             cycle_hop_counts: vec![],
             weakest_link: None,
             break_cost: 0,
+            score_impact: 0.0,
         };
         let cycle = CouplingViolation {
             dir_a: "src/p".into(),
@@ -534,6 +536,7 @@ mod tests {
             cycle_hop_counts: vec![1, 3],
             weakest_link: Some("src/p -> src/q (1 import)".into()),
             break_cost: 1,
+            score_impact: 0.0,
         };
         let result = AuditResultBuilder::new()
             .with_total_modules(4)
@@ -568,6 +571,59 @@ mod tests {
         // The old per-kind sections are gone.
         assert!(!text.contains("Stability Violations:"));
         assert!(!text.contains("Red Flags ("));
+    }
+
+    /// The breakdown line sums to the headline points lost and each card
+    /// shows its own score impact.
+    #[test]
+    fn text_format_points_lost_breakdown_adds_up_to_the_headline() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
+        let mut sibling = CouplingViolation {
+            dir_a: "src/a".into(),
+            dir_b: "src/b".into(),
+            from_module: "src/a/x.rs".into(),
+            to_module: "src/b/y.rs".into(),
+            line_number: 3,
+            depth: 1,
+            weight: 2,
+            severity: 1.0,
+            direction: DependencyDirection::Sibling,
+            rri: 8.0,
+            is_circular: false,
+            cycle_path: vec![],
+            cycle_hop_files: vec![],
+            cycle_order: 0,
+            cycle_hop_counts: vec![],
+            weakest_link: None,
+            break_cost: 0,
+            score_impact: 0.0,
+        };
+        let mut cycle = sibling.clone();
+        cycle.dir_a = "src/p".into();
+        cycle.dir_b = "src/q".into();
+        cycle.from_module = "src/p".into();
+        cycle.to_module = "src/q".into();
+        cycle.severity = 0.4;
+        cycle.direction = DependencyDirection::Circular;
+        cycle.is_circular = true;
+        cycle.cycle_path = vec!["src/p".into(), "src/q".into(), "src/p".into()];
+        cycle.cycle_order = 2;
+        sibling.score_impact = 20.0;
+        cycle.score_impact = 8.0;
+        let result = AuditResultBuilder::new()
+            .with_total_modules(5)
+            .with_score(72.0)
+            .with_violations(vec![cycle, sibling])
+            .build();
+
+        let text = format_text(&result);
+
+        assert!(
+            text.contains("Points lost: 28.0 (Coupling Violation 20.0, Cycle 8.0)"),
+            "{text}"
+        );
+        assert!(text.contains("Score impact: 20.0"), "{text}");
+        assert!(text.contains("Score impact: 8.0"), "{text}");
     }
 
     #[test]

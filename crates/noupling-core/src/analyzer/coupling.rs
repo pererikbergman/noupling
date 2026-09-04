@@ -48,6 +48,11 @@ pub struct CouplingViolation {
     pub weakest_link: Option<String>,
     /// For circular deps: number of imports to remove at the weakest link to break the cycle.
     pub break_cost: usize,
+    /// Points this violation takes off the project score (`CONTEXT.md`
+    /// § Score impact). Set by whichever scoring pass ran last
+    /// (`recalculate_score` or `apply_risk_weights`); zero until then.
+    /// Summed over `violations` it equals `100 − score`.
+    pub score_impact: f64,
 }
 
 /// Derive virtual directory tree from module file paths.
@@ -305,6 +310,7 @@ pub(super) fn compute_coupling_violations(
                 cycle_hop_counts: cycle.hop_import_counts.clone(),
                 weakest_link,
                 break_cost,
+                score_impact: 0.0,
             });
         }
 
@@ -353,6 +359,7 @@ pub(super) fn compute_coupling_violations(
                                                     cycle_hop_counts: Vec::new(),
                                                     weakest_link: None,
                                                     break_cost: 0,
+                                                    score_impact: 0.0,
                                                 });
                                             }
                                         }
@@ -399,6 +406,7 @@ pub(super) fn compute_coupling_violations(
                                                     cycle_hop_counts: Vec::new(),
                                                     weakest_link: None,
                                                     break_cost: 0,
+                                                    score_impact: 0.0,
                                                 });
                                             }
                                         }

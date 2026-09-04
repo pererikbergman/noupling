@@ -390,11 +390,12 @@ impl AuditResult {
             .max(weights.external)
             .max(weights.transitive)
             .max(weights.circular);
-        self.score = if self.total_modules > 0 && max_weight > 0.0 {
-            (100.0 * (1.0 - self.tri / (self.total_modules as f64 * max_weight))).clamp(0.0, 100.0)
+        if self.total_modules > 0 && max_weight > 0.0 {
+            let denominator = self.total_modules as f64 * max_weight;
+            self.assign_score(|v| 100.0 * v.rri / denominator);
         } else {
-            100.0
-        };
+            self.assign_score(|_| 0.0);
+        }
 
         // Detect Gravity Wells: modules with disproportionately high aggregate RRI.
         self.gravity_wells = compute_gravity_wells(&self.violations, &self.coupling_metrics);
@@ -402,12 +403,33 @@ impl AuditResult {
     }
 
     pub fn recalculate_score(&mut self) {
-        let sum_severity: f64 = self.violations.iter().map(|v| v.severity).sum();
-        self.score = if self.total_modules > 0 {
-            (100.0 * (1.0 - sum_severity / self.total_modules as f64)).max(0.0)
+        let total_modules = self.total_modules as f64;
+        if self.total_modules > 0 {
+            self.assign_score(|v| 100.0 * v.severity / total_modules);
         } else {
-            100.0
+            self.assign_score(|_| 0.0);
+        }
+    }
+
+    /// The one place the score and each violation's score impact are
+    /// written. `impact_of` gives a violation's raw points; the score is
+    /// `100 − Σ impact`, clamped to `0..=100`. When the raw loss exceeds
+    /// 100 the impacts are scaled down proportionally so they still sum to
+    /// the points actually lost (`CONTEXT.md` § Score impact).
+    fn assign_score(&mut self, impact_of: impl Fn(&CouplingViolation) -> f64) {
+        let raw_loss: f64 = self.violations.iter().map(&impact_of).sum();
+        let scale = if raw_loss > 100.0 {
+            100.0 / raw_loss
+        } else {
+            1.0
         };
+        for v in &mut self.violations {
+            v.score_impact = impact_of(v) * scale;
+        }
+        for v in &mut self.coupling_metrics {
+            v.score_impact = 0.0;
+        }
+        self.score = (100.0 - raw_loss).clamp(0.0, 100.0);
     }
 }
 
@@ -445,11 +467,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     }
 
     let violations = coupling::compute_coupling_violations(modules, dependencies);
-
-    // Health score
-    let sum_severity: f64 = violations.iter().map(|v| v.severity).sum();
     let total_modules = modules.len();
-    let score = (100.0 * (1.0 - sum_severity / total_modules as f64)).max(0.0);
 
     let hotspots = compute_hotspots(modules, dependencies);
 
@@ -474,9 +492,9 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
     let instability = compute_directory_instability(modules, dependencies);
     let stability_violations = compute_stability_violations(modules, dependencies, &instability);
 
-    AuditResult {
+    let mut result = AuditResult {
         violations,
-        score,
+        score: 100.0,
         tri: 0.0,
         total_modules,
         hotspots,
@@ -503,7 +521,10 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         distance: Vec::new(),
         layers: Vec::new(),
         layers_auto_detected: false,
-    }
+    };
+    // Health score (severity-based until risk weights are applied).
+    result.recalculate_score();
+    result
 }
 
 /// Audit a snapshot and apply all settings-driven transformations in one call.
