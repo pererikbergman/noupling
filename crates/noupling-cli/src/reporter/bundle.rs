@@ -60,8 +60,8 @@ pub fn generate_bundle_report(
         module_count = modules.len(),
         dep_count = dependencies.len(),
         violation_count = result.violations.len(),
-        score = format!("{:.1}", result.score),
-        tri = format!("{:.0}", result.tri),
+        score = result.score,
+        tri = result.tri,
     );
 
     if let Some(parent) = output_path.parent() {

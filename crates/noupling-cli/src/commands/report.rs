@@ -45,8 +45,13 @@ pub fn run(
     // session/repo triad for its history walk) and `explorer`
     // (carries an option struct that would balloon
     // FormatterContext for no gain) keep bespoke arms.
-    let (prev_score, prev_violation_count) =
-        previous_snapshot_deltas(&snap_repo, &module_repo, &dep_repo, &snapshot, &project_settings);
+    let (prev_score, prev_violation_count) = previous_snapshot_deltas(
+        &snap_repo,
+        &module_repo,
+        &dep_repo,
+        &snapshot,
+        &project_settings,
+    );
     let registry = crate::report_formatter::builtin_formatters();
     let ctx = crate::report_formatter::FormatterContext {
         modules: &report_modules,
@@ -298,12 +303,8 @@ fn previous_snapshot_deltas<'a>(
         Ok(v) => v,
         Err(_) => return (None, None),
     };
-    let prev_result = noupling_core::analyzer::audit_with_settings(
-        &prev_modules,
-        &prev_deps,
-        &[],
-        settings,
-    );
+    let prev_result =
+        noupling_core::analyzer::audit_with_settings(&prev_modules, &prev_deps, &[], settings);
     (Some(prev_result.score), Some(prev_result.violations.len()))
 }
 
