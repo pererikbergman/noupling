@@ -67,6 +67,10 @@ export function CanvasArea({
   const participantFiles =
     highlight.issueFocus?.participantFiles ?? EMPTY_STRING_SET;
   const issueFocusActive = highlight.issueFocus !== null;
+  // The issue-focus banner is absolutely positioned at top-24, exactly where
+  // the first tier label renders. Push the canvas down while it's shown so
+  // the banner has its own row instead of overprinting that label.
+  const canvasTop = issueFocusActive ? "pt-36" : "pt-24";
 
   // The LSM shows immediate children of the scope so the canvas reads
   // like a composition diagram; the Matrix shows the full scoped set.
@@ -242,7 +246,7 @@ export function CanvasArea({
       )}
 
       {viewMode === "lsm" && (
-        <div className="h-full w-full overflow-auto px-4 pb-16 pt-24">
+        <div className={`h-full w-full overflow-auto px-4 pb-16 ${canvasTop}`}>
           <div
             style={{
               transform: `scale(${zoom})`,
@@ -262,7 +266,7 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "matrix" && (
-        <div className="h-full w-full overflow-auto px-4 pb-16 pt-24">
+        <div className={`h-full w-full overflow-auto px-4 pb-16 ${canvasTop}`}>
           <Matrix
             data={lsmData}
             onNodeClick={onNodeClick}
@@ -273,7 +277,7 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "force" && (
-        <div className="h-full w-full px-4 pb-16 pt-24">
+        <div className={`h-full w-full px-4 pb-16 ${canvasTop}`}>
           <ForceView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
@@ -283,7 +287,7 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "composition" && (
-        <div className="h-full w-full pt-24">
+        <div className={`h-full w-full ${canvasTop}`}>
           <CompositionView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
