@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, IssueKind};
 use noupling_core::core::Module;
 
 use super::JsonReport;
@@ -33,25 +33,30 @@ pub fn generate_markdown_report(
         .map(|d| d.path.clone())
         .unwrap_or_default();
 
-    // Collect violations per directory (same logic as HTML)
-    let mut violations_per_dir: BTreeMap<String, Vec<&CouplingViolation>> = BTreeMap::new();
-    for v in &result.violations {
-        let parent = if v.is_circular && !v.cycle_path.is_empty() {
-            find_common_ancestor(&v.cycle_path)
-        } else {
-            common_parent(&v.dir_a, &v.dir_b)
-        };
-        violations_per_dir.entry(parent).or_default().push(v);
+    // Every Issue, filed under the deepest directory that contains its
+    // subject. The root page lists all of them; directory pages only
+    // their own.
+    let issues = result.issues();
+    let mut issues_per_dir: BTreeMap<String, Vec<&Issue>> = BTreeMap::new();
+    for issue in &issues {
+        let mut anchor = issue.anchor_dir();
+        // Anchors above the report root (or outside the tree) file at root.
+        if !dir_map.contains_key(&anchor) {
+            anchor = root_path.clone();
+        }
+        issues_per_dir.entry(anchor).or_default().push(issue);
     }
 
     // Generate root README.md
     let root_md = render_dir_page(
         &root_path,
         &dir_map,
-        &violations_per_dir,
+        &issues,
+        &issues_per_dir,
         &report,
         snapshot_id,
         true,
+        result.baseline.is_some(),
     );
     std::fs::write(output_dir.join("README.md"), root_md)?;
 
@@ -69,10 +74,12 @@ pub fn generate_markdown_report(
         let md = render_dir_page(
             &dir.path,
             &dir_map,
-            &violations_per_dir,
+            &issues,
+            &issues_per_dir,
             &report,
             snapshot_id,
             false,
+            result.baseline.is_some(),
         );
         std::fs::write(page_dir.join("README.md"), md)?;
     }
@@ -80,13 +87,16 @@ pub fn generate_markdown_report(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_dir_page(
     dir_path: &str,
     dir_map: &BTreeMap<String, &super::JsonDirectory>,
-    violations_per_dir: &BTreeMap<String, Vec<&CouplingViolation>>,
+    all_issues: &[Issue],
+    issues_per_dir: &BTreeMap<String, Vec<&Issue>>,
     report: &JsonReport,
     snapshot_id: &str,
     is_root: bool,
+    baseline_applied: bool,
 ) -> String {
     let dir = match dir_map.get(dir_path) {
         Some(d) => d,
@@ -106,10 +116,7 @@ fn render_dir_page(
     }
 
     // Summary
-    let violations = violations_per_dir
-        .get(dir_path)
-        .map(|v| v.len())
-        .unwrap_or(0);
+    let violations = dir.violations_count;
     md.push_str("## Summary\n\n");
     md.push_str("| Metric | Value |\n");
     md.push_str("| :--- | :--- |\n");
@@ -181,176 +188,254 @@ fn render_dir_page(
         md.push('\n');
     }
 
-    // Violations at this level
-    if let Some(violations) = violations_per_dir.get(dir_path) {
-        let circular: Vec<&&CouplingViolation> =
-            violations.iter().filter(|v| v.is_circular).collect();
-        let coupling: Vec<&&CouplingViolation> =
-            violations.iter().filter(|v| !v.is_circular).collect();
-
-        // Circular grouped by order
-        if !circular.is_empty() {
-            let mut by_order: BTreeMap<usize, Vec<&&CouplingViolation>> = BTreeMap::new();
-            for v in &circular {
-                by_order.entry(v.cycle_order).or_default().push(v);
-            }
-
-            md.push_str("## Circular Dependencies\n\n");
-            md.push_str("Modules that depend on each other in a loop (weight 10). Break the weakest link to resolve.\n");
-            for (order, cycles) in &by_order {
-                let label = match order {
-                    2 => "Mutual Dependencies (Order 2)".to_string(),
-                    3 => "Triangular Cycles (Order 3)".to_string(),
-                    n => format!("Cycles of Order {}", n),
-                };
-                md.push_str(&format!("\n### {} ({} found)\n\n", label, cycles.len()));
-
-                for (idx, v) in cycles.iter().enumerate() {
-                    // Short path
-                    let short: Vec<String> = v
-                        .cycle_path
-                        .iter()
-                        .map(|p| {
-                            std::path::Path::new(p)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(p)
-                                .to_string()
-                        })
-                        .collect();
-
-                    let mut display_parts = Vec::new();
-                    for (i, name) in short.iter().enumerate() {
-                        if i < v.cycle_hop_files.len() {
-                            let (from_file, _, _) = &v.cycle_hop_files[i];
-                            let file_short = std::path::Path::new(from_file)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(from_file);
-                            display_parts.push(format!("**{}** ({})", name, file_short));
-                        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                            let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-                            let file_short = std::path::Path::new(to_file)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(to_file);
-                            display_parts.push(format!("**{}** ({})", name, file_short));
-                        } else {
-                            display_parts.push(format!("**{}**", name));
-                        }
-                    }
-                    md.push_str(&format!(
-                        "**Cycle {}** (severity {:.2}): {}\n\n",
-                        idx + 1,
-                        v.severity,
-                        display_parts.join(" -> ")
-                    ));
-
-                    // Full paths
-                    md.push_str("<details><summary>Full paths</summary>\n\n");
-                    for (i, dir_p) in v.cycle_path.iter().enumerate() {
-                        if i < v.cycle_hop_files.len() {
-                            let (from_file, _, _) = &v.cycle_hop_files[i];
-                            let dir_short = std::path::Path::new(dir_p)
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                .unwrap_or(dir_p);
-                            md.push_str(&format!("- **{}**: `{}`\n", dir_short, from_file));
-                        }
-                    }
-                    md.push_str("\n</details>\n\n");
-
-                    if let Some(ref wl) = v.weakest_link {
-                        md.push_str(&format!(
-                            "> **Weakest link:** {} (break cost: {} import{})\n\n",
-                            wl,
-                            v.break_cost,
-                            if v.break_cost == 1 { "" } else { "s" }
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Coupling violations
-        if !coupling.is_empty() {
-            md.push_str("## Coupling Violations\n\n");
-            md.push_str("Sibling directories importing each other. **RRI** = direction weight × number of imports.\n\n");
-            md.push_str("| Severity | RRI | Dir | From | To |\n");
-            md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
-            for v in &coupling {
-                let from_short = std::path::Path::new(&v.from_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.from_module);
-                let to_short = std::path::Path::new(&v.to_module)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(&v.to_module);
-                let dir_symbol = match v.direction {
-                    noupling_core::analyzer::DependencyDirection::Downward => "↓",
-                    noupling_core::analyzer::DependencyDirection::Sibling => "↔",
-                    noupling_core::analyzer::DependencyDirection::Upward => "↑",
-                    noupling_core::analyzer::DependencyDirection::External => "↗",
-                    noupling_core::analyzer::DependencyDirection::Transitive => "⇝",
-                    noupling_core::analyzer::DependencyDirection::Circular => "↻",
-                };
-                md.push_str(&format!(
-                    "| {:.2} | {:.0} | {} | `{}` | `{}` |\n",
-                    v.severity, v.rri, dir_symbol, from_short, to_short
-                ));
-            }
-            md.push('\n');
-        }
-    }
+    // Issues: root lists everything (with a kind-count summary), a
+    // directory page only the Issues anchored under it.
+    let page_issues: Vec<&Issue> = if is_root {
+        all_issues.iter().collect()
+    } else {
+        issues_per_dir.get(dir_path).cloned().unwrap_or_default()
+    };
+    md.push_str(&render_issue_section(
+        &page_issues,
+        is_root,
+        baseline_applied,
+    ));
 
     md
 }
 
-fn find_common_ancestor(paths: &[String]) -> String {
-    if paths.is_empty() {
-        return String::new();
+/// The `## Issues` section: count line, kind-count table (root only), and
+/// one card per Issue in `issues()` order. The match on `IssueDetail` is
+/// exhaustive on purpose so a new kind fails to compile until handled.
+fn render_issue_section(issues: &[&Issue], is_root: bool, baseline_applied: bool) -> String {
+    let mut md = String::new();
+    if issues.is_empty() {
+        if is_root {
+            md.push_str("## Issues (0)\n\nNo Issues found.\n\n");
+        }
+        return md;
     }
-    let mut common = std::path::Path::new(&paths[0])
-        .parent()
-        .unwrap_or(std::path::Path::new(""))
-        .to_string_lossy()
-        .to_string();
-    for path in &paths[1..] {
-        let p = std::path::Path::new(path)
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
-        while !p.starts_with(&common) && !common.is_empty() {
-            common = std::path::Path::new(&common)
-                .parent()
-                .map(|pp| pp.to_string_lossy().to_string())
-                .unwrap_or_default();
+    let baselined = issues.iter().filter(|i| i.baselined).count();
+    if baseline_applied {
+        md.push_str(&format!(
+            "## Issues ({}) — {} new, {} baselined\n\n",
+            issues.len(),
+            issues.len() - baselined,
+            baselined
+        ));
+    } else {
+        md.push_str(&format!("## Issues ({})\n\n", issues.len()));
+    }
+
+    if is_root {
+        md.push_str("| Kind | Count |\n| :--- | :--- |\n");
+        for kind in IssueKind::ALL {
+            let n = issues.iter().filter(|i| i.kind() == kind).count();
+            if n > 0 {
+                md.push_str(&format!("| {} | {} |\n", kind, n));
+            }
+        }
+        md.push('\n');
+    }
+
+    for issue in issues {
+        md.push_str(&format!(
+            "### [{}] {}: `{}`{}\n\n",
+            issue.severity().name().to_uppercase(),
+            issue.kind(),
+            issue.subject(),
+            if issue.baselined {
+                " _(baselined)_"
+            } else {
+                ""
+            }
+        ));
+        // Per-kind numbers the one-sentence reason does not carry.
+        let extra: Option<String> = match &issue.detail {
+            IssueDetail::CouplingViolation(v) => Some(format!(
+                "`{}` <> `{}` — depth {}, line {}",
+                v.dir_a, v.dir_b, v.depth, v.line_number
+            )),
+            IssueDetail::Cycle(v) => v
+                .weakest_link
+                .as_ref()
+                .map(|wl| format!("Weakest link: {}", wl)),
+            IssueDetail::RuleViolation(r) => Some(format!("line {}", r.line_number)),
+            IssueDetail::LayerViolation(l) => Some(format!(
+                "{} -> {} (line {})",
+                l.from_layer, l.to_layer, l.line_number
+            )),
+            IssueDetail::GravityWell(g) => Some(format!(
+                "RRI {:.0} across {} relationships",
+                g.total_rri, g.relationship_count
+            )),
+            IssueDetail::RedFlag(f) => Some(format!("RRI {:.0}", f.rri)),
+            IssueDetail::StabilityViolation(s) => Some(format!(
+                "I={:.2} -> I={:.2}",
+                s.from_instability, s.to_instability
+            )),
+            IssueDetail::ZoneFlag(d) => Some(format!(
+                "D={:.2} (A={:.2}, I={:.2})",
+                d.distance, d.abstractness, d.instability
+            )),
+            IssueDetail::LowCohesion(c) => Some(format!(
+                "{} children, {} internal deps",
+                c.n_children, c.internal_deps
+            )),
+        };
+        if let Some(extra) = extra {
+            md.push_str(&format!("{}\n\n", extra));
+        }
+        md.push_str(&format!("- **Reason:** {}\n", issue.reason()));
+        md.push_str(&format!(
+            "- **Recommendation:** {}\n",
+            issue.recommendation()
+        ));
+        let impact = issue.score_impact();
+        if impact > 0.0 {
+            md.push_str(&format!("- **Score impact:** {:.1}\n\n", impact));
+        } else {
+            md.push_str("- **Score impact:** 0 (does not score)\n\n");
         }
     }
-    common
+    md
 }
 
-fn common_parent(a: &str, b: &str) -> String {
-    let pa = std::path::Path::new(a);
-    let pb = std::path::Path::new(b);
-    if pa.parent() == pb.parent() {
-        return pa
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use noupling_core::analyzer::{
+        AuditResultBuilder, CohesionMetrics, CouplingViolation, DependencyDirection, DirectoryKind,
+        StabilityViolation,
+    };
+    use noupling_core::core::ModuleType;
+
+    fn file(id: &str, path: &str) -> Module {
+        Module {
+            id: id.into(),
+            snapshot_id: "snap".into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: path.matches('/').count() as i32,
+        }
     }
-    let mut current = pa.to_path_buf();
-    loop {
-        let s = current.to_string_lossy().to_string();
-        if b.starts_with(&format!("{}/", s)) || b == s {
-            return s;
+
+    fn sibling(from: &str, to: &str, dir_a: &str, dir_b: &str) -> CouplingViolation {
+        CouplingViolation {
+            dir_a: dir_a.into(),
+            dir_b: dir_b.into(),
+            from_module: from.into(),
+            to_module: to.into(),
+            line_number: 2,
+            depth: 2,
+            weight: 1,
+            severity: 0.33,
+            direction: DependencyDirection::Sibling,
+            rri: 4.0,
+            is_circular: false,
+            cycle_path: vec![],
+            cycle_hop_files: vec![],
+            cycle_order: 0,
+            cycle_hop_counts: vec![],
+            weakest_link: None,
+            break_cost: 0,
+            score_impact: 1.5,
         }
-        match current.parent() {
-            Some(p) if !p.as_os_str().is_empty() => current = p.to_path_buf(),
-            _ => return String::new(),
-        }
+    }
+
+    /// Root README lists every Issue with a kind-count summary; a directory
+    /// page lists only the Issues anchored under it.
+    #[test]
+    fn root_lists_every_issue_and_directory_pages_only_their_own() {
+        let modules = vec![
+            file("a", "src/loose/x/x1.rs"),
+            file("b", "src/loose/y/y1.rs"),
+            file("c", "src/bag/a.rs"),
+            file("d", "src/bag/b.rs"),
+            file("e", "src/bag/c.rs"),
+            file("f", "src/stable/s.rs"),
+        ];
+        let result = AuditResultBuilder::new()
+            .with_total_modules(6)
+            .with_violations(vec![sibling(
+                "src/loose/x/x1.rs",
+                "src/loose/y/y1.rs",
+                "src/loose/x",
+                "src/loose/y",
+            )])
+            .with_cohesion(vec![CohesionMetrics {
+                dir: "src/bag".into(),
+                kind: DirectoryKind::Package,
+                n_children: 3,
+                internal_deps: 0,
+                cohesion: Some(0.0),
+            }])
+            .with_stability_violations(vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/loose".into(),
+                from_instability: 0.2,
+                to_instability: 0.8,
+            }])
+            .build();
+        let out = tempfile::tempdir().unwrap();
+        generate_markdown_report(&modules, &result, "snap-md", out.path()).unwrap();
+
+        let root = std::fs::read_to_string(out.path().join("README.md")).unwrap();
+        assert!(root.contains("## Issues (3)"), "{root}");
+        assert!(root.contains("| Coupling Violation | 1 |"), "{root}");
+        assert!(root.contains("| Stability Violation | 1 |"), "{root}");
+        assert!(root.contains("| Low Cohesion | 1 |"), "{root}");
+        assert!(
+            root.contains(
+                "### [HIGH] Coupling Violation: `src/loose/x/x1.rs -> src/loose/y/y1.rs`"
+            ),
+            "{root}"
+        );
+        assert!(
+            root.contains("**Reason:** src/loose/x/x1.rs imports across sibling"),
+            "{root}"
+        );
+        assert!(root.contains("**Recommendation:**"), "{root}");
+        assert!(root.contains("**Score impact:** 1.5"), "{root}");
+        // The old per-kind sections are gone from md.
+        assert!(!root.contains("## Coupling Violations"), "{root}");
+
+        let loose = std::fs::read_to_string(out.path().join("loose/README.md")).unwrap();
+        assert!(loose.contains("## Issues (1)"), "{loose}");
+        assert!(loose.contains("Coupling Violation:"), "{loose}");
+        assert!(
+            !loose.contains("Low Cohesion:"),
+            "bag's Issue must not leak into loose: {loose}"
+        );
+
+        let bag = std::fs::read_to_string(out.path().join("bag/README.md")).unwrap();
+        assert!(bag.contains("### [LOW] Low Cohesion: `src/bag`"), "{bag}");
+        assert!(!bag.contains("Coupling Violation:"), "{bag}");
+    }
+
+    #[test]
+    fn baselined_issues_are_marked() {
+        use noupling_core::baseline::Baseline;
+        let modules = vec![file("a", "src/x/a.rs"), file("b", "src/y/b.rs")];
+        let mut result = AuditResultBuilder::new()
+            .with_total_modules(2)
+            .with_violations(vec![sibling("src/x/a.rs", "src/y/b.rs", "src/x", "src/y")])
+            .build();
+        result.apply_baseline(&Baseline {
+            fingerprints: ["coupling_violation:src/x/a.rs -> src/y/b.rs".to_string()]
+                .into_iter()
+                .collect(),
+            legacy_format: false,
+        });
+        let out = tempfile::tempdir().unwrap();
+        generate_markdown_report(&modules, &result, "snap-md", out.path()).unwrap();
+        let root = std::fs::read_to_string(out.path().join("README.md")).unwrap();
+        assert!(
+            root.contains("## Issues (1) — 0 new, 1 baselined"),
+            "{root}"
+        );
+        assert!(root.contains("_(baselined)_"), "{root}");
     }
 }
