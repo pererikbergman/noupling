@@ -855,6 +855,149 @@ mod tests {
         assert_eq!(zone["primaryLocation"]["filePath"], "src/concrete");
     }
 
+    /// A result with a Cycle (scoring), a Coupling Violation (scoring), a
+    /// Rule Violation and a Zone Flag (non-scoring).
+    fn mixed_kind_result() -> noupling_core::analyzer::AuditResult {
+        use noupling_core::analyzer::{
+            CouplingViolation, DependencyDirection, DistanceMetric, RuleViolation, Zone,
+        };
+        let sibling = CouplingViolation {
+            dir_a: "src/a".into(),
+            dir_b: "src/b".into(),
+            from_module: "src/a/x.rs".into(),
+            to_module: "src/b/y.rs".into(),
+            line_number: 3,
+            depth: 1,
+            weight: 2,
+            severity: 0.4,
+            direction: DependencyDirection::Sibling,
+            rri: 8.0,
+            is_circular: false,
+            cycle_path: vec![],
+            cycle_hop_files: vec![],
+            cycle_order: 0,
+            cycle_hop_counts: vec![],
+            weakest_link: None,
+            break_cost: 0,
+            score_impact: 2.0,
+        };
+        let mut cycle = sibling.clone();
+        cycle.dir_a = "src/p".into();
+        cycle.dir_b = "src/q".into();
+        cycle.from_module = "src/p".into();
+        cycle.to_module = "src/q".into();
+        cycle.severity = 0.6;
+        cycle.direction = DependencyDirection::Circular;
+        cycle.is_circular = true;
+        cycle.cycle_path = vec!["src/p".into(), "src/q".into(), "src/p".into()];
+        cycle.cycle_order = 2;
+        cycle.cycle_hop_counts = vec![1, 3];
+        cycle.weakest_link = Some("src/p -> src/q (1 import)".into());
+        cycle.break_cost = 1;
+        cycle.score_impact = 6.0;
+        AuditResultBuilder::new()
+            .with_total_modules(10)
+            .with_score(92.0)
+            .with_violations(vec![cycle, sibling])
+            .with_rule_violations(vec![RuleViolation {
+                from_module: "src/plugins/x.rs".into(),
+                to_module: "src/legacy/y.rs".into(),
+                line_number: 7,
+                message: "plugins must not reach into legacy".into(),
+            }])
+            .with_distance(vec![DistanceMetric {
+                dir: "src/concrete".into(),
+                abstractness: 0.0,
+                instability: 0.0,
+                distance: 1.0,
+                zone: Zone::Pain,
+            }])
+            .build()
+    }
+
+    /// The PR comment names every kind with a count (zero included) and
+    /// lists the top Issues by band with their recommendation.
+    #[test]
+    fn pr_names_every_kind_with_a_count_and_lists_top_issues() {
+        let pr = format_pr(&mixed_kind_result(), None, None, None, None);
+        assert!(pr.contains("| Issues | 4 |"), "{pr}");
+        let kinds_line = pr
+            .lines()
+            .find(|l| l.starts_with("**By kind:**"))
+            .unwrap_or_else(|| panic!("no by-kind line:\n{pr}"));
+        for kind in noupling_core::analyzer::IssueKind::ALL {
+            assert!(
+                kinds_line.contains(kind.name()),
+                "{kind} missing from {kinds_line}"
+            );
+        }
+        assert!(kinds_line.contains("Cycle 1"), "{kinds_line}");
+        assert!(kinds_line.contains("Gravity Well 0"), "{kinds_line}");
+        assert!(pr.contains("### Top issues"), "{pr}");
+        let top_at = pr.find("### Top issues").unwrap();
+        let top = &pr[top_at..];
+        assert!(
+            top.contains("**[CRITICAL] Cycle** `src/p -> src/q -> src/p`"),
+            "{top}"
+        );
+        assert!(top.contains("Cut the cycle at src/p -> src/q"), "{top}");
+        assert!(
+            !pr.contains("### Red Flags"),
+            "old section must be gone: {pr}"
+        );
+    }
+
+    /// The PR comment stays short: at most five Issue entries however many exist.
+    #[test]
+    fn pr_top_issues_are_capped() {
+        use noupling_core::analyzer::CohesionMetrics;
+        use noupling_core::analyzer::DirectoryKind;
+        let cohesion: Vec<CohesionMetrics> = (0..20)
+            .map(|i| CohesionMetrics {
+                dir: format!("src/d{i}"),
+                kind: DirectoryKind::Package,
+                n_children: 3,
+                internal_deps: 0,
+                cohesion: Some(0.0),
+            })
+            .collect();
+        let result = AuditResultBuilder::new()
+            .with_total_modules(60)
+            .with_cohesion(cohesion)
+            .build();
+        let pr = format_pr(&result, None, None, None, None);
+        assert_eq!(pr.matches("**[LOW] Low Cohesion**").count(), 5, "{pr}");
+        assert!(pr.contains("… and 15 more"), "{pr}");
+    }
+
+    /// Briefing items are Issues ranked by score impact, and the approach
+    /// text is the Issue's recommendation verbatim.
+    #[test]
+    fn briefing_ranks_by_score_impact_and_uses_core_recommendations() {
+        let result = mixed_kind_result();
+        let issues = result.issues();
+        let briefing = format_briefing(&result);
+        let first = briefing.find("### 1. ").unwrap();
+        let second = briefing.find("### 2. ").unwrap();
+        let third = briefing.find("### 3. ").unwrap();
+        assert!(briefing[first..second].contains("Cycle"), "{briefing}");
+        assert!(
+            briefing[second..third].contains("Coupling Violation"),
+            "{briefing}"
+        );
+        for issue in &issues {
+            assert!(
+                briefing.contains(&format!("- **Approach:** {}", issue.recommendation())),
+                "recommendation for {} must appear verbatim:\n{briefing}",
+                issue.kind()
+            );
+        }
+        assert!(
+            briefing.contains("projected score:** 100.0 (+8.0)"),
+            "{briefing}"
+        );
+    }
+
     #[test]
     fn json_report_cohesion_array_includes_kind_and_nullable_cohesion() {
         use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};

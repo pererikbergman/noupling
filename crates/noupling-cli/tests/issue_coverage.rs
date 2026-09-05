@@ -56,6 +56,8 @@ const KINDS: &[(&str, &[&str])] = &[
     (
         "zone_flag",
         &[
+            "zone flag",
+            "zone_flag",
             "zone of pain",
             "zone_of_pain",
             "zone of uselessness",
@@ -86,22 +88,10 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("sonar", ALL_KINDS),
     ("md", ALL_KINDS),
     ("html", ALL_KINDS),
-    (
-        "dashboard",
-        &["cycle", "rule_violation", "layer_violation", "zone_flag"],
-    ),
+    ("dashboard", ALL_KINDS),
     ("bundle", &["coupling_violation", "cycle"]),
-    (
-        "pr",
-        &[
-            "coupling_violation",
-            "cycle",
-            "rule_violation",
-            "layer_violation",
-            "red_flag",
-        ],
-    ),
-    ("briefing", &["cycle", "rule_violation", "layer_violation"]),
+    ("pr", ALL_KINDS),
+    ("briefing", ALL_KINDS),
     ("mermaid", &["cycle"]),
     ("dot", &[]),
     ("strategy", &[]),

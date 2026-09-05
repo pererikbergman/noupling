@@ -1,8 +1,9 @@
-//! Sprint-planning briefing: Markdown report ranking the top 10
-//! refactoring opportunities by ROI, with effort estimates and a
-//! projected score after the top three.
+//! Sprint-planning briefing: Markdown report ranking the top 10 Issues
+//! by score impact (then band), with effort estimates and a projected
+//! score after the top three. The approach on each item is the Issue's
+//! recommendation from core, verbatim.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, IssueKind};
 
 use super::VERSION;
 
@@ -23,23 +24,20 @@ pub fn format_briefing(result: &AuditResult) -> String {
         years, month, day
     ));
 
-    let actions = noupling_core::analyzer::compute_top_actions(result, 10);
+    // issues() is band-ordered; rank by score impact first so the sprint
+    // list leads with what moves the score, then falls back to band.
+    let mut ranked: Vec<Issue> = result.issues();
+    ranked.sort_by(|a, b| {
+        b.score_impact()
+            .partial_cmp(&a.score_impact())
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.severity().cmp(&a.severity()))
+    });
+    let top: Vec<&Issue> = ranked.iter().take(10).collect();
 
-    // Projected score after fixing top 3
-    let actionable_severity: f64 = actions
-        .iter()
-        .take(3)
-        .filter(|a| a.category != "hotspot")
-        .map(|a| a.impact)
-        .sum();
-    let projected_score = if result.total_modules > 0 {
-        let projected_sum =
-            (100.0 - result.score) * result.total_modules as f64 / 100.0 - actionable_severity;
-        (100.0 * (1.0 - projected_sum.max(0.0) / result.total_modules as f64))
-            .clamp(result.score, 100.0)
-    } else {
-        result.score
-    };
+    // Projected score after fixing the top 3: their score impact comes back.
+    let recovered: f64 = top.iter().take(3).map(|i| i.score_impact()).sum();
+    let projected_score = (result.score + recovered).min(100.0);
     let delta = projected_score - result.score;
 
     out.push_str(&format!("**Current score:** {:.1}/100  \n", result.score));
@@ -60,6 +58,13 @@ pub fn format_briefing(result: &AuditResult) -> String {
     out.push_str("| Metric | Value |\n");
     out.push_str("| :--- | :--- |\n");
     out.push_str(&format!("| Total modules | {} |\n", result.total_modules));
+    out.push_str(&format!("| Issues | {} |\n", ranked.len()));
+    for kind in IssueKind::ALL {
+        let n = ranked.iter().filter(|i| i.kind() == kind).count();
+        if n > 0 {
+            out.push_str(&format!("| &nbsp;&nbsp;{} | {} |\n", kind, n));
+        }
+    }
     out.push_str(&format!(
         "| Active violations | {} |\n",
         result.violations.len()
@@ -82,7 +87,7 @@ pub fn format_briefing(result: &AuditResult) -> String {
     }
     out.push('\n');
 
-    if actions.is_empty() {
+    if top.is_empty() {
         out.push_str("## No Actionable Items\n\n");
         out.push_str("Architecture is healthy. \u{1F389}\n\n");
         out.push_str(&format!("---\n_{}_\n", VERSION));
@@ -91,38 +96,58 @@ pub fn format_briefing(result: &AuditResult) -> String {
 
     out.push_str("## Top Refactoring Opportunities\n\n");
     out.push_str(
-        "Ranked by ROI (impact / effort). Each item includes effort, impact, and approach.\n\n",
+        "Ranked by score impact, then severity band. Each item says why it matters and what to do.\n\n",
     );
 
-    for (i, action) in actions.iter().enumerate() {
-        let effort_label = effort_estimate(action.cost);
-        let impact_label = match action.category.as_str() {
-            "circular" => "Resolves a cycle",
-            "layer" => "Removes a layer violation",
-            "rule" => "Resolves a rule violation",
-            "cross-module" => "Removes a cross-module violation",
-            "hotspot" => "Reduces blast radius",
-            _ => "Improves architecture",
-        };
-
-        out.push_str(&format!("### {}. {}\n\n", i + 1, action.title));
+    for (i, issue) in top.iter().enumerate() {
         out.push_str(&format!(
-            "- **Effort:** {} import{} to remove ({})\n",
-            action.cost,
-            if action.cost == 1 { "" } else { "s" },
-            effort_label
+            "### {}. [{}] {}: `{}`{}\n\n",
+            i + 1,
+            issue.severity().name().to_uppercase(),
+            issue.kind(),
+            issue.subject(),
+            if issue.baselined {
+                " _(baselined)_"
+            } else {
+                ""
+            }
         ));
-        out.push_str(&format!(
-            "- **Impact:** {} (score impact: ~{:.1})\n",
-            impact_label, action.impact
-        ));
-        out.push_str(&format!("- **Detail:** `{}`\n", action.detail));
-        out.push_str(&format!("- **Approach:** {}\n", action.action));
-        out.push_str(&format!("- **Category:** {}\n\n", action.category));
+        match effort_imports(issue) {
+            Some(cost) => out.push_str(&format!(
+                "- **Effort:** {} import{} to remove ({})\n",
+                cost,
+                if cost == 1 { "" } else { "s" },
+                effort_estimate(cost)
+            )),
+            None => out.push_str("- **Effort:** structural change (no single import to remove)\n"),
+        }
+        let impact = issue.score_impact();
+        if impact > 0.0 {
+            out.push_str(&format!("- **Impact:** score +{:.1}\n", impact));
+        } else {
+            out.push_str("- **Impact:** does not score; reduces structural risk\n");
+        }
+        out.push_str(&format!("- **Why:** {}\n", issue.reason()));
+        out.push_str(&format!("- **Approach:** {}\n\n", issue.recommendation()));
     }
 
     out.push_str(&format!("---\n_{}_\n", VERSION));
     out
+}
+
+/// Imports to remove to resolve the Issue, for kinds where that is the
+/// fix. Exhaustive so a new kind must say how it is paid for.
+fn effort_imports(issue: &Issue) -> Option<usize> {
+    match &issue.detail {
+        IssueDetail::CouplingViolation(v) => Some(v.weight.max(1)),
+        IssueDetail::Cycle(v) => Some(v.break_cost.max(1)),
+        IssueDetail::RuleViolation(_) | IssueDetail::LayerViolation(_) => Some(1),
+        IssueDetail::StabilityViolation(_) => Some(1),
+        IssueDetail::GravityWell(_)
+        | IssueDetail::RedFlag(_)
+        | IssueDetail::ZoneFlag(_)
+        | IssueDetail::LowCohesion(_) => None,
+    }
 }
 
 fn effort_estimate(cost: usize) -> &'static str {
