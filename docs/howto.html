@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How-to — noupling</title>
+  <meta name="description" content="Copy-paste recipes for noupling: first setup, CI/CD gates, baselines, history and trends, layers and rules, monorepos, reports and the Explorer.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="container-wide">
+    <a href="index.html" class="logo"><img src="coupling-logo-blue-white.svg" alt="noupling"></a>
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="howto.html" class="active">How-to</a></li>
+      <li><a href="changelog.html">Changelog</a></li>
+      <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
+      <li><span class="badge">v0.9.0</span></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container-wide">
+  <div class="docs-layout">
+
+    <!-- ── Sidebar ──────────────────────────────────── -->
+    <aside class="docs-sidebar">
+      <h4>Getting started</h4>
+      <a href="#quick-start">Quick start</a>
+      <a href="#read-the-audit">Read the audit</a>
+      <a href="#first-cleanup">First clean-up</a>
+
+      <h4>CI/CD</h4>
+      <a href="#ci-gate">Score gate</a>
+      <a href="#ci-new-only">Fail only on new Issues</a>
+      <a href="#ci-pr-comment">PR comment</a>
+      <a href="#ci-sonar">SonarQube / SonarCloud</a>
+      <a href="#pre-commit">Pre-commit hook</a>
+
+      <h4>Baseline &amp; history</h4>
+      <a href="#baseline">Accept what's there today</a>
+      <a href="#baseline-review">Review a baseline</a>
+      <a href="#history">Keep history</a>
+      <a href="#trend">Trend over time</a>
+
+      <h4>Configuration</h4>
+      <a href="#layers">Declare layers</a>
+      <a href="#inference-off">Turn inference off</a>
+      <a href="#rules">Forbid an import</a>
+      <a href="#suppress">Suppress one import</a>
+      <a href="#monorepo">Monorepo</a>
+
+      <h4>Reports</h4>
+      <a href="#explorer">Explore the architecture</a>
+      <a href="#json">Script against JSON</a>
+      <a href="#sprint">Plan a sprint</a>
+      <a href="#diagram">Draw the dependency graph</a>
+    </aside>
+
+    <!-- ── Content ──────────────────────────────────── -->
+    <section class="docs-content">
+
+      <h2 id="quick-start">Quick start</h2>
+      <p>Install, scan, audit. Everything noupling knows about a project lives in <code>.noupling/</code> next to the code; commit <code>settings.json</code> and <code>baseline.json</code>, ignore <code>history.db</code> and the generated reports.</p>
+<pre><code class="language-bash">brew install pererikbergman/noupling/noupling   # or: cargo install --path crates/noupling-cli
+
+cd /path/to/project
+noupling scan .          # parse imports, store a snapshot in .noupling/history.db
+noupling audit .         # health score + every Issue as an Issue card</code></pre>
+      <p>The first run creates <code>.noupling/settings.json</code> with defaults. If the project has no <code>layers</code> configured, noupling infers a set from path names (<code>ui</code>, <code>domain</code>, <code>data</code>, &hellip;) and tells you so on a <code>Layers: inferred&hellip;</code> line.</p>
+<pre><code class="language-gitignore"># .gitignore
+.noupling/history.db
+.noupling/report*
+.noupling/*.html
+.noupling/*.md
+.noupling/*.mermaid
+.noupling/*.dot</code></pre>
+
+      <h2 id="read-the-audit">Read the audit</h2>
+      <p>The text output has three parts. The headline block, the Top Actions, then <code>Issues (N)</code> with one card per Issue in canonical order (critical first), followed by the Metric sections.</p>
+<pre><code>Health Score: 79.5/100
+Total Modules: 25
+Violations: 10
+Layers: inferred from path names (ui, domain, infra) — set `layers` in .noupling/settings.json to take over, or `infer_layers: false` to turn inference off
+
+Issues (20): 2 critical, 10 high, 6 medium, 2 low
+Points lost: 20.5 (Coupling Violation 16.0, Cycle 4.5)
+
+  [CRITICAL] Cycle: src/ring/alpha -> src/ring/beta -> src/ring/alpha
+      Weakest link: src/ring/alpha -> src/ring/beta (1 import)
+      Reason: … form a cycle of 2 directories (2 imports in the ring); the cheapest break is src/ring/alpha -> src/ring/beta (1 import).
+      Recommendation: Cut the cycle at src/ring/alpha -> src/ring/beta by removing 1 import or moving that code behind an interface.
+      Score impact: 4.5</code></pre>
+      <p>Every card says <em>why</em> (reason, with this instance's numbers) and <em>what to do</em> (recommendation). <strong>Score impact</strong> is the points the Issue costs; only Coupling Violations and Cycles score, and their impacts sum to the points lost. The nine kinds are defined on the <a href="docs.html#findings">Findings</a> page.</p>
+
+      <h2 id="first-cleanup">First clean-up</h2>
+      <p>Start with the <code>Points lost</code> line: it tells you which kind is costing the score. Then work the cards top to bottom &mdash; they are already ordered by severity band. The <code>briefing</code> report turns the same list into a sprint plan ranked by score impact with an effort estimate per item:</p>
+<pre><code class="language-bash">noupling report . --format briefing
+open .noupling/briefing.md</code></pre>
+
+      <!-- ── CI/CD ────────────────────────────────────── -->
+      <h2 id="ci-gate">CI: fail when the score drops</h2>
+      <p>The simplest gate. Scan, audit, and exit non-zero below a threshold.</p>
+<pre><code class="language-yaml"># .github/workflows/noupling.yml
+name: Architecture
+on: [push, pull_request]
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install noupling
+        run: |
+          curl -sL "https://github.com/pererikbergman/noupling/releases/latest/download/noupling-linux-x86_64" -o noupling
+          chmod +x noupling && sudo mv noupling /usr/local/bin/
+      - run: noupling scan .
+      - run: noupling audit . --fail-below 80</code></pre>
+      <div class="callout">
+        <strong>Pick the threshold from your current score.</strong> Run <code>noupling audit .</code> locally, subtract a couple of points of headroom, and raise the bar as you clean up. A threshold above the current score fails every build on day one.
+      </div>
+
+      <h2 id="ci-new-only">CI: fail only on new Issues</h2>
+      <p>Two options, and they compose. <strong>Diff mode</strong> narrows the audit to files changed against a base branch; <strong>baseline</strong> fails only on Issues the team has not accepted (see <a href="#baseline">below</a>). Diff mode needs full git history.</p>
+<pre><code class="language-yaml">      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                        # diff-base needs the base branch
+      - run: noupling scan . --diff-base origin/${{ github.base_ref }}
+      - run: noupling audit .                   # only Issues touching changed files</code></pre>
+<pre><code class="language-yaml">      - run: noupling scan .
+      - run: noupling audit . --baseline        # exit 1 only on Issues not in .noupling/baseline.json</code></pre>
+      <p>With <code>--baseline</code> the accepted Issues stay in the output marked <code>(baselined)</code>, and the summary reads <code>New issues: 0 / Baselined issues: N</code>, so the report is still the whole picture.</p>
+
+      <h2 id="ci-pr-comment">CI: comment on the pull request</h2>
+      <p>The <code>pr</code> format is a short Markdown summary built for a comment: score with delta, per-kind counts, and the top five Issues with their recommendations. The repository ships a complete workflow you can copy: <a href="https://github.com/pererikbergman/noupling/blob/main/.github/workflows/noupling-pr.yml"><code>.github/workflows/noupling-pr.yml</code></a>. The core of it:</p>
+<pre><code class="language-yaml">      - run: noupling scan . --diff-base origin/${{ github.base_ref }}
+      - run: noupling report . --format pr
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: .noupling/pr.md</code></pre>
+
+      <h2 id="ci-sonar">SonarQube / SonarCloud</h2>
+      <p>Export every Issue as a Sonar generic issue (one rule per kind, <code>noupling:cycle</code>, <code>noupling:layer_violation</code>, &hellip;) and point Sonar at the file.</p>
+<pre><code class="language-bash">noupling scan . && noupling report . --format sonar</code></pre>
+<pre><code class="language-properties"># sonar-project.properties
+sonar.externalIssuesReportPaths=.noupling/noupling-sonar.json</code></pre>
+
+      <h2 id="pre-commit">Pre-commit hook</h2>
+      <p>Block commits that introduce Issues, locally, before CI sees them.</p>
+<pre><code class="language-bash">noupling hook install .      # writes .git/hooks/pre-commit
+git commit --no-verify       # bypass once when you must
+noupling hook uninstall .</code></pre>
+
+      <!-- ── Baseline & history ───────────────────────── -->
+      <h2 id="baseline">Baseline: accept what's there today</h2>
+      <p>Adopting noupling on an existing codebase usually starts with hundreds of Issues nobody will fix this quarter. Record them as accepted so the gate only fires on what changes from here on.</p>
+<pre><code class="language-bash">noupling scan .
+noupling baseline save .            # writes .noupling/baseline.json: every current Issue, all nine kinds
+git add .noupling/baseline.json
+git commit -m "chore: accept current architecture Issues as the baseline"</code></pre>
+<pre><code class="language-bash">noupling audit . --baseline          # exit 1 only on new Issues
+noupling report . --format html --baseline   # any report can mark accepted Issues</code></pre>
+      <p>Baselined Issues are identified by kind and identity (the directory pair for Coupling Violations and Red Flags, the ring for Cycles, the subject otherwise), so adding another import between two directories that are already coupled does not count as new. When the team fixes an accepted Issue it simply disappears; re-run <code>baseline save</code> whenever you want the accepted set to shrink.</p>
+      <div class="callout-warn callout">
+        <strong>Upgrading from 0.8.x?</strong> Older baseline files covered only coupling violations and load as &ldquo;nothing baselined&rdquo; with a one-line warning. Run <code>noupling baseline save .</code> once after upgrading.
+      </div>
+
+      <h2 id="baseline-review">Review what the baseline holds</h2>
+      <p>The file is plain JSON: one fingerprint per accepted Issue. Diff it in code review like any other config.</p>
+<pre><code class="language-bash">jq '.fingerprints[]' .noupling/baseline.json | sort
+jq '.fingerprints | length' .noupling/baseline.json
+jq -r '.fingerprints[] | select(startswith("cycle:"))' .noupling/baseline.json   # just the accepted Cycles</code></pre>
+
+      <h2 id="history">Keep history across runs</h2>
+      <p>Every <code>scan</code> adds a snapshot to <code>.noupling/history.db</code> and records the score and per-kind Issue counts, so trends need nothing but repeated scans. In CI the database does not survive between jobs unless you keep it; cache it or commit it to a branch.</p>
+<pre><code class="language-yaml">      - name: Restore noupling history
+        uses: actions/cache@v4
+        with:
+          path: .noupling/history.db
+          key: noupling-history-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: noupling-history-${{ github.ref_name }}-
+      - run: noupling scan .
+      - run: noupling audit . --baseline</code></pre>
+      <p>Scans with <code>--diff-base</code> still record the whole project's trend point (the diff filter only narrows what <code>audit</code> prints), so a PR-only pipeline keeps a usable history too.</p>
+
+      <h2 id="trend">Trend over time</h2>
+      <p>Two views of the same history: a table in the terminal, or the <code>strategy</code> report with the score line and one line per Issue kind.</p>
+<pre><code class="language-bash">noupling trend . --last 20            # score, modules, violations per snapshot with deltas
+noupling trend . --by-module          # per top-level directory
+noupling report . --format strategy --last 12
+open .noupling/strategy.html</code></pre>
+      <p>Snapshots taken before 0.9.0 have no per-kind counts and show as gaps, not zeros.</p>
+
+      <!-- ── Configuration ────────────────────────────── -->
+      <h2 id="layers">Declare your layers</h2>
+      <p>Layers turn &ldquo;sibling coupling&rdquo; into &ldquo;allowed downward&rdquo; and &ldquo;forbidden upward&rdquo;. Order is top to bottom; a lower layer importing a higher one is a Layer Violation. Once you declare layers, inference stops.</p>
+<pre><code class="language-json">{
+  "layers": [
+    { "name": "presentation", "pattern": "**/ui/**" },
+    { "name": "domain",       "pattern": "**/domain/**", "allow_sibling": true },
+    { "name": "data",         "pattern": "**/data/**" },
+    { "name": "infra",        "pattern": "**/{infra,platform}/**" }
+  ]
+}</code></pre>
+      <p>The Explorer's auto-layers banner offers a ready-made snippet from what it inferred &mdash; paste it and adjust. <code>allow_sibling</code> reduces the weight of coupling inside a layer where lateral dependencies are expected.</p>
+
+      <h2 id="inference-off">Turn layer inference off</h2>
+      <p>For a flat codebase, or one whose directory names happen to match the keywords, audit as-is in strict mode:</p>
+<pre><code class="language-json">{ "infer_layers": false }</code></pre>
+
+      <h2 id="rules">Forbid a specific import</h2>
+      <p>Dependency rules are glob-to-glob, with a message that becomes the Issue's reason.</p>
+<pre><code class="language-json">{
+  "dependency_rules": [
+    {
+      "from": "**/plugins/**",
+      "to": "**/legacy/**",
+      "allow": false,
+      "message": "plugins must not reach into legacy; go through domain."
+    }
+  ]
+}</code></pre>
+
+      <h2 id="suppress">Suppress one import</h2>
+      <p>A suppression hides an edge at scan time (it is not a baseline). Put the comment on the import line:</p>
+<pre><code class="language-rust">use crate::legacy::compat; // noupling:ignore</code></pre>
+      <p>The audit prints <code>Suppressed: N imports via noupling:ignore</code> so they stay visible. Set <code>"allow_inline_suppression": false</code> to disable the mechanism in CI.</p>
+
+      <h2 id="monorepo">Monorepo: audit each module on its own</h2>
+      <p>Declare modules and, optionally, which ones may depend on which. Each gets its own score; cross-module imports outside <code>depends_on</code> are reported.</p>
+<pre><code class="language-json">{
+  "modules": [
+    { "name": "app",     "path": "apps/app",       "depends_on": ["shared"] },
+    { "name": "billing", "path": "services/billing", "depends_on": ["shared"] },
+    { "name": "shared",  "path": "libs/shared" }
+  ]
+}</code></pre>
+<pre><code class="language-bash">noupling audit .                       # per-module table + cross-module violations
+noupling audit . --module billing      # one module's full report
+noupling report . --format json --module billing</code></pre>
+
+      <!-- ── Reports ──────────────────────────────────── -->
+      <h2 id="explorer">Explore the architecture</h2>
+      <p>The Explorer is a single self-contained HTML file: a layered structure map, an Issues tab with every card, focus mode, and click-to-source links for your editor.</p>
+<pre><code class="language-bash">noupling report . --format explorer --editor vscode
+open .noupling/explorer.html</code></pre>
+      <p>Add <code>--baseline</code> to dim accepted Issues, <code>--no-history</code> to shrink the file, <code>--title</code> to name it. It works from <code>file://</code>, so it can be attached to a ticket or hosted as a static page.</p>
+
+      <h2 id="json">Script against the JSON report</h2>
+      <p>One <code>issues</code> array carries every Issue as an Issue card; filter by <code>kind</code>. The full shape is on the <a href="docs.html#issue-card">Report Formats</a> page.</p>
+<pre><code class="language-bash">noupling report . --format json
+
+jq '.issues | group_by(.kind) | map({kind: .[0].kind, n: length})' .noupling/report.json
+jq -r '.issues[] | select(.kind == "cycle") | .subject.members | join(" -> ")' .noupling/report.json
+jq -r '.issues[] | select(.severity == "critical" and .baselined == false) | "\(.kind_name): \(.recommendation)"' .noupling/report.json
+jq '[.issues[].score_impact] | add' .noupling/report.json        # equals 100 - .score</code></pre>
+
+      <h2 id="sprint">Plan a sprint</h2>
+      <p><code>briefing</code> ranks the top ten Issues by score impact with an effort estimate and the core recommendation; <code>dashboard</code> is the single-page overview for a leadership review.</p>
+<pre><code class="language-bash">noupling report . --format briefing && open .noupling/briefing.md
+noupling report . --format dashboard && open .noupling/dashboard.html</code></pre>
+
+      <h2 id="diagram">Draw the dependency graph</h2>
+      <p>Graph formats accent every edge-shaped Issue &mdash; Coupling, Rule, Layer and Stability Violations and each hop of a Cycle &mdash; with one style per kind and a legend.</p>
+<pre><code class="language-bash">noupling report . --format mermaid    # paste .noupling/report.mermaid into a Markdown file
+noupling report . --format dot && dot -Tsvg .noupling/report.dot -o architecture.svg
+noupling report . --format bundle && open .noupling/bundle.html   # zoomable sunburst</code></pre>
+
+      <div class="callout">
+        <strong>Everything at once:</strong> <code>noupling report . --format all</code> writes every format into <code>.noupling/</code> in one command.
+      </div>
+
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <p>noupling &middot; <a href="https://github.com/pererikbergman/noupling/blob/main/LICENSE">MIT License</a> &middot; Built with Rust &middot; Parsed by Tree-sitter</p>
+  </div>
+</footer>
+
+</body>
+</html>

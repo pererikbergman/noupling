@@ -12,6 +12,7 @@
   <p align="center">
     <a href="https://pererikbergman.github.io/noupling/"><strong>Website</strong></a> &middot;
     <a href="https://pererikbergman.github.io/noupling/docs.html">Documentation</a> &middot;
+    <a href="https://pererikbergman.github.io/noupling/howto.html">How-to</a> &middot;
     <a href="https://pererikbergman.github.io/noupling/changelog.html">Changelog</a> &middot;
     <a href="https://github.com/pererikbergman/noupling/releases">Releases</a>
   </p>
