@@ -51,22 +51,6 @@ pub(super) fn issue_edges(result: &AuditResult) -> Vec<IssueEdge> {
     edges
 }
 
-/// Drawing precedence when several Issues share one drawn edge: the
-/// most structural kind wins.
-fn accent_rank(kind: IssueKind) -> u8 {
-    match kind {
-        IssueKind::Cycle => 5,
-        IssueKind::RuleViolation => 4,
-        IssueKind::LayerViolation => 3,
-        IssueKind::CouplingViolation => 2,
-        IssueKind::StabilityViolation => 1,
-        IssueKind::GravityWell
-        | IssueKind::RedFlag
-        | IssueKind::ZoneFlag
-        | IssueKind::LowCohesion => 0,
-    }
-}
-
 /// The edge-shaped kinds a graph format draws, in legend order.
 pub(super) const EDGE_KINDS: [IssueKind; 5] = [
     IssueKind::Cycle,
@@ -97,18 +81,24 @@ fn edge_style(kind: IssueKind) -> (&'static str, &'static str) {
     }
 }
 
-/// A drawn directory-level edge: how many Issues it carries, the kind
-/// that styles it, and whether every Issue on it is baselined.
+/// A drawn directory-level edge, one per (from, to, kind): how many
+/// Issues of that kind it carries and whether every one is baselined.
+/// A pair that is both a Coupling and a Stability Violation gets two
+/// parallel edges, one per accent — every edge-shaped Issue is drawn.
 struct EdgeInfo {
     count: usize,
     kind: IssueKind,
     baselined: bool,
 }
 
+/// Drawn-edge key: `(from, to, kind id)`. Kind id keeps `BTreeMap` order
+/// deterministic and readable.
+type EdgeKey = (String, String, &'static str);
+
 fn build_dir_graph(
     modules: &[Module],
     result: &AuditResult,
-) -> (BTreeSet<String>, BTreeMap<(String, String), EdgeInfo>) {
+) -> (BTreeSet<String>, BTreeMap<EdgeKey, EdgeInfo>) {
     // Collect all directories
     let mut dirs: BTreeSet<String> = BTreeSet::new();
     for module in modules {
@@ -123,7 +113,7 @@ fn build_dir_graph(
     // Build edges from every edge-shaped Issue, keyed by short directory
     // names. Rule and Layer Violations are file edges; they draw between
     // the files' directories.
-    let mut edges: BTreeMap<(String, String), EdgeInfo> = BTreeMap::new();
+    let mut edges: BTreeMap<EdgeKey, EdgeInfo> = BTreeMap::new();
     for e in issue_edges(result) {
         let (from_dir, to_dir) = match e.kind {
             IssueKind::RuleViolation | IssueKind::LayerViolation => {
@@ -139,15 +129,12 @@ fn build_dir_graph(
         if from_dir == to_dir || from == to {
             continue;
         }
-        let entry = edges.entry((from, to)).or_insert(EdgeInfo {
+        let entry = edges.entry((from, to, e.kind.id())).or_insert(EdgeInfo {
             count: 0,
             kind: e.kind,
             baselined: true,
         });
         entry.count += 1;
-        if accent_rank(e.kind) > accent_rank(entry.kind) {
-            entry.kind = e.kind;
-        }
         entry.baselined &= e.baselined;
     }
 
@@ -189,7 +176,7 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
 
     // Collect unique short names from edges
     let mut used_dirs: BTreeSet<String> = BTreeSet::new();
-    for (from, to) in edges.keys() {
+    for (from, to, _) in edges.keys() {
         used_dirs.insert(from.clone());
         used_dirs.insert(to.clone());
     }
@@ -218,7 +205,7 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
     // Define edges: one arrow shape per kind, colour via linkStyle by
     // index, muted grey when every Issue on the edge is baselined.
     let mut link_styles = Vec::new();
-    for (idx, ((from, to), info)) in edges.iter().enumerate() {
+    for (idx, ((from, to, _), info)) in edges.iter().enumerate() {
         let label = if info.count > 1 {
             format!("|{}|", info.count)
         } else {
@@ -284,7 +271,7 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
 
     // Collect used dirs
     let mut used_dirs: BTreeSet<String> = BTreeSet::new();
-    for (from, to) in edges.keys() {
+    for (from, to, _) in edges.keys() {
         used_dirs.insert(from.clone());
         used_dirs.insert(to.clone());
     }
@@ -314,7 +301,7 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push('\n');
 
     // Edges: per-kind style; muted when every Issue on the edge is baselined.
-    for ((from, to), info) in &edges {
+    for ((from, to, _), info) in &edges {
         let (_, dot_style) = edge_style(info.kind);
         let colour = info.kind.accent_color();
         let mut attrs = vec![dot_style.to_string()];

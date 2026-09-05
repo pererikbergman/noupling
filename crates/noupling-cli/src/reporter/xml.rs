@@ -1,7 +1,9 @@
 //! XML format adapter. Reads the canonical `JsonReport` and serialises
 //! it as a tabular `<noupling-report>` document: the shared `<issues>`
-//! list (every Issue kind, ADR 0002) plus the legacy circular, coupling,
-//! directory-tree, gravity-well, and red-flag children.
+//! list (every Issue kind, ADR 0002) plus the directory tree. The
+//! per-kind `<circular-dependencies>`, `<coupling-violations>`,
+//! `<gravity-wells>` and `<red-flags>` children were removed in 0.9.0
+//! (#350); read `<issues>` and filter on `kind`.
 
 use noupling_core::analyzer::{AuditResult, SubjectCard};
 use noupling_core::core::Module;
@@ -77,71 +79,6 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     }
     xml.push_str("  </issues>\n");
 
-    // Circular dependencies
-    if !report.circular_dependencies.is_empty() {
-        xml.push_str("  <circular-dependencies>\n");
-        for (label, cycles) in &report.circular_dependencies {
-            xml.push_str(&format!(
-                "    <group label=\"{}\" count=\"{}\">\n",
-                xml_escape(label),
-                cycles.len()
-            ));
-            for cycle in cycles {
-                let wl_attr = cycle
-                    .weakest_link
-                    .as_ref()
-                    .map(|wl| {
-                        format!(
-                            " weakestLink=\"{}\" breakCost=\"{}\"",
-                            xml_escape(wl),
-                            cycle.break_cost
-                        )
-                    })
-                    .unwrap_or_default();
-                xml.push_str(&format!(
-                    "      <cycle order=\"{}\" severity=\"{:.2}\"{}>\n",
-                    cycle.cycle_order, cycle.severity, wl_attr
-                ));
-                xml.push_str("        <path>\n");
-                for dir in &cycle.cycle_path {
-                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
-                }
-                xml.push_str("        </path>\n");
-                xml.push_str("        <short-path>\n");
-                for dir in &cycle.cycle_short_path {
-                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
-                }
-                xml.push_str("        </short-path>\n");
-                xml.push_str("        <hops>\n");
-                for hop in &cycle.hop_files {
-                    xml.push_str(&format!(
-                        "          <hop fromDir=\"{}\" fromFile=\"{}\" toFile=\"{}\"/>\n",
-                        xml_escape(&hop.from_dir),
-                        xml_escape(&hop.from_file),
-                        xml_escape(&hop.to_file),
-                    ));
-                }
-                xml.push_str("        </hops>\n");
-                xml.push_str("      </cycle>\n");
-            }
-            xml.push_str("    </group>\n");
-        }
-        xml.push_str("  </circular-dependencies>\n");
-    }
-
-    // Coupling violations
-    if !report.coupling_violations.is_empty() {
-        xml.push_str("  <coupling-violations>\n");
-        for v in &report.coupling_violations {
-            xml.push_str(&format!(
-                "    <violation severity=\"{:.2}\" rri=\"{:.1}\" direction=\"{}\" depth=\"{}\" fromModule=\"{}\" toModule=\"{}\" dirA=\"{}\" dirB=\"{}\"/>\n",
-                v.severity, v.rri, xml_escape(&v.direction), v.depth, xml_escape(&v.from_module), xml_escape(&v.to_module),
-                xml_escape(&v.dir_a), xml_escape(&v.dir_b),
-            ));
-        }
-        xml.push_str("  </coupling-violations>\n");
-    }
-
     // Directory tree
     xml.push_str("  <directory-tree>\n");
     for dir in &report.directory_tree {
@@ -159,32 +96,6 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         xml.push_str("    </directory>\n");
     }
     xml.push_str("  </directory-tree>\n");
-
-    // Gravity wells
-    if !report.gravity_wells.is_empty() {
-        xml.push_str("  <gravity-wells>\n");
-        for g in &report.gravity_wells {
-            xml.push_str(&format!(
-                "    <well module=\"{}\" totalRri=\"{:.1}\" relationships=\"{}\" directions=\"{}\"/>\n",
-                xml_escape(&g.module_path), g.total_rri, g.relationship_count, g.direction_count,
-            ));
-        }
-        xml.push_str("  </gravity-wells>\n");
-    }
-
-    // Red flags
-    if !report.red_flags.is_empty() {
-        xml.push_str("  <red-flags>\n");
-        for f in &report.red_flags {
-            xml.push_str(&format!(
-                "    <flag type=\"{}\" rri=\"{:.1}\">{}</flag>\n",
-                xml_escape(&f.flag_type),
-                f.rri,
-                xml_escape(&f.recommendation),
-            ));
-        }
-        xml.push_str("  </red-flags>\n");
-    }
 
     xml.push_str("</noupling-report>\n");
     xml

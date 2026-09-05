@@ -1,6 +1,6 @@
 # every_issue_kind
 
-Integration fixture for `tests/issue_coverage.rs` (#339). Each directory
+Integration fixture for `tests/issue_coverage.rs` (#339, the format-class contract since #350). Each directory
 exists to trigger one Issue kind from `CONTEXT.md`; the comment at the top
 of each file says which. Some directories fire a second detector as a
 side effect (`fused/left` is also low-cohesion, `domain` also lands in the

@@ -32,42 +32,14 @@ pub struct JsonReport {
     pub critical_violations: usize,
     pub total_circular: usize,
     pub total_coupling: usize,
-    pub circular_dependencies: BTreeMap<String, Vec<JsonCircularViolation>>,
-    pub coupling_violations: Vec<JsonCouplingViolation>,
+    // Metric arrays. Every Issue-bearing array (coupling_violations,
+    // circular_dependencies, gravity_wells, red_flags, stability_violations,
+    // distance, cohesion) was replaced by `issues` in 0.9.0 (ADR 0002, #350):
+    // filter `issues` by `kind` instead.
     pub hotspots: Vec<JsonHotspot>,
-    pub gravity_wells: Vec<JsonGravityWell>,
-    pub red_flags: Vec<JsonRedFlag>,
     pub directory_tree: Vec<JsonDirectory>,
     pub abstractness: Vec<JsonAbstractness>,
     pub instability: Vec<JsonInstability>,
-    pub stability_violations: Vec<JsonStabilityViolation>,
-    pub distance: Vec<JsonDistance>,
-    pub cohesion: Vec<JsonCohesion>,
-}
-
-#[derive(Serialize)]
-pub struct JsonRedFlag {
-    pub flag_type: String,
-    pub modules: Vec<String>,
-    pub rri: f64,
-    pub recommendation: String,
-}
-
-#[derive(Serialize)]
-pub struct JsonGravityWell {
-    pub module_path: String,
-    pub total_rri: f64,
-    pub relationship_count: usize,
-    pub direction_count: usize,
-    pub direction_breakdown: JsonDirectionBreakdown,
-}
-
-#[derive(Serialize)]
-pub struct JsonDirectionBreakdown {
-    pub downward: f64,
-    pub sibling: f64,
-    pub upward: f64,
-    pub circular: f64,
 }
 
 #[derive(Serialize)]
@@ -101,65 +73,6 @@ pub struct JsonInstability {
 }
 
 #[derive(Serialize)]
-pub struct JsonCohesion {
-    pub dir: String,
-    /// "Container" or "Package".
-    pub kind: &'static str,
-    pub n_children: usize,
-    pub internal_deps: usize,
-    /// `null` for Containers; numeric for Packages.
-    pub cohesion: Option<f64>,
-}
-
-#[derive(Serialize)]
-pub struct JsonStabilityViolation {
-    pub from_dir: String,
-    pub to_dir: String,
-    pub from_instability: f64,
-    pub to_instability: f64,
-}
-
-#[derive(Serialize)]
-pub struct JsonDistance {
-    pub dir: String,
-    pub abstractness: f64,
-    pub instability: f64,
-    pub distance: f64,
-    pub zone: &'static str,
-}
-
-#[derive(Serialize)]
-pub struct JsonCircularViolation {
-    pub severity: f64,
-    pub cycle_order: usize,
-    pub cycle_path: Vec<String>,
-    pub cycle_short_path: Vec<String>,
-    pub hop_files: Vec<JsonHopFile>,
-    pub weakest_link: Option<String>,
-    pub break_cost: usize,
-}
-
-#[derive(Serialize)]
-pub struct JsonHopFile {
-    pub from_dir: String,
-    pub from_file: String,
-    pub to_file: String,
-}
-
-#[derive(Serialize)]
-pub struct JsonCouplingViolation {
-    pub severity: f64,
-    pub weight: usize,
-    pub rri: f64,
-    pub direction: String,
-    pub from_module: String,
-    pub to_module: String,
-    pub dir_a: String,
-    pub dir_b: String,
-    pub depth: i32,
-}
-
-#[derive(Serialize)]
 pub struct JsonDirectory {
     pub path: String,
     pub name: String,
@@ -189,83 +102,6 @@ impl JsonReport {
             .filter(|v| !v.is_circular)
             .collect();
 
-        // Group circular by order
-        let mut circular_by_order: BTreeMap<String, Vec<JsonCircularViolation>> = BTreeMap::new();
-        for v in &circular {
-            let label = match v.cycle_order {
-                2 => "Mutual Dependencies (Order 2)".to_string(),
-                3 => "Triangular Cycles (Order 3)".to_string(),
-                n => format!("Cycles of Order {}", n),
-            };
-            let short_path: Vec<String> = v
-                .cycle_path
-                .iter()
-                .map(|p| {
-                    std::path::Path::new(p)
-                        .file_name()
-                        .and_then(|f| f.to_str())
-                        .unwrap_or(p)
-                        .to_string()
-                })
-                .collect();
-
-            let mut hop_files = Vec::new();
-            for (i, dir) in v.cycle_path.iter().enumerate() {
-                let dir_short = std::path::Path::new(dir)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or(dir)
-                    .to_string();
-                if i < v.cycle_hop_files.len() {
-                    let (from_file, to_file, _line) = &v.cycle_hop_files[i];
-                    hop_files.push(JsonHopFile {
-                        from_dir: dir_short,
-                        from_file: from_file.clone(),
-                        to_file: to_file.clone(),
-                    });
-                } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-                    let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-                    hop_files.push(JsonHopFile {
-                        from_dir: dir_short,
-                        from_file: to_file.clone(),
-                        to_file: String::new(),
-                    });
-                }
-            }
-
-            circular_by_order
-                .entry(label)
-                .or_default()
-                .push(JsonCircularViolation {
-                    severity: v.severity,
-                    cycle_order: v.cycle_order,
-                    cycle_path: v.cycle_path.clone(),
-                    cycle_short_path: short_path,
-                    hop_files,
-                    weakest_link: v.weakest_link.clone(),
-                    break_cost: v.break_cost,
-                });
-        }
-
-        let coupling_violations: Vec<JsonCouplingViolation> = coupling
-            .iter()
-            .map(|v| JsonCouplingViolation {
-                severity: v.severity,
-                weight: v.weight,
-                rri: v.rri,
-                direction: format!("{:?}", v.direction).to_lowercase(),
-                from_module: v.from_module.clone(),
-                to_module: v.to_module.clone(),
-                dir_a: v.dir_a.clone(),
-                dir_b: v.dir_b.clone(),
-                depth: v.depth,
-            })
-            .collect();
-
-        // Build directory tree
-        let directory_tree = build_json_dir_tree(modules, result);
-
-        // Hotspots
         let hotspots: Vec<JsonHotspot> = result
             .hotspots
             .iter()
@@ -276,6 +112,8 @@ impl JsonReport {
                 fan_out: h.fan_out,
             })
             .collect();
+
+        let directory_tree = build_json_dir_tree(modules, result);
 
         JsonReport {
             generator: VERSION.to_string(),
@@ -296,35 +134,7 @@ impl JsonReport {
             critical_violations,
             total_circular: circular.len(),
             total_coupling: coupling.len(),
-            circular_dependencies: circular_by_order,
-            coupling_violations,
             hotspots,
-            gravity_wells: result
-                .gravity_wells
-                .iter()
-                .map(|g| JsonGravityWell {
-                    module_path: g.module_path.clone(),
-                    total_rri: g.total_rri,
-                    relationship_count: g.relationship_count,
-                    direction_count: g.direction_count,
-                    direction_breakdown: JsonDirectionBreakdown {
-                        downward: g.downward_rri,
-                        sibling: g.sibling_rri,
-                        upward: g.upward_rri,
-                        circular: g.circular_rri,
-                    },
-                })
-                .collect(),
-            red_flags: result
-                .red_flags
-                .iter()
-                .map(|f| JsonRedFlag {
-                    flag_type: format!("{:?}", f.flag_type),
-                    modules: f.modules.clone(),
-                    rri: f.rri,
-                    recommendation: f.recommendation.clone(),
-                })
-                .collect(),
             directory_tree,
             abstractness: result
                 .abstractness
@@ -344,45 +154,6 @@ impl JsonReport {
                     ca: i.ca,
                     ce: i.ce,
                     instability: i.instability,
-                })
-                .collect(),
-            stability_violations: result
-                .stability_violations
-                .iter()
-                .map(|v| JsonStabilityViolation {
-                    from_dir: v.from_dir.clone(),
-                    to_dir: v.to_dir.clone(),
-                    from_instability: v.from_instability,
-                    to_instability: v.to_instability,
-                })
-                .collect(),
-            distance: result
-                .distance
-                .iter()
-                .map(|d| JsonDistance {
-                    dir: d.dir.clone(),
-                    abstractness: d.abstractness,
-                    instability: d.instability,
-                    distance: d.distance,
-                    zone: match d.zone {
-                        noupling_core::analyzer::Zone::MainSequence => "main_sequence",
-                        noupling_core::analyzer::Zone::Pain => "zone_of_pain",
-                        noupling_core::analyzer::Zone::Uselessness => "zone_of_uselessness",
-                    },
-                })
-                .collect(),
-            cohesion: result
-                .cohesion
-                .iter()
-                .map(|c| JsonCohesion {
-                    dir: c.dir.clone(),
-                    kind: match c.kind {
-                        noupling_core::analyzer::DirectoryKind::Container => "Container",
-                        noupling_core::analyzer::DirectoryKind::Package => "Package",
-                    },
-                    n_children: c.n_children,
-                    internal_deps: c.internal_deps,
-                    cohesion: c.cohesion,
                 })
                 .collect(),
         }

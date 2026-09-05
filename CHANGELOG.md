@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Breaking change — `report.json` and `report.xml` (#350, ADR 0002):** the per-kind Issue arrays are removed; every Issue is in the single top-level `issues` array of Issue cards (see the docs site § Report Formats). Filter by `kind`:
+
+| Removed | Read instead |
+|---|---|
+| `coupling_violations` | `issues` where `kind == "coupling_violation"` (edge subject; `detail`: `dir_a`, `dir_b`, `imports`, `rri`, `depth`, `raw_severity`) |
+| `circular_dependencies` | `issues` where `kind == "cycle"` (ring subject; `detail`: `order`, `hops`, `hop_import_counts`, `weakest_link`, `break_cost`) |
+| `gravity_wells` | `issues` where `kind == "gravity_well"` (`detail`: `total_rri`, `relationship_count`, per-direction RRI) |
+| `red_flags` | `issues` where `kind == "red_flag"` (`detail`: `flag_type`, `modules`, `dir_a`, `dir_b`, `rri`, `imports`, `median_density`) |
+| `stability_violations` | `issues` where `kind == "stability_violation"` (`detail`: `from_instability`, `to_instability`) |
+| `distance` | `issues` where `kind == "zone_flag"` for the flagged directories (`detail`: `zone`, `abstractness`, `instability`, `distance`); on-sequence directories are no longer listed |
+| `cohesion` | `issues` where `kind == "low_cohesion"` for flagged Packages (`detail`: `cohesion`, `n_children`, `internal_deps`); Containers and cohesive Packages are no longer listed |
+
+The Metric arrays `hotspots`, `abstractness`, `instability` and `directory_tree` are unchanged, as are the header counts (`critical_violations`, `total_circular`, `total_coupling`). In XML the `<circular-dependencies>`, `<coupling-violations>`, `<gravity-wells>` and `<red-flags>` elements are replaced by `<issues>`.
+
 **Upgrade notes:** re-run `noupling baseline save` after upgrading. Baseline files written before 0.9.0 fingerprint only coupling violations; `--baseline` treats such a file as "nothing baselined" and prints a one-line warning until it is re-saved (#343). Baselined Issues are now kept in every report and marked `baselined` instead of being dropped, so `audit --baseline` no longer changes the score; its exit code still depends only on new Issues. Projects with no `layers` in `.noupling/settings.json` will see their score change (usually upward) and may gain Layer Violations. Layer inference and the actionable coupling-mode fallback, which only the Explorer applied before, now run inside the shared audit pipeline, so `audit`, every report format, and the CI gate see the same layers and the same Issues (ADR 0001, #341). To keep your own layers, declare at least one entry in `layers` (an empty array counts as unset, which is what `noupling init` writes); to keep strict coupling, set the top-level `coupling_mode` (`thresholds.coupling_mode` is always written by `init`, so it cannot serve as the explicit opt-out). Inferred layers never produce `<unlayered>` Layer Violations.
 
 ### Added
@@ -33,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stable Issue identities and trend records** (review of #361–#366): Coupling Violation and Red Flag fingerprints are keyed on the directory pair, not the representative import, and 3+-node Cycle rings are reported from their lexicographically smallest member, so a baseline match survives unrelated edits. Trend recording (score + per-kind counts) skips diff-scoped and `--module` runs instead of overwriting the whole-snapshot record. Sonar pins directory-shaped Issues (Stability Violation, Zone Flag, Low Cohesion) to the first file in that directory so SonarQube keeps them. Graph formats drop only genuine self-edges (compared by full path). html and JSON directory rollups use the same anchor rule as the Issue cards. One accent colour per kind (`IssueKind::accent_color`) is shared by dashboard, strategy, graph and bundle; a recorded snapshot missing a kind is a gap in strategy, not a zero.
 
 - **Explorer reads Issues from the shared array** (#345, second half of ADR 0002): the Data Contract (`format_version` 2) embeds the same `issues` cards as `report.json`, each extended with `participants` (the node ids focus mode expands and highlights — a Gravity Well's participants include the modules pulling on it, #333). The Issues tab lists all nine kinds in canonical order with band chips, the kind's name, and the core reason + recommendation; baselined Issues render dimmed with an "accepted" marker and are excluded from the new count. "About this verdict" shows per-kind background prose plus each Issue's reason and recommendation verbatim; the score-breakdown dialog sums score impact per kind to the points lost; the Rules tab lists Rule and Layer Violation Issues as offenders; Info shows per-kind counts. The `gravity_wells` and `red_flags` contract arrays are gone; `cycles` and `violations` stay as canvas geometry.
+
+- **Contract: one `issues` array, format-class rule asserted** (#350): the JSON per-kind arrays are removed (see the breaking-change table above). `tests/issue_coverage.rs` no longer pins a coverage matrix; it asserts the `CONTEXT.md` format-class rule against each format's data — every Issue-listing format carries all nine kinds, every graph format accents all five edge-shaped kinds, the trend format has a recorded series per kind. Graph formats now draw one accented edge per kind on a pair (a pair that is both a Coupling and a Stability Violation gets both accents) instead of letting one kind hide the other.
 
 ### Changed
 
