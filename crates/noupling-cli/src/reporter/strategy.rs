@@ -470,7 +470,12 @@ mod tests {
         .unwrap();
         let html = std::fs::read_to_string(&out).unwrap();
         let start = html.find("const D = ").expect("data assignment") + "const D = ".len();
-        let end = start + html[start..].find(";\n").unwrap();
+        // `;` followed by a line break; the template may carry CRLF on Windows.
+        let end = start
+            + html[start..]
+                .find(";\r")
+                .or_else(|| html[start..].find(";\n"))
+                .unwrap();
         let data: serde_json::Value = serde_json::from_str(&html[start..end]).unwrap();
 
         let kinds = data["issue_kinds"].as_array().expect("issue_kinds");

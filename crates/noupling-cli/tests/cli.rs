@@ -518,7 +518,12 @@ fn scan_records_issue_kind_counts_that_strategy_trends() {
     );
     let html = std::fs::read_to_string(project.join(".noupling/strategy.html")).unwrap();
     let start = html.find("const D = ").unwrap() + "const D = ".len();
-    let end = start + html[start..].find(";\n").unwrap();
+    // `;` followed by a line break; the template may carry CRLF on Windows.
+    let end = start
+        + html[start..]
+            .find(";\r")
+            .or_else(|| html[start..].find(";\n"))
+            .unwrap();
     let data: serde_json::Value = serde_json::from_str(&html[start..end]).unwrap();
 
     let series = data["issue_kind_series"].as_array().unwrap();
