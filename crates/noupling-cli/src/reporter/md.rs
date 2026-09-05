@@ -16,6 +16,7 @@ pub fn generate_markdown_report(
 ) -> Result<()> {
     let report = JsonReport::from_audit(modules, result, snapshot_id);
 
+    super::clear_generated_pages(output_dir, "README.md")?;
     std::fs::create_dir_all(output_dir)?;
 
     // Build a lookup: dir path -> (children dirs, files, violations, circular)
@@ -413,6 +414,27 @@ mod tests {
         let bag = std::fs::read_to_string(out.path().join("bag/README.md")).unwrap();
         assert!(bag.contains("### [LOW] Low Cohesion: `src/bag`"), "{bag}");
         assert!(!bag.contains("Coupling Violation:"), "{bag}");
+    }
+
+    /// Regenerating into the same directory removes pages for directories
+    /// that no longer exist, and leaves files noupling did not write (#383).
+    #[test]
+    fn md_regeneration_removes_stale_pages() {
+        let out = tempfile::tempdir().unwrap();
+        let before = vec![file("a", "src/old/a.rs"), file("b", "src/keep/b.rs")];
+        let result = AuditResultBuilder::new().with_total_modules(2).build();
+        generate_markdown_report(&before, &result, "s1", out.path()).unwrap();
+        assert!(out.path().join("old/README.md").exists());
+        std::fs::write(out.path().join("notes.txt"), "mine").unwrap();
+
+        let after = vec![file("a", "src/new/a.rs"), file("b", "src/keep/b.rs")];
+        generate_markdown_report(&after, &result, "s2", out.path()).unwrap();
+        assert!(
+            !out.path().join("old").exists(),
+            "stale page must be removed"
+        );
+        assert!(out.path().join("new/README.md").exists());
+        assert!(out.path().join("notes.txt").exists());
     }
 
     #[test]
