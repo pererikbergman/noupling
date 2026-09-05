@@ -146,7 +146,12 @@ pub fn compute_stability_violations(
             Some(d) if !d.is_empty() => d.clone(),
             _ => continue,
         };
-        if from_dir == to_dir {
+        if from_dir == to_dir || is_ancestor(&from_dir, &to_dir) || is_ancestor(&to_dir, &from_dir)
+        {
+            // Same directory, or a directory and its own ancestor: that is
+            // composition (an entry point reaching into its packages, a
+            // package reading a leaf type from its parent), not a dependency
+            // between peers the Stable Dependencies Principle speaks to (#414).
             continue;
         }
         let from_i = match dir_to_i.get(from_dir.as_str()) {
@@ -168,6 +173,11 @@ pub fn compute_stability_violations(
     }
     result.sort_by(|a, b| a.from_dir.cmp(&b.from_dir).then(a.to_dir.cmp(&b.to_dir)));
     result
+}
+
+/// `a` is a proper ancestor directory of `b`.
+fn is_ancestor(a: &str, b: &str) -> bool {
+    b.len() > a.len() && b.starts_with(a) && b.as_bytes()[a.len()] == b'/'
 }
 
 #[cfg(test)]
@@ -258,6 +268,56 @@ mod tests {
             .find(|v| v.from_dir == "src/stable" && v.to_dir == "src/unstable")
             .expect("expected SDP violation src/stable → src/unstable");
         assert!(v.from_instability < v.to_instability);
+    }
+
+    /// `lib.rs` depending on `src/analyzer/*` is composition, not a peer
+    /// dependency; the Stable Dependencies check must not compare a
+    /// directory with its own ancestor or descendant (#414). Sibling pairs
+    /// are still checked.
+    #[test]
+    fn parent_child_edges_are_not_sdp_violations() {
+        let modules = vec![
+            file_module("lib", "src/lib.rs"),
+            file_module("a1", "src/analyzer/a.rs"),
+            file_module("a2", "src/analyzer/b.rs"),
+            file_module("t", "src/types.rs"),
+            file_module("st", "src/state/s.rs"),
+            file_module("u1", "src/util/x.rs"),
+            file_module("u2", "src/util/y.rs"),
+            file_module("u3", "src/util/z.rs"),
+        ];
+        let deps = vec![
+            // Entry point depends on its own child package (parent → child):
+            // I(src) = 0.4 < I(analyzer) = 0.5.
+            dep("lib", "a1"),
+            dep("lib", "a2"),
+            // A child package reads a leaf type from its parent (child → parent):
+            // I(state) = 0.25 < I(src) = 0.4.
+            dep("st", "t"),
+            dep("u1", "st"),
+            dep("u2", "st"),
+            dep("u3", "st"),
+            dep("u1", "t"),
+            dep("u2", "t"),
+            // Siblings: I(analyzer) = 0.5 < I(util) = 0.71 — a real violation.
+            dep("a1", "u1"),
+            dep("a2", "u2"),
+        ];
+        let instability = compute_directory_instability(&modules, &deps);
+        let violations = compute_stability_violations(&modules, &deps, &instability);
+        let pair = |f: &str, t: &str| violations.iter().any(|v| v.from_dir == f && v.to_dir == t);
+        assert!(
+            !pair("src", "src/analyzer"),
+            "parent → child is not a violation: {violations:?}"
+        );
+        assert!(
+            !pair("src/state", "src"),
+            "child → parent is not a violation: {violations:?}"
+        );
+        assert!(
+            pair("src/analyzer", "src/util"),
+            "siblings are still checked: {violations:?}"
+        );
     }
 
     #[test]

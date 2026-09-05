@@ -65,7 +65,7 @@ A module whose aggregate relationship risk is disproportionate; everything nearb
 A named structural anti-pattern the audit recognises (fused siblings, trapped children, …), carrying a recommendation.
 
 **Stability Violation**:
-A more-stable directory depending on a less-stable one (Stable Dependencies Principle).
+A more-stable directory depending on a less-stable sibling or cousin (Stable Dependencies Principle). A directory and its own ancestor are never compared: an entry point reaching into its packages is composition, not a peer dependency.
 
 **Zone Flag**:
 A directory far enough off the main sequence to land in the Zone of Pain or the Zone of Uselessness.
