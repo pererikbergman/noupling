@@ -279,8 +279,13 @@ impl AuditResultBuilder {
 }
 
 impl AuditResult {
-    /// Keep only violations involving at least one changed file and recalculate the score.
-    pub fn filter_by_changed_files(&mut self, changed_files: &[String]) {
+    /// Keep only violations involving at least one changed file and re-score
+    /// the survivors on TRI — the same formula every other path uses (#354).
+    pub fn filter_by_changed_files(
+        &mut self,
+        changed_files: &[String],
+        weights: &crate::settings::RiskWeights,
+    ) {
         self.violations.retain(|v| {
             // Coupling: check if from_module or to_module is a changed file
             if !v.is_circular {
@@ -308,7 +313,7 @@ impl AuditResult {
             }
             false
         });
-        self.recalculate_score();
+        self.score_by_tri(weights);
     }
 
     /// Remove violations below the given severity threshold and recalculate the score.
@@ -357,7 +362,11 @@ impl AuditResult {
     ///
     /// For coupling violations, density = weight (import count between the pair).
     /// For circular violations, density = sum of all hop import counts.
-    pub fn apply_risk_weights(&mut self, weights: &crate::settings::RiskWeights) {
+    pub fn apply_risk_weights(
+        &mut self,
+        weights: &crate::settings::RiskWeights,
+        layers: &[crate::settings::Layer],
+    ) {
         for v in &mut self.violations {
             let direction_weight = match v.direction {
                 DependencyDirection::Downward => weights.downward,
@@ -388,11 +397,24 @@ impl AuditResult {
             v.rri = direction_weight * v.weight.max(1) as f64;
         }
 
-        // Compute TRI (Total Risk Index) and derive health score.
-        // TRI = sum of all violation RRIs.
-        // Score = 100 * (1 - TRI / (total_modules * max_weight)), clamped to 0-100.
-        // max_weight is the highest configured weight (typically circular=10),
-        // so a project where every module averages 1 worst-case violation scores 0.
+        // Sanctioned sibling connections inside an `allow_sibling` layer carry
+        // a reduced weight; apply it before the RRIs are summed (#354).
+        self.apply_layer_weights(layers);
+
+        self.score_by_tri(weights);
+
+        // Detect Gravity Wells: modules with disproportionately high aggregate RRI.
+        self.gravity_wells = compute_gravity_wells(&self.violations, &self.coupling_metrics);
+        self.red_flags = compute_red_flags(&self.violations, &self.coupling_metrics);
+    }
+
+    /// The score, from the violations' RRIs (#354): TRI is their sum and
+    /// Score = 100 · (1 − TRI / (total_modules · max_weight)), clamped to
+    /// 0–100. `max_weight` is the highest configured weight (typically
+    /// circular = 10), so a project where every module averages one
+    /// worst-case violation scores 0. Every path that changes the violation
+    /// set after RRIs exist ends here, never on the severity sum.
+    pub fn score_by_tri(&mut self, weights: &crate::settings::RiskWeights) {
         self.tri = self.violations.iter().map(|v| v.rri).sum();
         let max_weight = weights
             .downward
@@ -407,12 +429,11 @@ impl AuditResult {
         } else {
             self.assign_score(|_| 0.0);
         }
-
-        // Detect Gravity Wells: modules with disproportionately high aggregate RRI.
-        self.gravity_wells = compute_gravity_wells(&self.violations, &self.coupling_metrics);
-        self.red_flags = compute_red_flags(&self.violations, &self.coupling_metrics);
     }
 
+    /// Severity-sum score. Only the bare `audit()` (no settings) and the
+    /// pre-scoring filters use it as a placeholder; `audit_with_settings`
+    /// always ends with the TRI formula in `apply_risk_weights` (#354).
     pub fn recalculate_score(&mut self) {
         let total_modules = self.total_modules as f64;
         if self.total_modules > 0 {
@@ -589,9 +610,12 @@ pub fn audit_with_settings(
     result.distance = compute_distance(&result.abstractness, &result.instability, 0.5);
     result.filter_by_severity(settings.thresholds.minimum_severity);
     result.apply_coupling_mode(coupling_mode);
-    result.apply_risk_weights(&settings.risk_weights);
-    result.apply_layer_weights(&layers);
+    // Decide the violation set first, then score it once. Layer filtering
+    // used to run last and re-score with the severity-sum formula, so a
+    // layered project scored on a different formula than an unlayered one
+    // and `tri` went stale (#354). Now every project scores on TRI.
     result.filter_by_layers(&layers);
+    result.apply_risk_weights(&settings.risk_weights, &layers);
     result.rule_violations =
         check_dependency_rules(modules, dependencies, &settings.dependency_rules);
     result.layer_violations = check_layer_rules(modules, dependencies, &layers);

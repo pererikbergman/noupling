@@ -335,7 +335,7 @@ Works with `//`, `#`, and `--` comment styles. Disable with `"allow_inline_suppr
 
    **Health Score** = `100 × (1 - TRI / (total_modules × max_weight))`
 
-   > **Note (0.9.0):** the TRI formula applies when the project has no `layers`. When layers are configured or inferred, the layer-filtering step recomputes the score from the depth-based severity sum instead (`100 × (1 − Σ severity / total_modules)`), so a layered project's score is not comparable to an unlayered one's. Unifying the two is tracked in [#354](https://github.com/pererikbergman/noupling/issues/354). Either way, every scoring Issue's **score impact** sums to the points lost, so the breakdown each report prints adds up.
+   Since 0.9.2 this is the only formula: layer filtering decides which violations count, then every project is scored on TRI, whether it has layers or not. Every scoring Issue's **score impact** sums to the points lost, so the breakdown each report prints adds up.
 
 5. **Report**: every format renders the same Issues from one audit — Issue-listing formats (text, json, xml, sonar, md, html, dashboard, pr, briefing, explorer) carry all nine kinds, graph formats (mermaid, dot, bundle) accent every edge-shaped Issue, and strategy trends the counts per kind.
 

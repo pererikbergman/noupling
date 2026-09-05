@@ -44,9 +44,10 @@ CONFIGURATION (.noupling/settings.json):
   }
 
 HEALTH SCORE:
-  Score = 100 * (1 - sum_of_severities / total_modules)
-  Coupling severity = 1 / (depth + 1)    (deeper = less severe)
-  Circular severity = modules / (depth + 1) / 10   (always significant)
+  RRI   = direction_weight * imports      (per violation; circular = 10, sibling = 4, ...)
+  TRI   = sum of all violation RRIs
+  Score = 100 * (1 - TRI / (total_modules * max_weight))
+  Coupling severity = 1 / (depth + 1) drives the band ladder, not the score.
 
 EXAMPLES:
   noupling init .                           Create default settings.json

@@ -156,7 +156,7 @@ impl AuditResult {
                 _ => true,
             }
         });
-        self.recalculate_score();
+        // No re-score here: `apply_risk_weights` scores the surviving set (#354).
     }
 
     /// Apply layer-specific weight reductions for sanctioned sibling connections.
