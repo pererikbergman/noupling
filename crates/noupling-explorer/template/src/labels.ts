@@ -1,4 +1,4 @@
-import type { NodeEntry } from "../types";
+import type { NodeEntry } from "./types";
 
 /**
  * What a node is called on the canvas and in the tabs.

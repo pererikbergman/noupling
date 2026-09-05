@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import type { HighlightPolicy } from "../state/highlightPolicy";
-import { displayLabel } from "../state/labels";
+import { displayLabel } from "../labels";
 
 export interface MatrixProps {
   data: DataContract;

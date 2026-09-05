@@ -12,7 +12,7 @@ import {
   type PathFinder,
 } from "../state/explorerState";
 import { nodeById } from "../state/queries";
-import { collapsedLabel } from "../state/labels";
+import { collapsedLabel } from "../labels";
 import type { HighlightPolicy } from "../state/highlightPolicy";
 
 export interface CanvasAreaProps {

@@ -5,7 +5,7 @@
  */
 import type { DataContract, EdgeEntry, LayerEntry, NodeEntry } from "../types";
 // Explicit extension: the unit tests run this file under node --experimental-strip-types.
-import { displayLabel } from "../state/labels.ts";
+import { displayLabel } from "../labels.ts";
 
 export interface PositionedNode {
   id: string;

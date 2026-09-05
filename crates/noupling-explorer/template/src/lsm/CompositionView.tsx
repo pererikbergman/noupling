@@ -1,5 +1,5 @@
 import type { NodeEntry, EdgeEntry } from "../types";
-import { displayLabel } from "../state/labels";
+import { displayLabel } from "../labels";
 
 /**
  * Composition view (PRD §10.8). Answers "what *kind* of thing is
