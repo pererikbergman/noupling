@@ -87,13 +87,11 @@ fn edge_style(kind: IssueKind) -> (&'static str, &'static str) {
 /// parallel edges, one per accent — every edge-shaped Issue is drawn.
 struct EdgeInfo {
     count: usize,
-    kind: IssueKind,
     baselined: bool,
 }
 
-/// Drawn-edge key: `(from, to, kind id)`. Kind id keeps `BTreeMap` order
-/// deterministic and readable.
-type EdgeKey = (String, String, &'static str);
+/// Drawn-edge key. `IssueKind` is `Ord` in canonical kind order.
+type EdgeKey = (String, String, IssueKind);
 
 fn build_dir_graph(
     modules: &[Module],
@@ -129,9 +127,8 @@ fn build_dir_graph(
         if from_dir == to_dir || from == to {
             continue;
         }
-        let entry = edges.entry((from, to, e.kind.id())).or_insert(EdgeInfo {
+        let entry = edges.entry((from, to, e.kind)).or_insert(EdgeInfo {
             count: 0,
-            kind: e.kind,
             baselined: true,
         });
         entry.count += 1;
@@ -205,14 +202,14 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
     // Define edges: one arrow shape per kind, colour via linkStyle by
     // index, muted grey when every Issue on the edge is baselined.
     let mut link_styles = Vec::new();
-    for (idx, ((from, to, _), info)) in edges.iter().enumerate() {
+    for (idx, ((from, to, kind), info)) in edges.iter().enumerate() {
         let label = if info.count > 1 {
             format!("|{}|", info.count)
         } else {
             String::new()
         };
-        let (arrow, _) = edge_style(info.kind);
-        let colour = info.kind.accent_color();
+        let (arrow, _) = edge_style(*kind);
+        let colour = kind.accent_color();
         out.push_str(&format!(
             "    {} {}{} {}\n",
             sanitize(from),
@@ -301,9 +298,9 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push('\n');
 
     // Edges: per-kind style; muted when every Issue on the edge is baselined.
-    for ((from, to, _), info) in &edges {
-        let (_, dot_style) = edge_style(info.kind);
-        let colour = info.kind.accent_color();
+    for ((from, to, kind), info) in &edges {
+        let (_, dot_style) = edge_style(*kind);
+        let colour = kind.accent_color();
         let mut attrs = vec![dot_style.to_string()];
         if info.count > 1 {
             attrs.push(format!("label=\"{}\"", info.count));
@@ -311,10 +308,10 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
         if info.baselined {
             attrs.push(format!("color=\"{}\"", MUTED));
             attrs.push("penwidth=0.7".to_string());
-            attrs.push(format!("tooltip=\"{} (baselined)\"", info.kind.name()));
+            attrs.push(format!("tooltip=\"{} (baselined)\"", kind.name()));
         } else {
             attrs.push(format!("color=\"{}\"", colour));
-            attrs.push(format!("tooltip=\"{}\"", info.kind.name()));
+            attrs.push(format!("tooltip=\"{}\"", kind.name()));
         }
         out.push_str(&format!(
             "    {} -> {} [{}];\n",

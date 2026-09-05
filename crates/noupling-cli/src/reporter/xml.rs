@@ -23,8 +23,7 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         report.critical_violations, report.total_circular, report.total_coupling,
     ));
 
-    // Issues — every kind, from the shared Issue cards (ADR 0002). The
-    // per-kind sections below stay until #350 removes them.
+    // Issues — every kind, from the shared Issue cards (ADR 0002).
     xml.push_str(&format!("  <issues count=\"{}\">\n", report.issues.len()));
     for card in &report.issues {
         xml.push_str(&format!(

@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use noupling_core::analyzer::{common_parent_dir, AuditResult, CouplingViolation, IssueCard};
+use noupling_core::analyzer::{common_parent_dir, AuditResult, IssueCard};
 use noupling_core::core::Module;
 use serde::Serialize;
 
@@ -26,8 +26,7 @@ pub struct JsonReport {
     pub suppressed_count: usize,
     pub total_external_imports: usize,
     pub violation_age: JsonViolationAge,
-    /// Every Issue as an Issue card, in `issues()` order (ADR 0002). The
-    /// per-kind arrays below are kept until #350 removes them.
+    /// Every Issue as an Issue card, in `issues()` order (ADR 0002).
     pub issues: Vec<IssueCard>,
     pub critical_violations: usize,
     pub total_circular: usize,
@@ -93,14 +92,8 @@ impl JsonReport {
             .filter(|v| v.severity >= 0.5)
             .count();
 
-        let circular: Vec<&CouplingViolation> =
-            result.violations.iter().filter(|v| v.is_circular).collect();
-
-        let coupling: Vec<&CouplingViolation> = result
-            .violations
-            .iter()
-            .filter(|v| !v.is_circular)
-            .collect();
+        let total_circular = result.violations.iter().filter(|v| v.is_circular).count();
+        let total_coupling = result.violations.len() - total_circular;
 
         let hotspots: Vec<JsonHotspot> = result
             .hotspots
@@ -132,8 +125,8 @@ impl JsonReport {
             },
             issues: result.issues().iter().map(|i| i.to_card()).collect(),
             critical_violations,
-            total_circular: circular.len(),
-            total_coupling: coupling.len(),
+            total_circular,
+            total_coupling,
             hotspots,
             directory_tree,
             abstractness: result
