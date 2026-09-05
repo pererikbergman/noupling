@@ -218,7 +218,7 @@ fn render_issue_section(issues: &[&Issue], is_root: bool, baseline_applied: bool
     let baselined = issues.iter().filter(|i| i.baselined).count();
     if baseline_applied {
         md.push_str(&format!(
-            "## Issues ({}) — {} new, {} baselined\n\n",
+            "## Issues ({}) — {} not in baseline, {} baselined\n\n",
             issues.len(),
             issues.len() - baselined,
             baselined
@@ -433,7 +433,7 @@ mod tests {
         generate_markdown_report(&modules, &result, "snap-md", out.path()).unwrap();
         let root = std::fs::read_to_string(out.path().join("README.md")).unwrap();
         assert!(
-            root.contains("## Issues (1) — 0 new, 1 baselined"),
+            root.contains("## Issues (1) — 0 not in baseline, 1 baselined"),
             "{root}"
         );
         assert!(root.contains("_(baselined)_"), "{root}");

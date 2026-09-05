@@ -138,11 +138,17 @@ pub fn run(
     // Exit-code contract: fail only on Issues the baseline does not accept.
     if let Some(cmp) = baseline_info {
         println!("\nBaseline comparison:");
-        println!("  New issues: {}", cmp.new_count);
-        println!("  Baselined issues: {}", cmp.baselined_count);
-        println!("  Resolved issues: {}", cmp.resolved_count);
+        println!("  Not in baseline: {}", cmp.new_count);
+        println!("  Baselined: {}", cmp.baselined_count);
+        println!(
+            "  Resolved (in baseline, no longer present): {}",
+            cmp.resolved_count
+        );
         if cmp.new_count > 0 {
-            anyhow::bail!("{} new issue(s) introduced since baseline", cmp.new_count);
+            anyhow::bail!(
+                "{} issue(s) not in the baseline — fix them or accept them with `noupling baseline save`",
+                cmp.new_count
+            );
         }
     }
 

@@ -436,7 +436,7 @@ fn baseline_round_trip_fails_only_on_new_issues() {
     let clean = run_noupling(&["audit", root, "--baseline"]);
     let clean_out = String::from_utf8_lossy(&clean.stdout).into_owned();
     assert!(clean.status.success(), "{clean_out}");
-    assert!(clean_out.contains("New issues: 0"), "{clean_out}");
+    assert!(clean_out.contains("Not in baseline: 0"), "{clean_out}");
     assert!(clean_out.contains("(baselined)"), "{clean_out}");
 
     let text = run_noupling(&["report", root, "--format", "text", "--baseline"]);
@@ -446,7 +446,7 @@ fn baseline_round_trip_fails_only_on_new_issues() {
         String::from_utf8_lossy(&text.stderr)
     );
     let report_txt = std::fs::read_to_string(project.join(".noupling/report.txt")).unwrap();
-    assert!(report_txt.contains("0 new,"), "{report_txt}");
+    assert!(report_txt.contains("0 not in baseline,"), "{report_txt}");
     assert!(report_txt.contains("(baselined)"), "{report_txt}");
 
     // A new sibling pair between two fresh directories outside the ring,
@@ -468,8 +468,11 @@ fn baseline_round_trip_fails_only_on_new_issues() {
         !dirty.status.success(),
         "must fail on a new Issue:\n{dirty_out}"
     );
-    assert!(dirty_out.contains("New issues: 1"), "{dirty_out}");
-    assert!(dirty_err.contains("1 new issue(s)"), "{dirty_err}");
+    assert!(dirty_out.contains("Not in baseline: 1"), "{dirty_out}");
+    assert!(
+        dirty_err.contains("1 issue(s) not in the baseline"),
+        "{dirty_err}"
+    );
 }
 
 /// A pre-0.9.0 baseline file warns once and treats nothing as baselined.

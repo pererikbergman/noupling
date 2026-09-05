@@ -131,7 +131,7 @@ jobs:
       - run: noupling audit .                   # only Issues touching changed files</code></pre>
 <pre><code class="language-yaml">      - run: noupling scan .
       - run: noupling audit . --baseline        # exit 1 only on Issues not in .noupling/baseline.json</code></pre>
-      <p>With <code>--baseline</code> the accepted Issues stay in the output marked <code>(baselined)</code>, and the summary reads <code>New issues: 0 / Baselined issues: N</code>, so the report is still the whole picture.</p>
+      <p>With <code>--baseline</code> the accepted Issues stay in the output marked <code>(baselined)</code>, and the summary reads <code>Not in baseline: 0 / Baselined: N</code>, so the report is still the whole picture.</p>
 
       <h2 id="ci-pr-comment">CI: comment on the pull request</h2>
       <p>The <code>pr</code> format is a short Markdown summary built for a comment: score with delta, per-kind counts, and the top five Issues with their recommendations. The repository ships a complete workflow you can copy: <a href="https://github.com/pererikbergman/noupling/blob/main/.github/workflows/noupling-pr.yml"><code>.github/workflows/noupling-pr.yml</code></a>. The core of it:</p>

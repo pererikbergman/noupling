@@ -475,7 +475,10 @@ mod tests {
 
         let text = format_text(&result);
 
-        assert!(text.contains("Issues (2): 1 new, 1 baselined"), "{text}");
+        assert!(
+            text.contains("Issues (2): 1 not in baseline, 1 baselined"),
+            "{text}"
+        );
         assert!(
             text.contains("[CRITICAL] Coupling Violation: src/a/old.rs -> src/b/y.rs (baselined)"),
             "{text}"
