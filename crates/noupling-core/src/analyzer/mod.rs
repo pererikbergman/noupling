@@ -31,7 +31,7 @@ pub use abstractness::{compute_abstractness, AbstractnessMetric};
 pub use actions::compute_top_actions;
 #[allow(unused_imports)] // Public API surface: kept reachable as analyzer::TopAction
 pub use actions::TopAction;
-pub use auto_layers::detect_layers;
+pub use auto_layers::{detect_layers, detect_layers_with_prior};
 pub use cohesion::{compute_cohesion, CohesionMetrics, DirectoryKind};
 pub use coupling::CouplingViolation;
 pub use critical_path::compute_critical_path;
@@ -588,7 +588,21 @@ pub fn audit_with_settings(
     type_counts: &[crate::core::ModuleTypeCounts],
     settings: &crate::settings::Settings,
 ) -> AuditResult {
-    let (layers, layers_auto_detected) = resolve_layers(modules, settings);
+    audit_with_settings_and_prior_layers(modules, dependencies, type_counts, settings, None)
+}
+
+/// [`audit_with_settings`] that also knows which layers the previous
+/// snapshot inferred, so inference is sticky across the coverage threshold
+/// (#355). Callers with a snapshot history pass them; everyone else passes
+/// `None` and gets a fresh detection.
+pub fn audit_with_settings_and_prior_layers(
+    modules: &[Module],
+    dependencies: &[Dependency],
+    type_counts: &[crate::core::ModuleTypeCounts],
+    settings: &crate::settings::Settings,
+    prior_inferred: Option<&[crate::settings::Layer]>,
+) -> AuditResult {
+    let (layers, layers_auto_detected) = resolve_layers(modules, settings, prior_inferred);
     // Auto-detected layers are by definition coarse (`**/ui/**` etc.), so
     // every sibling coupling inside one of them would count as a strict-mode
     // violation and the score would collapse with no actionable signal.
@@ -638,6 +652,7 @@ pub fn audit_with_settings(
 fn resolve_layers(
     modules: &[Module],
     settings: &crate::settings::Settings,
+    prior_inferred: Option<&[crate::settings::Layer]>,
 ) -> (Vec<crate::settings::Layer>, bool) {
     if !settings.layers.is_empty() {
         return (settings.layers.clone(), false);
@@ -645,7 +660,7 @@ fn resolve_layers(
     if !settings.infer_layers {
         return (Vec::new(), false);
     }
-    let inferred = detect_layers(modules);
+    let inferred = detect_layers_with_prior(modules, prior_inferred);
     let auto = !inferred.is_empty();
     (inferred, auto)
 }

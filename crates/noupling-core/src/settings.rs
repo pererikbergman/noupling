@@ -124,7 +124,7 @@ pub struct ModuleConfig {
 }
 
 /// An architectural layer. Dependencies may only flow downward (higher index = lower layer).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
     /// Human-readable name (e.g., "presentation", "domain", "data").
     pub name: String,

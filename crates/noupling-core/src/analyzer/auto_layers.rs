@@ -116,6 +116,48 @@ const KEYWORDS: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Minimum share of files the previous snapshot's inferred layers must still
+/// match to be kept instead of re-inferred (#355). Half the entry threshold:
+/// inference switches on at 30% and off below 15%, so a project sitting near
+/// 30% does not flip between layered and unlayered with every commit.
+const KEEP_COVERAGE_PERCENT: f64 = MIN_COVERAGE_PERCENT / 2.0;
+
+/// [`detect_layers`] with hysteresis. A fresh detection wins whenever it
+/// finds layers, so a project that grows new layer directories or renames
+/// one picks that up immediately. Only when the fresh detection comes back
+/// empty does the previous snapshot's `prior` set stay in force — and only
+/// while it still covers at least [`KEEP_COVERAGE_PERCENT`] of the current
+/// files. That is the one-way stickiness #355 asks for: inference switches
+/// on at 30% and does not switch off until coverage halves.
+pub fn detect_layers_with_prior(modules: &[Module], prior: Option<&[Layer]>) -> Vec<Layer> {
+    let fresh = detect_layers(modules);
+    if !fresh.is_empty() {
+        return fresh;
+    }
+    if let Some(prior) = prior.filter(|p| !p.is_empty()) {
+        let files: Vec<&Module> = modules
+            .iter()
+            .filter(|m| matches!(m.module_type, ModuleType::File))
+            .collect();
+        let matchers: Vec<globset::GlobMatcher> = prior
+            .iter()
+            .filter_map(|l| globset::Glob::new(&l.pattern).ok())
+            .map(|g| g.compile_matcher())
+            .collect();
+        if !files.is_empty() && !matchers.is_empty() {
+            let matched = files
+                .iter()
+                .filter(|f| matchers.iter().any(|m| m.is_match(&f.path)))
+                .count();
+            let coverage = matched as f64 / files.len() as f64 * 100.0;
+            if coverage >= KEEP_COVERAGE_PERCENT {
+                return prior.to_vec();
+            }
+        }
+    }
+    Vec::new()
+}
+
 /// Detect a sensible layer set from the given source modules.
 ///
 /// Returns an empty vec when:
@@ -307,6 +349,77 @@ mod tests {
             matcher.is_match("src/Views/C.kt"),
             "{}",
             presentation.pattern
+        );
+    }
+
+    /// Layers inferred for the previous snapshot stay in force while they
+    /// still cover a meaningful share of the files, even when a fresh
+    /// detection would fall under the 30% threshold — so one unrelated file
+    /// cannot flip the audit between layered and unlayered (#355).
+    #[test]
+    fn prior_layers_are_kept_across_the_coverage_threshold() {
+        // 3 ui files + 6 others = 33% → inferred on the first snapshot.
+        let mut modules: Vec<Module> = (0..3).map(|i| file(&format!("app/ui/s{i}.kt"))).collect();
+        modules.extend((0..6).map(|i| file(&format!("app/misc/m{i}.kt"))));
+        let first = detect_layers(&modules);
+        assert_eq!(first.len(), 1, "precondition: ui inferred");
+
+        // One more unrelated file: 3/10 = 30% is still fine, 3/11 = 27% is not.
+        modules.push(file("app/misc/m6.kt"));
+        modules.push(file("app/misc/m7.kt"));
+        assert!(
+            detect_layers(&modules).is_empty(),
+            "fresh detection drops below 30%"
+        );
+        let kept = detect_layers_with_prior(&modules, Some(&first));
+        assert_eq!(
+            kept, first,
+            "the prior layers are kept while coverage stays above 15%"
+        );
+    }
+
+    #[test]
+    fn prior_layers_are_dropped_once_they_cover_almost_nothing() {
+        let prior = detect_layers(
+            &(0..3)
+                .map(|i| file(&format!("app/ui/s{i}.kt")))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(prior.len(), 1);
+        // The ui directory is gone; 1 of 12 files matches (8%).
+        let mut modules: Vec<Module> = (0..11)
+            .map(|i| file(&format!("app/misc/m{i}.kt")))
+            .collect();
+        modules.push(file("app/ui/leftover.kt"));
+        assert!(detect_layers_with_prior(&modules, Some(&prior)).is_empty());
+    }
+
+    /// New layer directories are picked up even while the old set still fits:
+    /// the prior only fills in when a fresh detection finds nothing.
+    #[test]
+    fn a_fresh_detection_that_finds_layers_beats_the_prior() {
+        let prior = detect_layers(
+            &(0..3)
+                .map(|i| file(&format!("app/ui/s{i}.kt")))
+                .collect::<Vec<_>>(),
+        );
+        let mut modules: Vec<Module> = (0..3).map(|i| file(&format!("app/ui/s{i}.kt"))).collect();
+        modules.extend((0..3).map(|i| file(&format!("app/data/r{i}.kt"))));
+        let now = detect_layers_with_prior(&modules, Some(&prior));
+        assert_eq!(now.len(), 2, "ui and data: {now:?}");
+    }
+
+    #[test]
+    fn a_prior_of_no_layers_is_just_a_fresh_detection() {
+        let mut modules: Vec<Module> = (0..3).map(|i| file(&format!("app/ui/s{i}.kt"))).collect();
+        modules.extend((0..3).map(|i| file(&format!("app/misc/m{i}.kt"))));
+        assert_eq!(
+            detect_layers_with_prior(&modules, Some(&[])),
+            detect_layers(&modules)
+        );
+        assert_eq!(
+            detect_layers_with_prior(&modules, None),
+            detect_layers(&modules)
         );
     }
 

@@ -89,6 +89,13 @@ impl Database {
         let _ = self
             .conn
             .execute_batch("ALTER TABLE snapshots ADD COLUMN issue_kind_counts TEXT;");
+        // The layers the audit inferred for this snapshot (JSON array of
+        // Layer; "[]" when none were inferred), so the next snapshot can
+        // keep them instead of re-deciding near the coverage threshold
+        // (#355). NULL on snapshots audited before 0.9.2.
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE snapshots ADD COLUMN inferred_layers TEXT;");
         Ok(())
     }
 }
@@ -158,6 +165,7 @@ mod tests {
                 "diff_changed_files",
                 "health_score",
                 "issue_kind_counts",
+                "inferred_layers",
             ]
         );
     }
