@@ -17,7 +17,7 @@
       <li><a href="docs.html">Docs</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.8.0</span></li>
+      <li><span class="badge">v0.9.0</span></li>
     </ul>
   </div>
 </nav>
@@ -31,6 +31,43 @@
     </p>
 
     <!-- ── v0.7.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.9.0 &mdash; Same Issues in Every Report</h2>
+      <div class="date">September 2026</div>
+
+      <h3><span class="tag tag-feat">feat</span> One <code>Issue</code> type, nine kinds, every report (<a href="https://github.com/pererikbergman/noupling/issues/338">#338</a> epic)</h3>
+      <p><strong>The friction:</strong> Each report format cherry-picked from the audit result. The text report listed coupling violations and cycles; JSON had some kinds, XML fewer, Sonar only cycles; the Explorer silently re-audited with different settings; rule and layer violations never reached JSON; and the same Red Flag was worded three different ways. You could not compare two formats and be sure they described the same codebase.</p>
+      <p><strong>The implementation:</strong> <code>noupling-core</code> gains an <code>Issue</code> type with one variant per kind &mdash; Coupling Violation, Cycle, Rule Violation, Layer Violation, Gravity Well, Red Flag, Stability Violation, Zone Flag, Low Cohesion &mdash; and an <code>issues()</code> accessor in canonical order (severity band, kind, subject). Every Issue is an <strong>Issue card</strong>: kind, band (critical / high / medium / low, assigned once), subject, a one-sentence reason with this instance's numbers, a recommendation, and its score impact, all written once in core (<a href="https://github.com/pererikbergman/noupling/issues/340">#340</a>, <a href="https://github.com/pererikbergman/noupling/issues/342">#342</a>). A ring is one Cycle, never also its edges. Then every format was moved onto it:</p>
+      <ul>
+        <li><strong>text</strong> renders Issue cards under <code>Issues (N)</code> with a <code>Points lost</code> breakdown that adds up (<a href="https://github.com/pererikbergman/noupling/issues/340">#340</a>, <a href="https://github.com/pererikbergman/noupling/issues/342">#342</a>).</li>
+        <li><strong>json</strong> gains the single <code>issues</code> array; <strong>xml</strong> and <strong>sonar</strong> derive from it &mdash; Sonar now imports all nine kinds as <code>noupling:&lt;kind&gt;</code> (<a href="https://github.com/pererikbergman/noupling/issues/344">#344</a>).</li>
+        <li><strong>html</strong> and <strong>md</strong> render cards for all nine kinds: the root page with per-kind counts, each directory page with only the Issues anchored under it (<a href="https://github.com/pererikbergman/noupling/issues/346">#346</a>).</li>
+        <li><strong>dashboard</strong> gets a nine-tile kind row and a full Issue table; <strong>pr</strong> names every kind with a count and lists the top five; <strong>briefing</strong> ranks its top ten by score impact with core's recommendations verbatim (<a href="https://github.com/pererikbergman/noupling/issues/347">#347</a>).</li>
+        <li><strong>mermaid</strong>, <strong>dot</strong> and <strong>bundle</strong> accent every edge-shaped Issue with a per-kind style and a legend, one edge per pair and kind (<a href="https://github.com/pererikbergman/noupling/issues/348">#348</a>).</li>
+        <li><strong>strategy</strong> trends the Issue count per kind across snapshots, recorded at scan time; older snapshots show as gaps (<a href="https://github.com/pererikbergman/noupling/issues/349">#349</a>).</li>
+        <li><strong>explorer</strong> reads Issues from the shared array (Data Contract <code>format_version</code> 2): the Issues tab, verdict text, score breakdown, Rules offenders and focus mode all come from core; baselined Issues are dimmed and marked <em>accepted</em> (<a href="https://github.com/pererikbergman/noupling/issues/345">#345</a>).</li>
+      </ul>
+      <p><strong>The contract:</strong> the per-kind JSON arrays are removed and the coverage test asserts the format-class rule from <code>CONTEXT.md</code> against each format's data (<a href="https://github.com/pererikbergman/noupling/issues/350">#350</a>, <a href="https://github.com/pererikbergman/noupling/blob/main/docs/adr/0002-single-issues-array-in-json-and-explorer.md">ADR 0002</a>). <strong>Breaking for JSON/XML consumers</strong> &mdash; the changelog carries the field mapping.</p>
+
+      <h3><span class="tag tag-feat">feat</span> One audit per snapshot (<a href="https://github.com/pererikbergman/noupling/issues/341">#341</a>, <a href="https://github.com/pererikbergman/noupling/blob/main/docs/adr/0001-one-audit-per-snapshot.md">ADR 0001</a>)</h3>
+      <p>Layer inference and the actionable coupling-mode fallback move from the Explorer into the shared audit pipeline, so <code>audit</code>, every report and the CI gate see the same layers and the same Issues. Projects without configured <code>layers</code> will see their score change (usually upward); <code>"infer_layers": false</code> turns inference off (<a href="https://github.com/pererikbergman/noupling/issues/356">#356</a>). Inferred globs now match the path segments that produced them, and never produce <code>&lt;unlayered&gt;</code> violations.</p>
+
+      <h3><span class="tag tag-feat">feat</span> Baseline over every Issue kind (<a href="https://github.com/pererikbergman/noupling/issues/343">#343</a>)</h3>
+      <p><code>baseline save</code> records every current Issue; <code>--baseline</code> is accepted by both <code>audit</code> and <code>report</code>, keeps accepted Issues visible and marked instead of dropping them, and fails only on new ones. Identities are stable across scans (directory pair for Coupling Violations and Red Flags; canonically rotated rings for Cycles). <strong>Re-run <code>baseline save</code> after upgrading.</strong> New <code>report --format text</code>.</p>
+
+      <h3>Also in this release:</h3>
+      <ul>
+        <li><span class="tag tag-fix">fix</span> <code>critical_severity</code> is honoured again as the step to the <em>critical</em> band (<a href="https://github.com/pererikbergman/noupling/issues/368">#368</a>).</li>
+        <li><span class="tag tag-fix">fix</span> Headline <code>Violations:</code> counts agree with the Issue cards everywhere (<a href="https://github.com/pererikbergman/noupling/issues/358">#358</a>).</li>
+        <li><span class="tag tag-fix">fix</span> Deterministic output across scans: representative edges, ring rotation and hop files no longer depend on per-scan module ids (<a href="https://github.com/pererikbergman/noupling/pull/367">#367</a>, <a href="https://github.com/pererikbergman/noupling/pull/370">#370</a>).</li>
+        <li><span class="tag tag-fix">fix</span> Scan-time trend records survive <code>--diff-base</code>; <code>--module</code> runs never overwrite them (<a href="https://github.com/pererikbergman/noupling/pull/370">#370</a>).</li>
+        <li><span class="tag tag-fix">fix</span> Explorer: focusing a gravity well shows the well and the modules pulling on it (<a href="https://github.com/pererikbergman/noupling/issues/333">#333</a>).</li>
+        <li><span class="tag tag-test">tests</span> <code>tests/fixtures/every_issue_kind</code> produces all nine kinds; <code>issue_coverage.rs</code> is the format-class contract (<a href="https://github.com/pererikbergman/noupling/issues/339">#339</a>, <a href="https://github.com/pererikbergman/noupling/issues/350">#350</a>). 376 tests total.</li>
+        <li><span class="tag tag-docs">docs</span> <code>CONTEXT.md</code> glossary, two ADRs, a Findings section and Issue-card schema on the docs site, README and <code>llms.txt</code> refreshed (<a href="https://github.com/pererikbergman/noupling/issues/337">#337</a>, <a href="https://github.com/pererikbergman/noupling/issues/351">#351</a>).</li>
+      </ul>
+    </article>
+
+
     <article class="release">
       <h2>v0.8.0 &mdash; The Explorer Release</h2>
       <div class="date">September 2026</div>
