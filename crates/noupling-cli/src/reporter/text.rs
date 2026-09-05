@@ -14,7 +14,8 @@ pub fn format_text(result: &AuditResult) -> String {
         output.push_str(&format!("Total Risk Index (TRI): {:.1}\n", result.tri));
     }
     output.push_str(&format!("Total Modules: {}\n", result.total_modules));
-    output.push_str(&format!("Violations: {}\n", result.violations.len()));
+    // Counted as Issues count them: a ring is one Cycle, not its hop edges (#358).
+    output.push_str(&format!("Violations: {}\n", result.violation_count()));
     if result.total_xs > 0 {
         output.push_str(&format!(
             "Total XS: {} import{} to remove\n",

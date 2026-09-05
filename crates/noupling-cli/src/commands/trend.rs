@@ -77,7 +77,7 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
             snap.timestamp,
             result.score,
             result.total_modules,
-            result.violations.len(),
+            result.violation_count(),
             delta,
         );
 

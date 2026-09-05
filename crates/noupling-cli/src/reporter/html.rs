@@ -190,7 +190,8 @@ fn build_report_data(
     }
 
     // Assign violations to directories
-    for violation in &result.violations {
+    // Ring hops are folded into their Cycle, as issues() does (#358).
+    for violation in result.issue_violations() {
         // For circular violations, find the common ancestor of ALL dirs in the cycle
         // For coupling violations, find the parent where dir_a and dir_b are siblings
         // Same anchor rule as the Issue cards on the page (Issue::anchor_dir),
@@ -298,7 +299,7 @@ fn build_report_data(
         snapshot_id: snapshot_id.to_string(),
         total_score: result.score,
         total_modules: result.total_modules,
-        total_violations: result.violations.len(),
+        total_violations: result.violation_count(),
         total_tri: result.tri,
         total_xs: result.total_xs,
         score_green: settings.thresholds.score_green,

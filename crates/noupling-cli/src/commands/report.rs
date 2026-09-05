@@ -249,7 +249,7 @@ fn previous_snapshot_deltas<'a>(
     };
     let prev_result =
         noupling_core::analyzer::audit_with_settings(&prev_modules, &prev_deps, &[], settings);
-    (Some(prev_result.score), Some(prev_result.violations.len()))
+    (Some(prev_result.score), Some(prev_result.violation_count()))
 }
 
 /// Read per-module LLM enrichment from

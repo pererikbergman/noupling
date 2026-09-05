@@ -103,7 +103,7 @@ pub fn generate_bundle_report(
         version = super::VERSION,
         module_count = modules.len(),
         dep_count = dependencies.len(),
-        violation_count = result.violations.len(),
+        violation_count = result.violation_count(),
         score = result.score,
         tri = result.tri,
     );

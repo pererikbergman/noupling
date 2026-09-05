@@ -55,10 +55,10 @@ pub fn format_pr(
     out.push_str("| :--- | :--- |\n");
     out.push_str(&format!(
         "| Violations | {}{} |\n",
-        result.violations.len(),
+        result.violation_count(),
         previous_violation_count
             .map(|p| {
-                let d = result.violations.len() as i64 - p as i64;
+                let d = result.violation_count() as i64 - p as i64;
                 if d > 0 {
                     format!(" (+{})", d)
                 } else if d < 0 {
