@@ -28,7 +28,7 @@ pub fn age_key(v: &CouplingViolation) -> (String, String) {
 }
 
 pub fn compute_violation_age(
-    current_violations: &[CouplingViolation],
+    current_violations: &[&CouplingViolation],
     historical_violation_sets: &[Vec<(String, String)>], // Vec of `age_key`s per snapshot
 ) -> ViolationAgeSummary {
     let mut new_count = 0;
@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn violation_age_all_new() {
-        let violations = vec![CouplingViolation {
+        let violations = [CouplingViolation {
             dir_a: "src/a".to_string(),
             dir_b: "src/b".to_string(),
             from_module: "src/a/main.rs".to_string(),
@@ -86,7 +86,8 @@ mod tests {
             score_impact: 0.0,
         }];
         // No historical snapshots
-        let age = compute_violation_age(&violations, &[]);
+        let refs: Vec<&CouplingViolation> = violations.iter().collect();
+        let age = compute_violation_age(&refs, &[]);
         assert_eq!(age.new_count, 1);
         assert_eq!(age.recent_count, 0);
         assert_eq!(age.chronic_count, 0);
@@ -94,7 +95,7 @@ mod tests {
 
     #[test]
     fn violation_age_chronic() {
-        let violations = vec![CouplingViolation {
+        let violations = [CouplingViolation {
             dir_a: "src/a".to_string(),
             dir_b: "src/b".to_string(),
             from_module: "src/a/main.rs".to_string(),
@@ -129,7 +130,8 @@ mod tests {
             fp.clone(),
             fp,
         ];
-        let age = compute_violation_age(&violations, &historical);
+        let refs: Vec<&CouplingViolation> = violations.iter().collect();
+        let age = compute_violation_age(&refs, &historical);
         assert_eq!(age.new_count, 0);
         assert_eq!(age.chronic_count, 1);
     }

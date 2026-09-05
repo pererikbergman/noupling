@@ -124,14 +124,14 @@ pub fn run(
         let s_deps = dep_repo.get_by_snapshot(&s.id)?;
         let s_result = noupling_core::analyzer::audit(&s_mods, &s_deps);
         let fingerprints: Vec<(String, String)> = s_result
-            .violations
-            .iter()
+            .issue_violations()
+            .into_iter()
             .map(noupling_core::analyzer::age_key)
             .collect();
         historical.push(fingerprints);
     }
     result.violation_age =
-        noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
+        noupling_core::analyzer::compute_violation_age(&result.issue_violations(), &historical);
 
     print!("{}", crate::reporter::format_text(&result));
 

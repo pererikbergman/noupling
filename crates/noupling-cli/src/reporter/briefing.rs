@@ -67,7 +67,7 @@ pub fn format_briefing(result: &AuditResult) -> String {
     }
     out.push_str(&format!(
         "| Active violations | {} |\n",
-        result.violations.len()
+        result.violation_count()
     ));
     out.push_str(&format!(
         "| Total XS (imports to remove) | {} |\n",

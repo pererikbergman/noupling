@@ -160,9 +160,10 @@ fn build_dashboard_data(
         .map(|m| (m.id.as_str(), m.path.as_str()))
         .collect();
 
-    // Assign each violation to its common parent directory (matching HTML report)
-    let violation_parents: Vec<String> = result
-        .violations
+    // Violations as Issues count them (ring hops folded into their Cycle, #358),
+    // each assigned to its common parent directory (matching HTML report).
+    let issue_violations = result.issue_violations();
+    let violation_parents: Vec<String> = issue_violations
         .iter()
         .map(|v| common_parent_dir(&[&v.dir_a, &v.dir_b]))
         .collect();
@@ -197,18 +198,18 @@ fn build_dashboard_data(
         let prefix = format!("{}/", dir);
         let violations = violation_parents
             .iter()
-            .zip(result.violations.iter())
+            .zip(issue_violations.iter())
             .filter(|(p, _)| *p == dir || p.starts_with(&prefix))
             .count();
         let circular = violation_parents
             .iter()
-            .zip(result.violations.iter())
+            .zip(issue_violations.iter())
             .filter(|(p, v)| v.is_circular && (*p == dir || p.starts_with(&prefix)))
             .count();
 
         let dir_sev: f64 = violation_parents
             .iter()
-            .zip(result.violations.iter())
+            .zip(issue_violations.iter())
             .filter(|(p, _)| *p == dir || p.starts_with(&prefix))
             .map(|(_, v)| v.severity)
             .sum();
@@ -216,7 +217,7 @@ fn build_dashboard_data(
 
         let xs: usize = violation_parents
             .iter()
-            .zip(result.violations.iter())
+            .zip(issue_violations.iter())
             .filter(|(p, _)| *p == dir || p.starts_with(&prefix))
             .map(|(_, v)| {
                 if v.is_circular {
@@ -319,8 +320,8 @@ fn build_dashboard_data(
         });
 
     // Violation types
-    let coupling = result.violations.iter().filter(|v| !v.is_circular).count();
-    let circular_count = result.violations.iter().filter(|v| v.is_circular).count();
+    let coupling = issue_violations.iter().filter(|v| !v.is_circular).count();
+    let circular_count = issue_violations.iter().filter(|v| v.is_circular).count();
 
     // Sunburst data (reuse bundle logic)
     let sunburst_tree = build_sunburst_tree(modules, result);

@@ -503,6 +503,47 @@ mod tests {
         assert!(warnings[0].contains("baseline save"), "{}", warnings[0]);
     }
 
+    /// The headline `Violations:` agrees with the cards: a ring's hop edges
+    /// count once, as their Cycle (#358).
+    #[test]
+    fn text_headline_violations_count_matches_the_issue_cards() {
+        use noupling_core::analyzer::{audit_with_settings, IssueKind};
+        use noupling_core::core::{Dependency, ModuleType};
+        use noupling_core::settings::Settings;
+        let file = |id: &str, path: &str| Module {
+            id: id.into(),
+            snapshot_id: "s".into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: 3,
+        };
+        let dep = |from: &str, to: &str| Dependency {
+            from_module_id: from.into(),
+            to_module_id: to.into(),
+            line_number: 1,
+        };
+        let modules = vec![
+            file("a", "src/ring/alpha/a.rs"),
+            file("b", "src/ring/beta/b.rs"),
+            file("x", "src/loose/x/x1.rs"),
+            file("y", "src/loose/y/y1.rs"),
+        ];
+        let deps = vec![dep("a", "b"), dep("b", "a"), dep("x", "y")];
+        let result = audit_with_settings(&modules, &deps, &[], &Settings::default());
+        assert_eq!(result.violations.len(), 4, "raw list keeps the hops");
+
+        let text = format_text(&result);
+        let cards = result
+            .issues()
+            .iter()
+            .filter(|i| matches!(i.kind(), IssueKind::Cycle | IssueKind::CouplingViolation))
+            .count();
+        assert_eq!(cards, 2);
+        assert!(text.contains("Violations: 2\n"), "{text}");
+    }
+
     #[test]
     fn text_format_has_no_issues_heading_when_there_are_none() {
         let result = AuditResultBuilder::new().with_total_modules(4).build();

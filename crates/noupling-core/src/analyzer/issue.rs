@@ -774,6 +774,30 @@ impl Issue {
 }
 
 impl AuditResult {
+    /// The violations as Issues count them: every circular entry plus every
+    /// sibling / upward edge that is *not* a hop of a detected ring (those
+    /// belong to the Cycle). `violations` itself keeps the hops because the
+    /// score and TRI are computed from it; use this for any headline count
+    /// or per-violation listing so it agrees with `issues()` (#358).
+    pub fn issue_violations(&self) -> Vec<&CouplingViolation> {
+        let cycles: Vec<CouplingViolation> = self
+            .violations
+            .iter()
+            .filter(|v| v.is_circular)
+            .cloned()
+            .collect();
+        self.violations
+            .iter()
+            .filter(|v| v.is_circular || hop_of_cycle(v, &cycles).is_none())
+            .collect()
+    }
+
+    /// `issue_violations().len()`: the number every format prints as
+    /// "Violations".
+    pub fn violation_count(&self) -> usize {
+        self.issue_violations().len()
+    }
+
     /// Every Issue in this result, in canonical order: severity band
     /// descending (critical first), then kind in [`IssueKind::ALL`] order,
     /// then subject path ascending. Deterministic for a given result.
@@ -1229,5 +1253,39 @@ mod tests {
         assert_eq!(band(&strict), SeverityBand::Critical, "0.25 >= 0.2");
         // Ladder scales with the threshold: high = 0.4×, medium = 0.2×.
         assert_eq!(band(&lenient), SeverityBand::Low, "0.25 < 0.4 (2.0 × 0.2)");
+    }
+
+    // ── violation_count folds ring hops like issues() (#358) ──
+
+    #[test]
+    fn violation_count_matches_the_coupling_and_cycle_issues() {
+        let modules = vec![
+            file("a", "src/ring/alpha/a.rs"),
+            file("b", "src/ring/beta/b.rs"),
+            file("x", "src/loose/x/x1.rs"),
+            file("y", "src/loose/y/y1.rs"),
+        ];
+        // A mutual ring (circular entry + two hop edges) and one plain sibling pair.
+        let deps = vec![dep("a", "b", 1), dep("b", "a", 1), dep("x", "y", 1)];
+        let result = audit_with_settings(&modules, &deps, &[], &Settings::default());
+
+        assert_eq!(
+            result.violations.len(),
+            4,
+            "raw list keeps the hops (scoring input)"
+        );
+        assert_eq!(
+            result.violation_count(),
+            2,
+            "one Cycle + one Coupling Violation"
+        );
+        let issue_violations = result
+            .issues()
+            .iter()
+            .filter(|i| matches!(i.kind(), IssueKind::Cycle | IssueKind::CouplingViolation))
+            .count();
+        assert_eq!(result.violation_count(), issue_violations);
+        assert_eq!(result.issue_violations().len(), 2);
+        assert!(result.issue_violations().iter().any(|v| v.is_circular));
     }
 }

@@ -96,8 +96,10 @@ impl JsonReport {
             .filter(|v| v.severity >= result.critical_severity)
             .count();
 
-        let total_circular = result.violations.iter().filter(|v| v.is_circular).count();
-        let total_coupling = result.violations.len() - total_circular;
+        // Header counts agree with `issues`: ring hops belong to their Cycle (#358).
+        let issue_violations = result.issue_violations();
+        let total_circular = issue_violations.iter().filter(|v| v.is_circular).count();
+        let total_coupling = issue_violations.len() - total_circular;
 
         let hotspots: Vec<JsonHotspot> = result
             .hotspots
@@ -249,10 +251,10 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
     }
 
     // Count violations per directory
-    for v in &result.violations {
+    for v in result.issue_violations() {
         // Same anchor rule as Issue::anchor_dir, so a violation is counted
-        // under the directory whose page lists its Issue. Counts are raw
-        // violations (ring hops count separately; see #358).
+        // under the directory whose page lists its Issue; ring hops are
+        // folded into their Cycle so the count matches the cards (#358).
         let parent = if v.is_circular && !v.cycle_path.is_empty() {
             let members: Vec<&str> = v.cycle_path.iter().map(String::as_str).collect();
             common_parent_dir(&members)
