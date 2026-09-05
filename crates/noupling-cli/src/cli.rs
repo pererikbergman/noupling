@@ -100,11 +100,12 @@ pub enum Commands {
         diff_base: Option<String>,
     },
 
-    /// Save or manage the violation baseline.
-    /// `noupling baseline save .` saves current violations as the accepted baseline.
-    /// Future audits with --baseline will only report NEW violations not in the baseline.
+    /// Save or manage the Issue baseline.
+    /// `noupling baseline save .` records every current Issue (all nine kinds) as accepted.
+    /// `audit --baseline` and `report --baseline` then mark those Issues baselined and
+    /// `audit` fails only on new ones.
     Baseline {
-        /// Action: "save" to create baseline from current violations
+        /// Action: "save" to create the baseline from the current Issues
         action: String,
 
         /// Path to the project root
@@ -128,8 +129,9 @@ pub enum Commands {
         #[arg(long)]
         fail_below: Option<f64>,
 
-        /// Compare against the saved baseline. Only report NEW violations
-        /// not in .noupling/baseline.json. Exit code 1 only on new violations.
+        /// Compare against .noupling/baseline.json: accepted Issues are marked
+        /// baselined (still listed) and the exit code is 1 only when there are
+        /// new Issues.
         #[arg(long)]
         baseline: bool,
 
@@ -161,8 +163,9 @@ pub enum Commands {
         #[arg(default_value = ".")]
         path: String,
 
-        /// Output format: json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, pr, briefing, strategy, or all.
+        /// Output format: text, json, xml, md, html, sonar, mermaid, dot, bundle, dashboard, pr, briefing, strategy, explorer, or all.
         ///
+        /// text      - The same plain-text output `audit` prints, saved to .noupling/report.txt.
         /// json      - Comprehensive JSON with directory tree, grouped cycles, and coupling details.
         /// xml       - Same structure as JSON but in XML format.
         /// md        - Multi-file Markdown with navigable README.md per directory.
@@ -207,6 +210,11 @@ pub enum Commands {
         /// Shrinks the output file. Only used with --format explorer.
         #[arg(long)]
         no_history: bool,
+
+        /// Mark Issues accepted by .noupling/baseline.json as baselined
+        /// in the report (they are still listed, never dropped).
+        #[arg(long)]
+        baseline: bool,
     },
 }
 

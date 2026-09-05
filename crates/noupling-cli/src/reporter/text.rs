@@ -2,7 +2,7 @@
 //! stdout. Also owns the monorepo-aware variant used when audit
 //! discovers per-module configs.
 
-use noupling_core::analyzer::{AuditResult, Issue, IssueKind, SeverityBand};
+use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, IssueKind, SeverityBand};
 
 use super::VERSION;
 
@@ -232,14 +232,31 @@ pub fn format_text(result: &AuditResult) -> String {
 /// exhaustive on purpose — a new kind must be handled here to compile.
 fn format_issue_cards(result: &AuditResult) -> String {
     let issues = result.issues();
-    if issues.is_empty() {
-        return String::new();
-    }
     let mut out = String::new();
+    if result.baseline.as_ref().is_some_and(|b| b.legacy_format) {
+        out.push_str(
+            "\nBaseline: .noupling/baseline.json is in the pre-0.9.0 format (coupling only); \
+             nothing is treated as baselined — re-run `noupling baseline save`.\n",
+        );
+    }
+    if issues.is_empty() {
+        return out;
+    }
     let band_count = |band: SeverityBand| issues.iter().filter(|i| i.severity() == band).count();
+    let baselined = issues.iter().filter(|i| i.baselined).count();
+    let baseline_counts = if result.baseline.is_some() {
+        format!(
+            "{} new, {} baselined; ",
+            issues.len() - baselined,
+            baselined
+        )
+    } else {
+        String::new()
+    };
     out.push_str(&format!(
-        "\nIssues ({}): {} critical, {} high, {} medium, {} low\n",
+        "\nIssues ({}): {}{} critical, {} high, {} medium, {} low\n",
         issues.len(),
+        baseline_counts,
         band_count(SeverityBand::Critical),
         band_count(SeverityBand::High),
         band_count(SeverityBand::Medium),
@@ -269,43 +286,44 @@ fn format_issue_cards(result: &AuditResult) -> String {
     for issue in &issues {
         // Per-kind extra line: the number formats have always shown next
         // to the subject and that the card's one-sentence reason omits.
-        let extra: Option<String> = match issue {
-            Issue::CouplingViolation(v) => Some(format!(
+        let extra: Option<String> = match &issue.detail {
+            IssueDetail::CouplingViolation(v) => Some(format!(
                 "{} <> {} (depth {}, line {})",
                 v.dir_a, v.dir_b, v.depth, v.line_number
             )),
-            Issue::Cycle(v) => v
+            IssueDetail::Cycle(v) => v
                 .weakest_link
                 .as_ref()
                 .map(|wl| format!("Weakest link: {}", wl)),
-            Issue::RuleViolation(r) => Some(format!("line {}", r.line_number)),
-            Issue::LayerViolation(l) => Some(format!(
+            IssueDetail::RuleViolation(r) => Some(format!("line {}", r.line_number)),
+            IssueDetail::LayerViolation(l) => Some(format!(
                 "{} -> {} (line {})",
                 l.from_layer, l.to_layer, l.line_number
             )),
-            Issue::GravityWell(g) => Some(format!(
+            IssueDetail::GravityWell(g) => Some(format!(
                 "RRI {:.0} across {} relationships",
                 g.total_rri, g.relationship_count
             )),
-            Issue::RedFlag(f) => Some(format!("RRI {:.0}", f.rri)),
-            Issue::StabilityViolation(s) => Some(format!(
+            IssueDetail::RedFlag(f) => Some(format!("RRI {:.0}", f.rri)),
+            IssueDetail::StabilityViolation(s) => Some(format!(
                 "I={:.2} -> I={:.2}",
                 s.from_instability, s.to_instability
             )),
-            Issue::ZoneFlag(d) => Some(format!(
+            IssueDetail::ZoneFlag(d) => Some(format!(
                 "D={:.2} (A={:.2}, I={:.2})",
                 d.distance, d.abstractness, d.instability
             )),
-            Issue::LowCohesion(c) => Some(format!(
+            IssueDetail::LowCohesion(c) => Some(format!(
                 "{} children, {} internal deps",
                 c.n_children, c.internal_deps
             )),
         };
         out.push_str(&format!(
-            "\n  [{}] {}: {}\n",
+            "\n  [{}] {}: {}{}\n",
             issue.severity().name().to_uppercase(),
             issue.kind(),
-            issue.subject()
+            issue.subject(),
+            if issue.baselined { " (baselined)" } else { "" }
         ));
         if let Some(extra) = extra {
             out.push_str(&format!("      {}\n", extra));

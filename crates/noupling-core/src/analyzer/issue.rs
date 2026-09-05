@@ -144,12 +144,24 @@ impl fmt::Display for Subject {
 
 /// One Finding that names modules or edges and asks for a change.
 ///
-/// One variant per Issue kind; each carries the analyzer record it was
-/// derived from so formats can print per-kind numbers. The Issue-card
-/// header — kind, band, subject, reason, recommendation — is computed by
-/// the accessor methods so the wording lives in exactly one place.
+/// The Issue-card header — kind, band, subject, reason, recommendation,
+/// score impact — is computed by the accessor methods from `detail`, so
+/// the wording lives in exactly one place. `baselined` is the one header
+/// field that depends on something outside the audit (the baseline file).
 #[derive(Debug, Clone)]
-pub enum Issue {
+pub struct Issue {
+    /// True when the project's baseline accepts this Issue: still reported,
+    /// never counted as new (`CONTEXT.md` § Baseline).
+    pub baselined: bool,
+    /// The analyzer record this Issue was derived from, one variant per kind.
+    pub detail: IssueDetail,
+}
+
+/// The per-kind payload of an [`Issue`]. One variant per Issue kind; every
+/// listing format matches on it exhaustively, so a new kind fails to
+/// compile until handled.
+#[derive(Debug, Clone)]
+pub enum IssueDetail {
     /// A sibling or upward edge the audit disallows. Never a circular pair.
     CouplingViolation(CouplingViolation),
     /// A ring of directories depending on each other back to the start.
@@ -218,16 +230,16 @@ fn plural(n: usize, word: &str) -> String {
 
 impl Issue {
     pub fn kind(&self) -> IssueKind {
-        match self {
-            Issue::CouplingViolation(_) => IssueKind::CouplingViolation,
-            Issue::Cycle(_) => IssueKind::Cycle,
-            Issue::RuleViolation(_) => IssueKind::RuleViolation,
-            Issue::LayerViolation(_) => IssueKind::LayerViolation,
-            Issue::GravityWell(_) => IssueKind::GravityWell,
-            Issue::RedFlag(_) => IssueKind::RedFlag,
-            Issue::StabilityViolation(_) => IssueKind::StabilityViolation,
-            Issue::ZoneFlag(_) => IssueKind::ZoneFlag,
-            Issue::LowCohesion(_) => IssueKind::LowCohesion,
+        match &self.detail {
+            IssueDetail::CouplingViolation(_) => IssueKind::CouplingViolation,
+            IssueDetail::Cycle(_) => IssueKind::Cycle,
+            IssueDetail::RuleViolation(_) => IssueKind::RuleViolation,
+            IssueDetail::LayerViolation(_) => IssueKind::LayerViolation,
+            IssueDetail::GravityWell(_) => IssueKind::GravityWell,
+            IssueDetail::RedFlag(_) => IssueKind::RedFlag,
+            IssueDetail::StabilityViolation(_) => IssueKind::StabilityViolation,
+            IssueDetail::ZoneFlag(_) => IssueKind::ZoneFlag,
+            IssueDetail::LowCohesion(_) => IssueKind::LowCohesion,
         }
     }
 
@@ -236,33 +248,35 @@ impl Issue {
     /// are high; Stability Violations and Zone Flags are medium; Low
     /// Cohesion is low.
     pub fn severity(&self) -> SeverityBand {
-        match self {
-            Issue::CouplingViolation(v) | Issue::Cycle(v) => band_for_severity(v.severity),
-            Issue::RuleViolation(_) | Issue::LayerViolation(_) => SeverityBand::High,
-            Issue::GravityWell(g) => band_for_rri(g.total_rri),
-            Issue::RedFlag(f) => band_for_rri(f.rri),
-            Issue::StabilityViolation(_) | Issue::ZoneFlag(_) => SeverityBand::Medium,
-            Issue::LowCohesion(_) => SeverityBand::Low,
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) | IssueDetail::Cycle(v) => {
+                band_for_severity(v.severity)
+            }
+            IssueDetail::RuleViolation(_) | IssueDetail::LayerViolation(_) => SeverityBand::High,
+            IssueDetail::GravityWell(g) => band_for_rri(g.total_rri),
+            IssueDetail::RedFlag(f) => band_for_rri(f.rri),
+            IssueDetail::StabilityViolation(_) | IssueDetail::ZoneFlag(_) => SeverityBand::Medium,
+            IssueDetail::LowCohesion(_) => SeverityBand::Low,
         }
     }
 
     pub fn subject(&self) -> Subject {
-        match self {
-            Issue::CouplingViolation(v) => Subject::Edge {
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => Subject::Edge {
                 from: v.from_module.clone(),
                 to: v.to_module.clone(),
             },
-            Issue::Cycle(v) => Subject::Ring(v.cycle_path.clone()),
-            Issue::RuleViolation(r) => Subject::Edge {
+            IssueDetail::Cycle(v) => Subject::Ring(v.cycle_path.clone()),
+            IssueDetail::RuleViolation(r) => Subject::Edge {
                 from: r.from_module.clone(),
                 to: r.to_module.clone(),
             },
-            Issue::LayerViolation(l) => Subject::Edge {
+            IssueDetail::LayerViolation(l) => Subject::Edge {
                 from: l.from_module.clone(),
                 to: l.to_module.clone(),
             },
-            Issue::GravityWell(g) => Subject::Module(g.module_path.clone()),
-            Issue::RedFlag(f) => match f.modules.as_slice() {
+            IssueDetail::GravityWell(g) => Subject::Module(g.module_path.clone()),
+            IssueDetail::RedFlag(f) => match f.modules.as_slice() {
                 [from, to, ..] => Subject::Edge {
                     from: from.clone(),
                     to: to.clone(),
@@ -270,19 +284,19 @@ impl Issue {
                 [one] => Subject::Module(one.clone()),
                 [] => Subject::Module(String::new()),
             },
-            Issue::StabilityViolation(s) => Subject::Edge {
+            IssueDetail::StabilityViolation(s) => Subject::Edge {
                 from: s.from_dir.clone(),
                 to: s.to_dir.clone(),
             },
-            Issue::ZoneFlag(d) => Subject::Module(d.dir.clone()),
-            Issue::LowCohesion(c) => Subject::Module(c.dir.clone()),
+            IssueDetail::ZoneFlag(d) => Subject::Module(d.dir.clone()),
+            IssueDetail::LowCohesion(c) => Subject::Module(c.dir.clone()),
         }
     }
 
     /// One sentence saying why this particular Issue exists, with its numbers.
     pub fn reason(&self) -> String {
-        match self {
-            Issue::CouplingViolation(v) => {
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => {
                 let rri = if v.rri > 0.0 {
                     format!(", RRI {:.0}", v.rri)
                 } else {
@@ -307,7 +321,7 @@ impl Issue {
                     ),
                 }
             }
-            Issue::Cycle(v) => {
+            IssueDetail::Cycle(v) => {
                 let ring = v.cycle_path.join(" -> ");
                 let total: usize = v.cycle_hop_counts.iter().sum();
                 match &v.weakest_link {
@@ -326,14 +340,14 @@ impl Issue {
                     ),
                 }
             }
-            Issue::RuleViolation(r) => format!(
+            IssueDetail::RuleViolation(r) => format!(
                 "{} imports {} at line {}, which a dependency rule forbids: {}.",
                 r.from_module,
                 r.to_module,
                 r.line_number,
                 r.message.trim().trim_end_matches('.')
             ),
-            Issue::LayerViolation(l) => {
+            IssueDetail::LayerViolation(l) => {
                 if l.to_layer == "<unlayered>" {
                     format!(
                         "{} in layer {} imports {} at line {}, which belongs to no layer.",
@@ -346,13 +360,13 @@ impl Issue {
                     )
                 }
             }
-            Issue::GravityWell(g) => format!(
+            IssueDetail::GravityWell(g) => format!(
                 "{} carries a total RRI of {:.0} across {} — disproportionate to its neighbours, so everything nearby bends toward it.",
                 g.module_path,
                 g.total_rri,
                 plural(g.relationship_count, "relationship")
             ),
-            Issue::RedFlag(f) => {
+            IssueDetail::RedFlag(f) => {
                 let (a, b) = (
                     f.modules.first().map(String::as_str).unwrap_or(""),
                     f.modules.get(1).map(String::as_str).unwrap_or(""),
@@ -372,11 +386,11 @@ impl Issue {
                     ),
                 }
             }
-            Issue::StabilityViolation(s) => format!(
+            IssueDetail::StabilityViolation(s) => format!(
                 "{} (I={:.2}) depends on the less stable {} (I={:.2}), against the Stable Dependencies Principle.",
                 s.from_dir, s.from_instability, s.to_dir, s.to_instability
             ),
-            Issue::ZoneFlag(d) => match d.zone {
+            IssueDetail::ZoneFlag(d) => match d.zone {
                 Zone::Pain => format!(
                     "{} is in the Zone of Pain: concrete (A={:.2}) yet stable (I={:.2}), D={:.2}.",
                     d.dir, d.abstractness, d.instability, d.distance
@@ -390,7 +404,7 @@ impl Issue {
                     d.dir, d.abstractness, d.instability
                 ),
             },
-            Issue::LowCohesion(c) => format!(
+            IssueDetail::LowCohesion(c) => format!(
                 "{} has cohesion {:.2}: its {} share only {}.",
                 c.dir,
                 c.cohesion.unwrap_or(0.0),
@@ -402,8 +416,8 @@ impl Issue {
 
     /// One sentence saying what to do about this Issue.
     pub fn recommendation(&self) -> String {
-        match self {
-            Issue::CouplingViolation(v) => match v.direction {
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => match v.direction {
                 DependencyDirection::Upward => {
                     "Invert the dependency or introduce an interface the child can depend on."
                         .to_string()
@@ -413,7 +427,7 @@ impl Issue {
                     v.dir_a, v.dir_b
                 ),
             },
-            Issue::Cycle(v) => match &v.weakest_link {
+            IssueDetail::Cycle(v) => match &v.weakest_link {
                 Some(link) => format!(
                     "Cut the cycle at {} by removing {} or moving that code behind an interface.",
                     link.split(" (").next().unwrap_or(link),
@@ -422,10 +436,10 @@ impl Issue {
                 None => "Cut the cycle at its weakest hop and move that code behind an interface."
                     .to_string(),
             },
-            Issue::RuleViolation(_) => {
+            IssueDetail::RuleViolation(_) => {
                 "Remove the import or route it through a module the rule allows.".to_string()
             }
-            Issue::LayerViolation(l) => {
+            IssueDetail::LayerViolation(l) => {
                 if l.to_layer == "<unlayered>" {
                     format!(
                         "Add {} to a layer below {}, or record the exception in dependency_rules.",
@@ -438,11 +452,11 @@ impl Issue {
                     )
                 }
             }
-            Issue::GravityWell(g) => format!(
+            IssueDetail::GravityWell(g) => format!(
                 "Split {} by responsibility so no single module anchors this much coupling.",
                 g.module_path
             ),
-            Issue::RedFlag(f) => match f.flag_type {
+            IssueDetail::RedFlag(f) => match f.flag_type {
                 RedFlagType::FusedSibling => {
                     "Merge the two modules or extract the shared part into an abstraction both depend on."
                         .to_string()
@@ -452,11 +466,11 @@ impl Issue {
                         .to_string()
                 }
             },
-            Issue::StabilityViolation(s) => format!(
+            IssueDetail::StabilityViolation(s) => format!(
                 "Depend on an abstraction instead, or make {} at least as stable as {}.",
                 s.to_dir, s.from_dir
             ),
-            Issue::ZoneFlag(d) => match d.zone {
+            IssueDetail::ZoneFlag(d) => match d.zone {
                 Zone::Pain => format!(
                     "Introduce abstractions in {} so its dependants can vary without editing it.",
                     d.dir
@@ -467,7 +481,7 @@ impl Issue {
                 ),
                 Zone::MainSequence => "No change needed.".to_string(),
             },
-            Issue::LowCohesion(c) => format!(
+            IssueDetail::LowCohesion(c) => format!(
                 "Split {} into packages whose files actually use each other, or fold it into a neighbour.",
                 c.dir
             ),
@@ -480,16 +494,22 @@ impl Issue {
     /// ring hops folded into it, so the sum over all Issues equals
     /// `100 − score`.
     pub fn score_impact(&self) -> f64 {
-        match self {
-            Issue::CouplingViolation(v) | Issue::Cycle(v) => v.score_impact,
-            Issue::RuleViolation(_)
-            | Issue::LayerViolation(_)
-            | Issue::GravityWell(_)
-            | Issue::RedFlag(_)
-            | Issue::StabilityViolation(_)
-            | Issue::ZoneFlag(_)
-            | Issue::LowCohesion(_) => 0.0,
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) | IssueDetail::Cycle(v) => v.score_impact,
+            IssueDetail::RuleViolation(_)
+            | IssueDetail::LayerViolation(_)
+            | IssueDetail::GravityWell(_)
+            | IssueDetail::RedFlag(_)
+            | IssueDetail::StabilityViolation(_)
+            | IssueDetail::ZoneFlag(_)
+            | IssueDetail::LowCohesion(_) => 0.0,
         }
+    }
+
+    /// Stable identity for the baseline: `<kind id>:<subject>`. Two Issues
+    /// with the same fingerprint are the same Issue across audits.
+    pub fn fingerprint(&self) -> String {
+        format!("{}:{}", self.kind().id(), self.subject())
     }
 
     /// Canonical order: band descending, then kind, then subject path.
@@ -519,44 +539,49 @@ impl AuditResult {
             .cloned()
             .collect();
 
-        let mut issues: Vec<Issue> = Vec::new();
+        let mut details: Vec<IssueDetail> = Vec::new();
 
         for v in self.violations.iter().filter(|v| !v.is_circular) {
             match hop_of_cycle(v, &cycles) {
                 // A ring hop belongs to its Cycle, points included.
                 Some(idx) => cycles[idx].score_impact += v.score_impact,
-                None => issues.push(Issue::CouplingViolation(v.clone())),
+                None => details.push(IssueDetail::CouplingViolation(v.clone())),
             }
         }
-        issues.extend(cycles.into_iter().map(Issue::Cycle));
-        issues.extend(
+        details.extend(cycles.into_iter().map(IssueDetail::Cycle));
+        details.extend(
             self.rule_violations
                 .iter()
                 .cloned()
-                .map(Issue::RuleViolation),
+                .map(IssueDetail::RuleViolation),
         );
-        issues.extend(
+        details.extend(
             self.layer_violations
                 .iter()
                 .cloned()
-                .map(Issue::LayerViolation),
+                .map(IssueDetail::LayerViolation),
         );
-        issues.extend(self.gravity_wells.iter().cloned().map(Issue::GravityWell));
-        issues.extend(self.red_flags.iter().cloned().map(Issue::RedFlag));
-        issues.extend(
+        details.extend(
+            self.gravity_wells
+                .iter()
+                .cloned()
+                .map(IssueDetail::GravityWell),
+        );
+        details.extend(self.red_flags.iter().cloned().map(IssueDetail::RedFlag));
+        details.extend(
             self.stability_violations
                 .iter()
                 .cloned()
-                .map(Issue::StabilityViolation),
+                .map(IssueDetail::StabilityViolation),
         );
-        issues.extend(
+        details.extend(
             self.distance
                 .iter()
                 .filter(|d| d.zone != Zone::MainSequence)
                 .cloned()
-                .map(Issue::ZoneFlag),
+                .map(IssueDetail::ZoneFlag),
         );
-        issues.extend(
+        details.extend(
             self.cohesion
                 .iter()
                 .filter(|c| {
@@ -564,9 +589,21 @@ impl AuditResult {
                         && c.cohesion.is_some_and(|val| val < LOW_COHESION_MAX)
                 })
                 .cloned()
-                .map(Issue::LowCohesion),
+                .map(IssueDetail::LowCohesion),
         );
 
+        let mut issues: Vec<Issue> = details
+            .into_iter()
+            .map(|detail| Issue {
+                baselined: false,
+                detail,
+            })
+            .collect();
+        if let Some(baseline) = &self.baseline {
+            for issue in &mut issues {
+                issue.baselined = baseline.fingerprints.contains(&issue.fingerprint());
+            }
+        }
         issues.sort_by(Issue::canonical_cmp);
         issues
     }

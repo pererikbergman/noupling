@@ -429,7 +429,30 @@ pub(super) fn compute_coupling_violations(
         }
     }
 
-    // Dedup coupling violations, keeping one per (dir_a, dir_b, depth) with weight
+    // Dedup coupling violations, keeping one per (dir_a, dir_b, depth) with
+    // weight. The survivor is the lexicographically smallest edge
+    // (from_module, to_module, line) so the representative — and every
+    // fingerprint or report line built from it — is the same on every
+    // scan; D_acc iteration order depends on module ids, which are fresh
+    // UUIDs each time.
+    violations.sort_by(|a, b| {
+        (
+            &a.dir_a,
+            &a.dir_b,
+            a.depth,
+            &a.from_module,
+            &a.to_module,
+            a.line_number,
+        )
+            .cmp(&(
+                &b.dir_a,
+                &b.dir_b,
+                b.depth,
+                &b.from_module,
+                &b.to_module,
+                b.line_number,
+            ))
+    });
     let mut seen: FxHashSet<(String, String, i32)> = FxHashSet::default();
     violations.retain_mut(|v| {
         if v.is_circular {
@@ -482,6 +505,51 @@ mod tests {
     }
 
     // ── D_acc tests ──
+
+    /// The representative edge of an aggregated sibling pair must not depend
+    /// on module ids (fresh UUIDs per scan): D_acc is a hash set of ids, so
+    /// whichever target hashed first used to become the representative.
+    #[test]
+    fn representative_edge_of_a_pair_is_the_smallest_regardless_of_input_order() {
+        let build = |left: &str, r1: &str, r2: &str| {
+            let modules = vec![
+                make_module(left, "src/fused/left/l1.rs"),
+                make_module(r1, "src/fused/right/r1.rs"),
+                make_module(r2, "src/fused/right/r2.rs"),
+            ];
+            let deps = vec![make_dep(left, r2, 2), make_dep(left, r1, 4)];
+            compute_coupling_violations(&modules, &deps)
+        };
+        let mut runs = Vec::new();
+        for (l, r1, r2) in [
+            ("l1", "r1", "r2"),
+            ("l1", "r2", "r1"),
+            ("m-0001", "m-zzzz", "m-aaaa"),
+            ("x", "q", "k"),
+            ("a1b2", "9f8e", "0c0d"),
+        ] {
+            runs.push(build(l, r1, r2));
+        }
+        let a = &runs[0];
+        for b in &runs[1..] {
+            assert_eq!(
+                (
+                    a[0].from_module.as_str(),
+                    a[0].to_module.as_str(),
+                    a[0].line_number
+                ),
+                (
+                    b[0].from_module.as_str(),
+                    b[0].to_module.as_str(),
+                    b[0].line_number
+                )
+            );
+        }
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].weight, 2);
+        assert_eq!(a[0].to_module, "src/fused/right/r1.rs");
+        assert_eq!(a[0].line_number, 4);
+    }
 
     #[test]
     fn dacc_excludes_internal_deps() {

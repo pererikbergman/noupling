@@ -74,6 +74,7 @@ pub trait ReportFormatter {
 /// would balloon `FormatterContext` for no gain.
 pub fn builtin_formatters() -> Vec<Box<dyn ReportFormatter>> {
     vec![
+        Box::new(adapters::Text),
         Box::new(adapters::Json),
         Box::new(adapters::Xml),
         Box::new(adapters::Sonar),
@@ -137,6 +138,23 @@ pub fn write(out: &Output) -> Result<()> {
 mod adapters {
     use super::*;
     use crate::reporter;
+
+    /// The same text `audit` prints, written to `.noupling/report.txt`
+    /// so `report --format text --baseline` and `report --format all`
+    /// carry it (#343).
+    pub struct Text;
+    impl ReportFormatter for Text {
+        fn name(&self) -> &'static str {
+            "text"
+        }
+        fn render(&self, ctx: &FormatterContext<'_>) -> Result<Output> {
+            Ok(Output::SingleFile {
+                file_path: ctx.report_dir.join("report.txt"),
+                content: reporter::format_text(ctx.result),
+                success_tail: None,
+            })
+        }
+    }
 
     pub struct Json;
     impl ReportFormatter for Json {

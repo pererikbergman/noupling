@@ -399,3 +399,101 @@ fn unlayered_project_gets_the_same_inferred_audit_in_audit_text_and_explorer() {
         "audit and explorer disagree on the score"
     );
 }
+
+// ── Baseline over every Issue kind (#343) ─────────────────────────────────
+
+/// `baseline save` → `audit --baseline` passes; one new sibling import →
+/// exit 1 naming exactly one new Issue; `report --format text --baseline`
+/// marks the accepted Issues.
+#[test]
+fn baseline_round_trip_fails_only_on_new_issues() {
+    let fixture = create_unlayered_by_settings_fixture();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    // Explicit strict mode so the sibling pairs stay Issues.
+    std::fs::create_dir_all(project.join(".noupling")).unwrap();
+    std::fs::write(
+        project.join(".noupling/settings.json"),
+        r#"{"coupling_mode":"strict"}"#,
+    )
+    .unwrap();
+    scan(project);
+
+    let save = run_noupling(&["baseline", "save", root]);
+    assert!(
+        save.status.success(),
+        "{}",
+        String::from_utf8_lossy(&save.stderr)
+    );
+    let saved = String::from_utf8_lossy(&save.stdout).into_owned();
+    assert!(saved.contains("Baseline saved with"), "{saved}");
+    assert!(
+        !saved.contains("with 0 issue"),
+        "fixture must have Issues: {saved}"
+    );
+
+    let clean = run_noupling(&["audit", root, "--baseline"]);
+    let clean_out = String::from_utf8_lossy(&clean.stdout).into_owned();
+    assert!(clean.status.success(), "{clean_out}");
+    assert!(clean_out.contains("New issues: 0"), "{clean_out}");
+    assert!(clean_out.contains("(baselined)"), "{clean_out}");
+
+    let text = run_noupling(&["report", root, "--format", "text", "--baseline"]);
+    assert!(
+        text.status.success(),
+        "{}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let report_txt = std::fs::read_to_string(project.join(".noupling/report.txt")).unwrap();
+    assert!(report_txt.contains("0 new,"), "{report_txt}");
+    assert!(report_txt.contains("(baselined)"), "{report_txt}");
+
+    // A new sibling pair between two fresh directories outside the ring,
+    // so instability of the existing directories is untouched and the
+    // only new Issue is the Coupling Violation itself.
+    std::fs::create_dir_all(project.join("src/tools")).unwrap();
+    std::fs::create_dir_all(project.join("src/misc")).unwrap();
+    std::fs::write(
+        project.join("src/tools/a.rs"),
+        "use crate::misc::b;\npub fn run() { b::go(); }\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("src/misc/b.rs"), "pub fn go() {}\n").unwrap();
+    scan(project);
+    let dirty = run_noupling(&["audit", root, "--baseline"]);
+    let dirty_out = String::from_utf8_lossy(&dirty.stdout).into_owned();
+    let dirty_err = String::from_utf8_lossy(&dirty.stderr).into_owned();
+    assert!(
+        !dirty.status.success(),
+        "must fail on a new Issue:\n{dirty_out}"
+    );
+    assert!(dirty_out.contains("New issues: 1"), "{dirty_out}");
+    assert!(dirty_err.contains("1 new issue(s)"), "{dirty_err}");
+}
+
+/// A pre-0.9.0 baseline file warns once and treats nothing as baselined.
+#[test]
+fn old_format_baseline_warns_instead_of_crashing() {
+    let fixture = create_clean_fixture();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    scan(project);
+    std::fs::write(
+        project.join(".noupling/baseline.json"),
+        r#"{"version":1,"timestamp":"0","violation_count":0,"fingerprints":[]}"#,
+    )
+    .unwrap();
+
+    let out = run_noupling(&["audit", root, "--baseline"]);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        out.status.success(),
+        "clean project has no new Issues: {stderr}"
+    );
+    assert_eq!(
+        stderr.lines().filter(|l| l.contains("pre-0.9.0")).count(),
+        1,
+        "{stderr}"
+    );
+    assert!(stderr.contains("baseline save"), "{stderr}");
+}

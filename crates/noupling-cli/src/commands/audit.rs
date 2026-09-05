@@ -97,11 +97,15 @@ pub fn run(
 
     let pipeline =
         crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
-    let crate::audit_pipeline::PipelineOutcome { mut result, .. } =
-        pipeline.run(crate::audit_pipeline::PipelineOptions {
-            snapshot_id: Some(&snapshot.id),
-            module_filter,
-        })?;
+    let crate::audit_pipeline::PipelineOutcome {
+        mut result,
+        baseline: baseline_info,
+        ..
+    } = pipeline.run(crate::audit_pipeline::PipelineOptions {
+        snapshot_id: Some(&snapshot.id),
+        module_filter,
+        baseline: use_baseline,
+    })?;
 
     // Compute violation age from snapshot history. Specific to audit;
     // not part of the shared pipeline.
@@ -124,27 +128,20 @@ pub fn run(
     result.violation_age =
         noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
 
-    // Apply baseline filter
-    let baseline_info = if use_baseline {
-        let (new_count, resolved_count) =
-            noupling_core::baseline::compare_baseline(Path::new(path), &mut result)?;
-        Some((new_count, resolved_count))
-    } else {
-        None
-    };
-
     // Persist the score on the snapshot row so the Explorer's history
     // scrubber (PRD §10.5) can render a trend over time.
     let _ = snap_repo.save_health_score(&snapshot.id, result.score);
 
     print!("{}", crate::reporter::format_text(&result));
 
-    if let Some((new_count, resolved_count)) = baseline_info {
+    // Exit-code contract: fail only on Issues the baseline does not accept.
+    if let Some(cmp) = baseline_info {
         println!("\nBaseline comparison:");
-        println!("  New violations: {}", new_count);
-        println!("  Resolved violations: {}", resolved_count);
-        if new_count > 0 {
-            anyhow::bail!("{} new violation(s) introduced since baseline", new_count);
+        println!("  New issues: {}", cmp.new_count);
+        println!("  Baselined issues: {}", cmp.baselined_count);
+        println!("  Resolved issues: {}", cmp.resolved_count);
+        if cmp.new_count > 0 {
+            anyhow::bail!("{} new issue(s) introduced since baseline", cmp.new_count);
         }
     }
 
