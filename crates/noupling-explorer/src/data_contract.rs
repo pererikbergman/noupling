@@ -44,18 +44,6 @@ pub(crate) struct DataContract {
     /// (ADR 0002, #345), plus the participant node ids focus mode uses.
     pub issues: Vec<IssueEntry>,
     pub history: Vec<HistoryEntry>,
-    /// Pre-computed module clusters for the Force view. Tightly
-    /// coupled groups detected via label propagation; the Force view
-    /// renders a faint boundary around each cluster's nodes so the
-    /// user sees the structure the force layout would otherwise
-    /// blur. Empty by default and never gates view rendering.
-    pub clusters: Vec<ClusterEntry>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ClusterEntry {
-    pub id: String,
-    pub members: Vec<String>,
 }
 
 /// Explains how `health_score` was derived: the points lost, split by
@@ -293,7 +281,7 @@ impl<'a> ContractBuilder<'a> {
     /// order is explicit here, instead of implicit in a struct literal.
     pub(crate) fn build(&self) -> DataContract {
         DataContract {
-            format_version: 2,
+            format_version: 3,
             noupling_version: env!("CARGO_PKG_VERSION").to_string(),
             generated_at: self.snapshot.timestamp.clone(),
             report_options: self.report_options(),
@@ -311,7 +299,6 @@ impl<'a> ContractBuilder<'a> {
             violations: self.violations(),
             issues: self.issues(),
             history: self.history(),
-            clusters: self.clusters(),
         }
     }
 
@@ -426,16 +413,6 @@ impl<'a> ContractBuilder<'a> {
                 snapshot_id: h.snapshot_id.clone(),
                 taken_at: h.taken_at.clone(),
                 health_score: h.health_score,
-            })
-            .collect()
-    }
-
-    pub(crate) fn clusters(&self) -> Vec<ClusterEntry> {
-        crate::clusters::detect_clusters(self.modules, self.dependencies)
-            .into_iter()
-            .map(|c| ClusterEntry {
-                id: c.id,
-                members: c.members,
             })
             .collect()
     }

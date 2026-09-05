@@ -82,7 +82,7 @@ fails if `dist/explorer.html` differs from what the source produces.
 The current shell implements **Variant D** from the prototype
 (`prototype/explorer-ui-mockup` branch):
 
-- Top bar with view-mode pills (LSM / Matrix / Force / Composition), an
+- Top bar with view-mode pills (LSM / Matrix / Composition), an
   Inside / + External scope toggle, hide-by-kind chips, and Structure101-
   style utility icons (path finder, cycle min-cut, filter, export).
 - Search row with substring/regex modes.

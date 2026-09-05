@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **Explorer Data Contract is `format_version` 3.** The `clusters` array is gone; nothing else in the embedded `noupling-data` JSON changed. Anything reading the contract that keyed on `clusters` or on `format_version == 2` needs updating.
+
+### Removed
+
+- **Explorer force-directed cluster view** (#396): the Force view and the label-propagation clustering behind it. It showed nothing the LSM, Matrix or Composition views do not, its layout changed on every render, and it carried no Issue or Metric a user could act on. The top bar now offers LSM, Matrix and Composition; `d3-force` is no longer a template dependency.
+
 ## [0.9.1] - 2026-09-05
 
 **Dogfooding fixes.** Eight things found by running the released 0.9.0 on noupling itself and on `examples/`: one band that contradicted its own score impact, three counts that disagreed between the header and the cards or between a parent page and its child, and small cosmetics.

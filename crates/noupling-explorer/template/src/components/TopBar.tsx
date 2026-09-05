@@ -42,8 +42,8 @@ export function TopBar({
 
       <Divider />
 
-      {/* View modes — LSM + Matrix are wired; Force + Composition stay as
-          v3 placeholders (the PRD §10 advanced views). */}
+      {/* View modes — LSM, Matrix and Composition. The force-directed
+          cluster view was removed in #396. */}
       <div className="flex items-center gap-1 rounded-md border border-border bg-canvas p-[3px]">
         <ViewBtn
           active={viewMode === "lsm"}
@@ -58,13 +58,6 @@ export function TopBar({
           title="N×N dependency heatmap — rows are sources, columns are targets. Cells show edge weight; reds mark cycles + violations."
         >
           Matrix
-        </ViewBtn>
-        <ViewBtn
-          active={viewMode === "force"}
-          onClick={() => onViewMode("force")}
-          title="Force-directed layout — tightly coupled nodes pull together. Cluster boundaries are precomputed (label propagation)."
-        >
-          Force
         </ViewBtn>
         <ViewBtn
           active={viewMode === "composition"}

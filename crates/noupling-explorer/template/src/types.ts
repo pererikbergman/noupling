@@ -4,7 +4,7 @@
 // to be human-readable and the Rust + TS sides are version-locked.
 
 export interface DataContract {
-  format_version: 2;
+  format_version: 3;
   noupling_version: string;
   generated_at: string;
   report_options: ReportOptions;
@@ -26,14 +26,6 @@ export interface DataContract {
    *  (ADR 0002, #345), plus the participant node ids focus mode uses. */
   issues: IssueEntry[];
   history: HistoryEntry[];
-  /** Pre-computed Force-view module clusters (#278 follow-up).
-   *  Tightly coupled groups detected in Rust via label propagation. */
-  clusters: ClusterEntry[];
-}
-
-export interface ClusterEntry {
-  id: string;
-  members: string[];
 }
 
 export interface ScoreBreakdown {

@@ -12,8 +12,6 @@
     "test:e2e:android": "playwright test --project=chromium tests/e2e/android.spec.ts"
   },
   "dependencies": {
-    "@types/d3-force": "^3.0.10",
-    "d3-force": "^3.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

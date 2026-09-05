@@ -125,7 +125,7 @@ fn template_carries_data_injection_contract() {
 }
 
 #[test]
-fn render_embeds_data_contract_with_format_version_2() {
+fn render_embeds_data_contract_with_format_version_3() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
 
@@ -142,10 +142,12 @@ fn render_embeds_data_contract_with_format_version_2() {
     let contract = extract_data_contract(&html);
     // v2 (#345, ADR 0002): Issues arrive as the shared `issues` array; the
     // per-kind `gravity_wells` / `red_flags` lists are gone.
-    assert_eq!(contract["format_version"], 2);
+    // v3 (#396): the Force view and its `clusters` field are gone.
+    assert_eq!(contract["format_version"], 3);
     assert!(contract["issues"].is_array());
     assert!(contract.get("gravity_wells").is_none());
     assert!(contract.get("red_flags").is_none());
+    assert!(contract.get("clusters").is_none());
 }
 
 #[test]

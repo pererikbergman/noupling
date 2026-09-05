@@ -8,8 +8,8 @@ import type { NodeEntry, EdgeEntry } from "../types";
  * (enrichment infrastructure) lands and the data contract carries an
  * `llm` block per node.
  *
- * Distinct from LSM (architecture) and Force (#278, coupling) by
- * focusing on identity, not relationships.
+ * Distinct from LSM (architecture) by focusing on identity, not
+ * relationships.
  */
 export interface CompositionViewProps {
   nodes: NodeEntry[];

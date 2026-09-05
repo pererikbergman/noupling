@@ -92,38 +92,6 @@ test.describe("Explorer — acme-payments sample", () => {
     ).toBeVisible();
   });
 
-  test("Force view renders d3-force layout when switched to (#278)", async ({
-    page,
-  }) => {
-    await page.locator("button:has-text('Force')").click();
-    const svg = page.locator(
-      "svg[aria-label*='Force-directed cluster view']",
-    );
-    await expect(svg).toBeVisible();
-    // The SVG mounts before the d3-force simulation has emitted its
-    // first tick, so a one-shot count() can race the render and see
-    // zero circles (flaky on CI). Poll until the nodes are in the DOM.
-    const circles = svg.locator("circle");
-    await expect.poll(() => circles.count(), { timeout: 10000 }).toBeGreaterThan(0);
-  });
-
-  test("Force view renders cluster boundary circles when contract carries clusters (#278 follow-up)", async ({
-    page,
-  }) => {
-    // Drill into src/ so the cluster members (src/ui, src/domain,
-    // src/infra) become visible as immediate children, then switch to
-    // Force. The simulation needs a moment to settle — give the
-    // boundary selector room to find the rendered hull.
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
-    await page.locator("button:has-text('Force')").click();
-    // Cluster boundary circles use a dashed stroke. Wait for at least
-    // one — d3-force settles within a couple of seconds.
-    await expect(
-      page.locator("svg circle[stroke-dasharray]").first(),
-    ).toBeVisible({ timeout: 10000 });
-  });
-
   test("Matrix aggregates file-level edges to visible packages (#290)", async ({
     page,
   }) => {

@@ -348,7 +348,7 @@ fn explorer_and_text_report_share_issue_wording() {
     let contract = explorer_contract(&html);
 
     let issues = contract["issues"].as_array().expect("issues array");
-    assert_eq!(contract["format_version"], 2);
+    assert_eq!(contract["format_version"], 3);
     let red_flag = issues
         .iter()
         .find(|i| i["kind"] == "red_flag")
