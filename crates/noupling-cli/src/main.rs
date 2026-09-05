@@ -62,6 +62,7 @@ fn main() {
             editor,
             title,
             no_history,
+            baseline,
         } => commands::report::run(
             &path,
             &format,
@@ -71,6 +72,7 @@ fn main() {
             editor.as_deref(),
             title.as_deref(),
             no_history,
+            baseline,
         ),
     };
 

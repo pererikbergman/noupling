@@ -42,7 +42,7 @@ pub use instability::{
     compute_directory_instability, compute_stability_violations, InstabilityMetric,
     StabilityViolation,
 };
-pub use issue::{Issue, IssueKind, SeverityBand, Subject};
+pub use issue::{Issue, IssueDetail, IssueKind, SeverityBand, Subject};
 pub use layers::{check_layer_rules, LayerViolation};
 pub use metrics::{compute_hotspots, ExternalDepMetric, ModuleMetrics};
 #[allow(unused_imports)]
@@ -113,6 +113,9 @@ pub struct AuditResult {
     /// True when `layers` were inferred from path names rather than read
     /// from settings. Formats use it to say "these layers were inferred".
     pub layers_auto_detected: bool,
+    /// The baseline applied to this result, if `--baseline` was given.
+    /// `issues()` marks matching Issues `baselined`; nothing is dropped.
+    pub baseline: Option<crate::baseline::Baseline>,
 }
 
 /// Test-only builder for `AuditResult` with sensible defaults.
@@ -164,6 +167,7 @@ impl AuditResultBuilder {
                 distance: Vec::new(),
                 layers: Vec::new(),
                 layers_auto_detected: false,
+                baseline: None,
             },
         }
     }
@@ -463,6 +467,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             distance: Vec::new(),
             layers: Vec::new(),
             layers_auto_detected: false,
+            baseline: None,
         };
     }
 
@@ -521,6 +526,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         distance: Vec::new(),
         layers: Vec::new(),
         layers_auto_detected: false,
+        baseline: None,
     };
     // Health score (severity-based until risk weights are applied).
     result.recalculate_score();

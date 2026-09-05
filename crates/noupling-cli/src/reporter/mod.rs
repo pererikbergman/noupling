@@ -627,6 +627,75 @@ mod tests {
     }
 
     #[test]
+    fn text_format_marks_baselined_cards_and_prints_new_vs_baselined_counts() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
+        use noupling_core::baseline::Baseline;
+        let edge = |from: &str, to: &str| CouplingViolation {
+            dir_a: "src/a".into(),
+            dir_b: "src/b".into(),
+            from_module: from.into(),
+            to_module: to.into(),
+            line_number: 1,
+            depth: 1,
+            weight: 1,
+            severity: 0.5,
+            direction: DependencyDirection::Sibling,
+            rri: 4.0,
+            is_circular: false,
+            cycle_path: vec![],
+            cycle_hop_files: vec![],
+            cycle_order: 0,
+            cycle_hop_counts: vec![],
+            weakest_link: None,
+            break_cost: 0,
+            score_impact: 1.0,
+        };
+        let mut result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_violations(vec![
+                edge("src/a/old.rs", "src/b/y.rs"),
+                edge("src/a/new.rs", "src/b/y.rs"),
+            ])
+            .build();
+        let accepted = Baseline {
+            fingerprints: ["coupling_violation:src/a/old.rs -> src/b/y.rs".to_string()]
+                .into_iter()
+                .collect(),
+            legacy_format: false,
+        };
+        result.apply_baseline(&accepted);
+
+        let text = format_text(&result);
+
+        assert!(text.contains("Issues (2): 1 new, 1 baselined"), "{text}");
+        assert!(
+            text.contains("[CRITICAL] Coupling Violation: src/a/old.rs -> src/b/y.rs (baselined)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("[CRITICAL] Coupling Violation: src/a/new.rs -> src/b/y.rs\n"),
+            "new issue must not be marked: {text}"
+        );
+    }
+
+    #[test]
+    fn text_format_warns_once_about_an_old_format_baseline() {
+        use noupling_core::baseline::Baseline;
+        let mut result = AuditResultBuilder::new().with_total_modules(4).build();
+        result.apply_baseline(&Baseline {
+            fingerprints: Default::default(),
+            legacy_format: true,
+        });
+        let text = format_text(&result);
+        let warnings: Vec<&str> = text
+            .lines()
+            .filter(|l| l.starts_with("Baseline:"))
+            .collect();
+        assert_eq!(warnings.len(), 1, "{text}");
+        assert!(warnings[0].contains("baseline save"), "{}", warnings[0]);
+    }
+
+    #[test]
     fn text_format_has_no_issues_heading_when_there_are_none() {
         let result = AuditResultBuilder::new().with_total_modules(4).build();
         let text = format_text(&result);

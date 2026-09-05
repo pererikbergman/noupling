@@ -11,6 +11,7 @@
 
 use anyhow::{Context, Result};
 use noupling_core::analyzer::{self, AuditResult, ExternalDepMetric};
+use noupling_core::baseline::{load_baseline, BaselineComparison};
 use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::scanner;
 use noupling_core::settings::Settings;
@@ -33,6 +34,10 @@ pub struct PipelineOptions<'a> {
     /// Monorepo split — restrict the audit to one configured module
     /// from `settings.modules`. None = audit the whole codebase.
     pub module_filter: Option<&'a str>,
+    /// Apply `.noupling/baseline.json`: matching Issues are marked
+    /// `baselined` (never dropped) and the outcome carries the
+    /// comparison counts. Errors when no baseline file exists.
+    pub baseline: bool,
 }
 
 /// Everything a caller needs after the pipeline runs. The fields
@@ -45,6 +50,8 @@ pub struct PipelineOutcome {
     pub modules: Vec<Module>,
     pub dependencies: Vec<Dependency>,
     pub result: AuditResult,
+    /// New / baselined / resolved counts when `baseline` was requested.
+    pub baseline: Option<BaselineComparison>,
 }
 
 /// The seam. Owns the project path + db + settings for the duration
@@ -121,11 +128,26 @@ impl<'a> AuditPipeline<'a> {
             result.filter_by_changed_files(changed_files);
         }
 
+        // (6) Baseline — mark accepted Issues; never drop them.
+        let baseline = if options.baseline {
+            let loaded = load_baseline(self.project_path)?;
+            if loaded.legacy_format {
+                eprintln!(
+                    "warning: .noupling/baseline.json is in the pre-0.9.0 format (coupling only); \
+                     nothing is treated as baselined — re-run `noupling baseline save`"
+                );
+            }
+            Some(result.apply_baseline(&loaded))
+        } else {
+            None
+        };
+
         Ok(PipelineOutcome {
             snapshot,
             modules: filtered_modules,
             dependencies: filtered_deps,
             result,
+            baseline,
         })
     }
 }
@@ -334,6 +356,7 @@ mod tests {
             .run(PipelineOptions {
                 snapshot_id: None,
                 module_filter: Some("orders"),
+                baseline: false,
             })
             .expect("run");
 
@@ -351,6 +374,7 @@ mod tests {
             .run(PipelineOptions {
                 snapshot_id: None,
                 module_filter: Some("ghost"),
+                baseline: false,
             })
             .unwrap_err();
         assert!(err.to_string().contains("ghost"));

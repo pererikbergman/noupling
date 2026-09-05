@@ -10,6 +10,7 @@ pub fn run(
     explorer_editor: Option<&str>,
     explorer_title: Option<&str>,
     explorer_no_history: bool,
+    use_baseline: bool,
 ) -> anyhow::Result<()> {
     let session = crate::db_session::DatabaseSession::open(path)?;
     let snap_repo = session.snapshots();
@@ -27,9 +28,11 @@ pub fn run(
         modules: report_modules,
         dependencies: report_deps,
         result,
+        ..
     } = pipeline.run(crate::audit_pipeline::PipelineOptions {
         snapshot_id: None,
         module_filter,
+        baseline: use_baseline,
     })?;
 
     // Persist the score on the snapshot row so the Explorer's history
@@ -207,7 +210,7 @@ pub fn run(
         }
         _ => {
             anyhow::bail!(
-                "Unknown format: {}. Use 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', 'strategy', 'explorer', or 'all'.",
+                "Unknown format: {}. Use 'text', 'json', 'xml', 'md', 'html', 'sonar', 'mermaid', 'dot', 'bundle', 'dashboard', 'pr', 'briefing', 'strategy', 'explorer', or 'all'.",
                 format
             );
         }
