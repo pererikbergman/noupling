@@ -152,6 +152,28 @@ impl<'a> AuditPipeline<'a> {
     }
 }
 
+/// Record what the strategy report and the Explorer's history scrubber
+/// read later: the health score and the per-kind Issue counts of this
+/// audit (#349). Best-effort — a failed write must not fail the command.
+pub fn record_snapshot_trends(
+    snap_repo: &SnapshotRepository<'_>,
+    snapshot_id: &str,
+    result: &AuditResult,
+) {
+    let _ = snap_repo.save_health_score(snapshot_id, result.score);
+    let issues = result.issues();
+    let counts: std::collections::BTreeMap<String, usize> = noupling_core::analyzer::IssueKind::ALL
+        .iter()
+        .map(|k| {
+            (
+                k.id().to_string(),
+                issues.iter().filter(|i| i.kind() == *k).count(),
+            )
+        })
+        .collect();
+    let _ = snap_repo.save_issue_kind_counts(snapshot_id, &counts);
+}
+
 fn apply_module_filter(
     modules: &[Module],
     dependencies: &[Dependency],

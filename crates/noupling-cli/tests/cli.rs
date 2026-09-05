@@ -497,3 +497,43 @@ fn old_format_baseline_warns_instead_of_crashing() {
     );
     assert!(stderr.contains("baseline save"), "{stderr}");
 }
+
+// ── Per-kind Issue counts are recorded at scan time (#349) ────────────────
+
+/// Two scans → the strategy report carries a recorded count for every
+/// kind on both snapshots (no gaps), without any `audit` in between.
+#[test]
+fn scan_records_issue_kind_counts_that_strategy_trends() {
+    let fixture = create_unlayered_by_settings_fixture();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    scan(project);
+    scan(project);
+
+    let out = run_noupling(&["report", root, "--format", "strategy"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = std::fs::read_to_string(project.join(".noupling/strategy.html")).unwrap();
+    let start = html.find("const D = ").unwrap() + "const D = ".len();
+    let end = start + html[start..].find(";\n").unwrap();
+    let data: serde_json::Value = serde_json::from_str(&html[start..end]).unwrap();
+
+    let series = data["issue_kind_series"].as_array().unwrap();
+    assert_eq!(series.len(), 9);
+    for s in series {
+        let counts = s["counts"].as_array().unwrap();
+        assert_eq!(counts.len(), 2, "{s}");
+        assert!(
+            counts.iter().all(|c| !c.is_null()),
+            "scan must record counts: {s}"
+        );
+    }
+    let cycle = series.iter().find(|s| s["kind"] == "cycle").unwrap();
+    assert_eq!(
+        cycle["counts"][0], 1,
+        "the ring ui → domain → data → ui: {cycle}"
+    );
+}

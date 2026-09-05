@@ -82,6 +82,13 @@ impl Database {
         let _ = self
             .conn
             .execute_batch("ALTER TABLE snapshots ADD COLUMN health_score REAL;");
+        // Per-kind Issue counts (JSON object, kind id → count) recorded
+        // whenever a snapshot is audited, so the strategy report can trend
+        // every kind without re-auditing. NULL on snapshots taken before
+        // 0.9.0: rendered as gaps, never zeros (#349).
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE snapshots ADD COLUMN issue_kind_counts TEXT;");
         Ok(())
     }
 }
@@ -150,6 +157,7 @@ mod tests {
                 "diff_base",
                 "diff_changed_files",
                 "health_score",
+                "issue_kind_counts",
             ]
         );
     }

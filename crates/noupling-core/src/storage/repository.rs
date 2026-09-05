@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use std::collections::BTreeMap;
 
 use crate::core::{Dependency, Module, ModuleType, Snapshot};
 
@@ -154,6 +155,39 @@ impl<'a> SnapshotRepository<'a> {
             rusqlite::params![score, snapshot_id],
         )?;
         Ok(())
+    }
+
+    /// Record the per-kind Issue counts of an audit on a snapshot row
+    /// (kind id → count, all nine kinds, zero included). Called alongside
+    /// `save_health_score` so the strategy report can trend every kind.
+    pub fn save_issue_kind_counts(
+        &self,
+        snapshot_id: &str,
+        counts: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        let json = serde_json::to_string(counts)?;
+        self.conn.execute(
+            "UPDATE snapshots SET issue_kind_counts = ?1 WHERE id = ?2",
+            rusqlite::params![json, snapshot_id],
+        )?;
+        Ok(())
+    }
+
+    /// The per-kind Issue counts recorded for a snapshot, or `None` when it
+    /// predates the column or was never audited — a gap, not zeros.
+    pub fn get_issue_kind_counts(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<BTreeMap<String, usize>>> {
+        let json: Option<String> = self.conn.query_row(
+            "SELECT issue_kind_counts FROM snapshots WHERE id = ?1",
+            rusqlite::params![snapshot_id],
+            |row| row.get(0),
+        )?;
+        Ok(match json {
+            Some(j) => Some(serde_json::from_str(&j)?),
+            None => None,
+        })
     }
 
     /// Return every snapshot (oldest first) with its recorded health
@@ -351,6 +385,28 @@ mod tests {
     }
 
     // ── SnapshotRepository ──
+
+    /// Per-kind Issue counts round-trip; a snapshot that never recorded
+    /// them reads back as `None` (a gap), never as zeros.
+    #[test]
+    fn issue_kind_counts_round_trip_and_are_absent_for_older_snapshots() {
+        let db = setup_db();
+        let repo = SnapshotRepository::new(&db.conn);
+        let recorded = repo.create("/p").unwrap();
+        let older = repo.create("/p").unwrap();
+        let counts: BTreeMap<String, usize> =
+            [("cycle".to_string(), 1), ("low_cohesion".to_string(), 3)]
+                .into_iter()
+                .collect();
+
+        repo.save_issue_kind_counts(&recorded.id, &counts).unwrap();
+
+        assert_eq!(
+            repo.get_issue_kind_counts(&recorded.id).unwrap(),
+            Some(counts)
+        );
+        assert_eq!(repo.get_issue_kind_counts(&older.id).unwrap(), None);
+    }
 
     #[test]
     fn snapshot_create_returns_valid_snapshot() {
