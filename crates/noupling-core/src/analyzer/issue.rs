@@ -61,6 +61,23 @@ impl IssueKind {
         }
     }
 
+    /// Whether Issues of this kind are about dependency edges (`CONTEXT.md`
+    /// § Edge-shaped Issue): what graph formats must accent. Node-shaped
+    /// kinds are about a module or directory.
+    pub fn is_edge_shaped(self) -> bool {
+        match self {
+            IssueKind::CouplingViolation
+            | IssueKind::Cycle
+            | IssueKind::RuleViolation
+            | IssueKind::LayerViolation
+            | IssueKind::StabilityViolation => true,
+            IssueKind::GravityWell
+            | IssueKind::RedFlag
+            | IssueKind::ZoneFlag
+            | IssueKind::LowCohesion => false,
+        }
+    }
+
     /// The accent colour every visual format uses for this kind, so the
     /// dashboard tiles, strategy series, graph edges and bundle legend
     /// agree. Exhaustive so a new kind must pick one.

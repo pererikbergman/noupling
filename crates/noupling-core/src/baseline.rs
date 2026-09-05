@@ -1,8 +1,9 @@
 //! Baseline file management for incremental adoption (`CONTEXT.md`
 //! § Baseline, #343).
 //!
-//! `baseline save` fingerprints every Issue (kind + subject) into
-//! `.noupling/baseline.json`. A later audit or report run with
+//! `baseline save` fingerprints every Issue (`Issue::fingerprint`: kind +
+//! identity — the subject, or the directory pair for Coupling Violations
+//! and Red Flags) into `.noupling/baseline.json`. A later audit or report run with
 //! `--baseline` loads that set and marks matching Issues `baselined`:
 //! they are still reported, never dropped, and never counted as new.
 //!

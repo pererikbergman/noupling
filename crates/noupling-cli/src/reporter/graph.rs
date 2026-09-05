@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::reporter::VERSION;
-use noupling_core::analyzer::{parent_dir, AuditResult, CouplingViolation, IssueDetail, IssueKind};
+use noupling_core::analyzer::{parent_dir, AuditResult, IssueDetail, IssueKind};
 use noupling_core::core::Module;
 
 /// One accented edge on a graph drawing: an edge-shaped Issue projected
@@ -48,23 +48,11 @@ pub(super) fn issue_edges(result: &AuditResult) -> Vec<IssueEdge> {
             | IssueDetail::LowCohesion(_) => {}
         }
     }
+    debug_assert!(
+        edges.iter().all(|e| e.kind.is_edge_shaped()),
+        "issue_edges must agree with IssueKind::is_edge_shaped"
+    );
     edges
-}
-
-/// Drawing precedence when several Issues share one drawn edge: the
-/// most structural kind wins.
-fn accent_rank(kind: IssueKind) -> u8 {
-    match kind {
-        IssueKind::Cycle => 5,
-        IssueKind::RuleViolation => 4,
-        IssueKind::LayerViolation => 3,
-        IssueKind::CouplingViolation => 2,
-        IssueKind::StabilityViolation => 1,
-        IssueKind::GravityWell
-        | IssueKind::RedFlag
-        | IssueKind::ZoneFlag
-        | IssueKind::LowCohesion => 0,
-    }
 }
 
 /// The edge-shaped kinds a graph format draws, in legend order.
@@ -97,78 +85,84 @@ fn edge_style(kind: IssueKind) -> (&'static str, &'static str) {
     }
 }
 
-/// A drawn directory-level edge: how many Issues it carries, the kind
-/// that styles it, and whether every Issue on it is baselined.
+/// A drawn directory-level edge, one per (from, to, kind): how many
+/// Issues of that kind it carries and whether every one is baselined.
+/// A pair that is both a Coupling and a Stability Violation gets two
+/// parallel edges, one per accent — every edge-shaped Issue is drawn.
 struct EdgeInfo {
     count: usize,
-    kind: IssueKind,
     baselined: bool,
+}
+
+/// Drawn-edge key: full directory paths plus the kind. `IssueKind` is `Ord`
+/// in canonical kind order.
+type EdgeKey = (String, String, IssueKind);
+
+/// A drawn node: the directory's full path is its identity (two `models/`
+/// directories stay two nodes), the basename is its label.
+struct NodeInfo {
+    label: String,
+    /// `"circular"` when a Cycle edge touches it, `"coupled"` when any other
+    /// accented edge does, else `"healthy"`.
+    status: &'static str,
 }
 
 fn build_dir_graph(
     modules: &[Module],
     result: &AuditResult,
-) -> (BTreeSet<String>, BTreeMap<(String, String), EdgeInfo>) {
-    // Collect all directories
-    let mut dirs: BTreeSet<String> = BTreeSet::new();
-    for module in modules {
-        if let Some(parent) = std::path::Path::new(&module.path).parent() {
-            let dir = parent.to_string_lossy().to_string();
-            if !dir.is_empty() {
-                dirs.insert(dir);
-            }
+) -> (BTreeMap<String, NodeInfo>, BTreeMap<EdgeKey, EdgeInfo>) {
+    let mut nodes: BTreeMap<String, NodeInfo> = BTreeMap::new();
+    let mut node = |dir: &str| {
+        if !dir.is_empty() {
+            nodes.entry(dir.to_string()).or_insert_with(|| NodeInfo {
+                label: short_name(dir),
+                status: "healthy",
+            });
         }
+    };
+    for module in modules {
+        node(parent_dir(&module.path));
     }
 
-    // Build edges from every edge-shaped Issue, keyed by short directory
-    // names. Rule and Layer Violations are file edges; they draw between
-    // the files' directories.
-    let mut edges: BTreeMap<(String, String), EdgeInfo> = BTreeMap::new();
+    // Build edges from every edge-shaped Issue. Rule and Layer Violations
+    // are file edges; they draw between the files' directories.
+    let mut edges: BTreeMap<EdgeKey, EdgeInfo> = BTreeMap::new();
     for e in issue_edges(result) {
-        let (from_dir, to_dir) = match e.kind {
+        let (from, to) = match e.kind {
             IssueKind::RuleViolation | IssueKind::LayerViolation => {
                 (parent_dir(&e.from), parent_dir(&e.to))
             }
             _ => (e.from.as_str(), e.to.as_str()),
         };
-        // Nodes are keyed by basename, so two distinct directories sharing a
-        // basename collapse onto one node; an edge between them would draw
-        // as a self-loop asserting a directory imports itself. Drop those
-        // along with genuine self-edges.
-        let (from, to) = (short_name(from_dir), short_name(to_dir));
-        if from_dir == to_dir || from == to {
+        if from == to || from.is_empty() || to.is_empty() {
             continue;
         }
-        let entry = edges.entry((from, to)).or_insert(EdgeInfo {
-            count: 0,
-            kind: e.kind,
-            baselined: true,
-        });
+        node(from);
+        node(to);
+        let entry = edges
+            .entry((from.to_string(), to.to_string(), e.kind))
+            .or_insert(EdgeInfo {
+                count: 0,
+                baselined: true,
+            });
         entry.count += 1;
-        if accent_rank(e.kind) > accent_rank(entry.kind) {
-            entry.kind = e.kind;
-        }
         entry.baselined &= e.baselined;
     }
 
-    (dirs, edges)
-}
-
-/// Classify a directory as healthy, coupled, or circular based on violations.
-fn node_status(dir_name: &str, violations: &[CouplingViolation]) -> &'static str {
-    for v in violations {
-        if v.is_circular {
-            for p in &v.cycle_path {
-                if short_name(p) == dir_name {
-                    return "circular";
+    // Node status follows the edges actually drawn on it.
+    for (from, to, kind) in edges.keys() {
+        for dir in [from, to] {
+            if let Some(n) = nodes.get_mut(dir) {
+                if *kind == IssueKind::Cycle {
+                    n.status = "circular";
+                } else if n.status == "healthy" {
+                    n.status = "coupled";
                 }
             }
         }
-        if short_name(&v.dir_a) == dir_name || short_name(&v.dir_b) == dir_name {
-            return "coupled";
-        }
     }
-    "healthy"
+
+    (nodes, edges)
 }
 
 fn short_name(path: &str) -> String {
@@ -181,51 +175,39 @@ fn short_name(path: &str) -> String {
 
 /// Generate a Mermaid flowchart diagram.
 pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
-    let (dirs, edges) = build_dir_graph(modules, result);
+    let (nodes, edges) = build_dir_graph(modules, result);
     let mut out = String::new();
 
     out.push_str(&format!("%% Generated by {}\n", VERSION));
+    // Data-derived: the kinds that actually have an accented edge below.
+    let drawn: BTreeSet<&str> = edges.keys().map(|(_, _, k)| k.id()).collect();
+    out.push_str(&format!(
+        "%% drawn kinds: {}\n",
+        drawn.into_iter().collect::<Vec<_>>().join(", ")
+    ));
     out.push_str("flowchart LR\n");
 
-    // Collect unique short names from edges
-    let mut used_dirs: BTreeSet<String> = BTreeSet::new();
-    for (from, to) in edges.keys() {
-        used_dirs.insert(from.clone());
-        used_dirs.insert(to.clone());
-    }
-
-    // Add nodes without edges too (from directory list)
-    for dir in &dirs {
-        let name = short_name(dir);
-        if !name.is_empty() {
-            used_dirs.insert(name);
-        }
-    }
-
-    // Define nodes with styling
-    for dir_name in &used_dirs {
-        let status = node_status(dir_name, &result.violations);
-        let style = match status {
-            "circular" => format!("    {}[{}]:::circular", sanitize(dir_name), dir_name),
-            "coupled" => format!("    {}[{}]:::coupled", sanitize(dir_name), dir_name),
-            _ => format!("    {}[{}]:::healthy", sanitize(dir_name), dir_name),
-        };
-        out.push_str(&style);
-        out.push('\n');
+    // Nodes: id = sanitised full path, label = basename.
+    for (dir, n) in &nodes {
+        out.push_str(&format!(
+            "    {}[{}]:::{}\n",
+            sanitize(dir),
+            n.label,
+            n.status
+        ));
     }
     out.push('\n');
 
-    // Define edges: one arrow shape per kind, colour via linkStyle by
-    // index, muted grey when every Issue on the edge is baselined.
+    // Edges: one arrow shape per kind, colour via linkStyle by index,
+    // muted grey when every Issue on the edge is baselined.
     let mut link_styles = Vec::new();
-    for (idx, ((from, to), info)) in edges.iter().enumerate() {
+    for (idx, ((from, to, kind), info)) in edges.iter().enumerate() {
         let label = if info.count > 1 {
             format!("|{}|", info.count)
         } else {
             String::new()
         };
-        let (arrow, _) = edge_style(info.kind);
-        let colour = info.kind.accent_color();
+        let (arrow, _) = edge_style(*kind);
         out.push_str(&format!(
             "    {} {}{} {}\n",
             sanitize(from),
@@ -233,7 +215,11 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
             label,
             sanitize(to)
         ));
-        let stroke = if info.baselined { MUTED } else { colour };
+        let stroke = if info.baselined {
+            MUTED
+        } else {
+            kind.accent_color()
+        };
         link_styles.push(format!(
             "    linkStyle {} stroke:{},stroke-width:{}\n",
             idx,
@@ -251,12 +237,11 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
     out.push_str("    %% Legend — edge accents by Issue kind:\n");
     for kind in EDGE_KINDS {
         let (arrow, _) = edge_style(kind);
-        let colour = kind.accent_color();
         out.push_str(&format!(
             "    %%   {}  {}  ({})\n",
             arrow,
             kind.name(),
-            colour
+            kind.accent_color()
         ));
     }
     out.push_str(&format!(
@@ -274,7 +259,7 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
 
 /// Generate a Graphviz DOT diagram.
 pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
-    let (dirs, edges) = build_dir_graph(modules, result);
+    let (nodes, edges) = build_dir_graph(modules, result);
     let mut out = String::new();
 
     out.push_str(&format!("// Generated by {}\n", VERSION));
@@ -282,31 +267,18 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push_str("    rankdir=LR;\n");
     out.push_str("    node [shape=box, style=filled, fontname=\"Helvetica\"];\n\n");
 
-    // Collect used dirs
-    let mut used_dirs: BTreeSet<String> = BTreeSet::new();
-    for (from, to) in edges.keys() {
-        used_dirs.insert(from.clone());
-        used_dirs.insert(to.clone());
-    }
-    for dir in &dirs {
-        let name = short_name(dir);
-        if !name.is_empty() {
-            used_dirs.insert(name);
-        }
-    }
-
-    // Nodes
-    for dir_name in &used_dirs {
-        let status = node_status(dir_name, &result.violations);
-        let (fill, font) = match status {
+    // Nodes: id = sanitised full path, label = basename, tooltip = full path.
+    for (dir, n) in &nodes {
+        let (fill, font) = match n.status {
             "circular" => ("#fecaca", "#991b1b"),
             "coupled" => ("#fef9c3", "#854d0e"),
             _ => ("#dcfce7", "#166534"),
         };
         out.push_str(&format!(
-            "    {} [label=\"{}\", fillcolor=\"{}\", fontcolor=\"{}\"];\n",
-            sanitize(dir_name),
-            dir_name,
+            "    {} [label=\"{}\", tooltip=\"{}\", fillcolor=\"{}\", fontcolor=\"{}\"];\n",
+            sanitize(dir),
+            n.label,
+            dir,
             fill,
             font
         ));
@@ -314,9 +286,9 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push('\n');
 
     // Edges: per-kind style; muted when every Issue on the edge is baselined.
-    for ((from, to), info) in &edges {
-        let (_, dot_style) = edge_style(info.kind);
-        let colour = info.kind.accent_color();
+    for ((from, to, kind), info) in &edges {
+        let (_, dot_style) = edge_style(*kind);
+        let colour = kind.accent_color();
         let mut attrs = vec![dot_style.to_string()];
         if info.count > 1 {
             attrs.push(format!("label=\"{}\"", info.count));
@@ -324,10 +296,10 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
         if info.baselined {
             attrs.push(format!("color=\"{}\"", MUTED));
             attrs.push("penwidth=0.7".to_string());
-            attrs.push(format!("tooltip=\"{} (baselined)\"", info.kind.name()));
+            attrs.push(format!("tooltip=\"{} (baselined)\"", kind.name()));
         } else {
             attrs.push(format!("color=\"{}\"", colour));
-            attrs.push(format!("tooltip=\"{}\"", info.kind.name()));
+            attrs.push(format!("tooltip=\"{}\"", kind.name()));
         }
         out.push_str(&format!(
             "    {} -> {} [{}];\n",
@@ -363,22 +335,17 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
 }
 
 /// Sanitize a name for use as a Mermaid/DOT identifier.
+/// Sanitize a full directory path into a Mermaid/DOT identifier.
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| {
-            if c == '-' || c == '.' || c == ' ' {
-                '_'
-            } else {
-                c
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use noupling_core::analyzer::AuditResultBuilder;
+    use noupling_core::analyzer::{AuditResultBuilder, CouplingViolation};
     use noupling_core::core::ModuleType;
 
     fn make_module(path: &str) -> Module {
@@ -547,10 +514,11 @@ mod tests {
         assert_eq!(edges.len(), 6);
     }
 
-    /// Two directories sharing a basename collapse onto one node; an edge
-    /// between them must not be drawn as a self-loop.
+    /// Two directories sharing a basename are two nodes (ids are full
+    /// paths, labels basenames), so an edge between them is drawn, not
+    /// collapsed into a self-loop or dropped.
     #[test]
-    fn edges_between_same_basename_directories_are_not_drawn_as_self_loops() {
+    fn same_basename_directories_stay_distinct_nodes() {
         use noupling_core::analyzer::RuleViolation;
         let result = AuditResultBuilder::new()
             .with_total_modules(2)
@@ -562,9 +530,38 @@ mod tests {
             }])
             .build();
         let mermaid = format_mermaid(&[], &result);
-        assert!(!mermaid.contains("models --x models"), "{mermaid}");
+        assert!(mermaid.contains("src_api_models[models]"), "{mermaid}");
+        assert!(mermaid.contains("src_db_models[models]"), "{mermaid}");
+        assert!(
+            mermaid.contains("src_api_models --x src_db_models"),
+            "{mermaid}"
+        );
         let dot = format_dot(&[], &result);
-        assert!(!dot.contains("models -> models"), "{dot}");
+        assert!(dot.contains("src_api_models -> src_db_models ["), "{dot}");
+        assert!(!dot.contains("models -> models ["), "{dot}");
+    }
+
+    /// Node colour follows the accented edges drawn on it, whatever the kind.
+    #[test]
+    fn nodes_touched_only_by_rule_or_stability_edges_are_not_painted_healthy() {
+        let mermaid = format_mermaid(&[], &every_edge_kind());
+        assert!(
+            mermaid.contains("src_plugins[plugins]:::coupled"),
+            "{mermaid}"
+        );
+        assert!(
+            mermaid.contains("src_stable[stable]:::coupled"),
+            "{mermaid}"
+        );
+        assert!(
+            mermaid.contains("src_ring_alpha[alpha]:::circular"),
+            "{mermaid}"
+        );
+        // Data-derived header names exactly the drawn kinds.
+        assert!(
+            mermaid.contains("%% drawn kinds: coupling_violation, cycle, layer_violation, rule_violation, stability_violation"),
+            "{mermaid}"
+        );
     }
 
     #[test]
@@ -582,19 +579,25 @@ mod tests {
         }
         // Distinct arrow per kind.
         assert!(
-            mermaid.contains("alpha -.-> beta"),
+            mermaid.contains("src_ring_alpha -.-> src_ring_beta"),
             "cycle dashed: {mermaid}"
         );
         assert!(
-            mermaid.contains("plugins --x legacy"),
+            mermaid.contains("src_plugins --x src_legacy"),
             "rule cross: {mermaid}"
         );
-        assert!(mermaid.contains("infra ==> ui"), "layer thick: {mermaid}");
         assert!(
-            mermaid.contains("stable --o volatile"),
+            mermaid.contains("src_infra ==> src_ui"),
+            "layer thick: {mermaid}"
+        );
+        assert!(
+            mermaid.contains("src_stable --o src_volatile"),
             "stability circle: {mermaid}"
         );
-        assert!(mermaid.contains("x --> y"), "coupling plain: {mermaid}");
+        assert!(
+            mermaid.contains("src_loose_x --> src_loose_y"),
+            "coupling plain: {mermaid}"
+        );
         // Baselined edge is muted grey via linkStyle.
         assert!(
             mermaid.contains("stroke:#94a3b8"),
@@ -607,23 +610,23 @@ mod tests {
         let dot = format_dot(&[], &every_edge_kind());
         assert!(dot.contains("// Legend"), "{dot}");
         assert!(
-            dot.contains("alpha -> beta [") && dot.contains("style=dashed"),
+            dot.contains("src_ring_alpha -> src_ring_beta [") && dot.contains("style=dashed"),
             "{dot}"
         );
         assert!(
-            dot.contains("plugins -> legacy [") && dot.contains("arrowhead=box"),
+            dot.contains("src_plugins -> src_legacy [") && dot.contains("arrowhead=box"),
             "{dot}"
         );
         assert!(
-            dot.contains("infra -> ui [") && dot.contains("arrowhead=tee"),
+            dot.contains("src_infra -> src_ui [") && dot.contains("arrowhead=tee"),
             "{dot}"
         );
         assert!(
-            dot.contains("stable -> volatile [") && dot.contains("style=dotted"),
+            dot.contains("src_stable -> src_volatile [") && dot.contains("style=dotted"),
             "{dot}"
         );
         assert!(
-            dot.contains("x -> y [") && dot.contains("color=\"#94a3b8\""),
+            dot.contains("src_loose_x -> src_loose_y [") && dot.contains("color=\"#94a3b8\""),
             "baselined muted: {dot}"
         );
         assert!(dot.contains("subgraph cluster_legend"), "{dot}");

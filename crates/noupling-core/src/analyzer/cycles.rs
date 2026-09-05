@@ -34,7 +34,7 @@ pub(super) fn detect_sibling_cycles(
 
     // Build adjacency: sibling A -> sibling B if D_acc(A) contains a module under B
     let mut adj: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
-    // Track which file causes each edge for hop_files (first match only, for display)
+    // Track which file represents each edge for hop_files (the smallest, for determinism)
     let mut edge_files: FxHashMap<(usize, usize), (String, String, i32)> = FxHashMap::default();
     // Track total import count per edge for XS metric (weakest_link / break_cost)
     let mut edge_import_count: FxHashMap<(usize, usize), usize> = FxHashMap::default();
@@ -58,17 +58,28 @@ pub(super) fn detect_sibling_cycles(
                                     if let Some(fd) = from_dir {
                                         if fd == dir_a || fd.starts_with(&a_prefix) {
                                             *edge_import_count.entry((i, j)).or_insert(0) += 1;
-                                            edge_files.entry((i, j)).or_insert_with(|| {
-                                                let from_file = id_to_path
+                                            // The hop's representative import is the
+                                            // lexicographically smallest (from, to, line):
+                                            // D_acc iteration order depends on module ids,
+                                            // which are fresh UUIDs on every scan.
+                                            let candidate = (
+                                                id_to_path
                                                     .get(dep.from_module_id.as_str())
                                                     .unwrap_or(&"")
-                                                    .to_string();
-                                                let to_file = id_to_path
+                                                    .to_string(),
+                                                id_to_path
                                                     .get(dep.to_module_id.as_str())
                                                     .unwrap_or(&"")
-                                                    .to_string();
-                                                (from_file, to_file, dep.line_number)
-                                            });
+                                                    .to_string(),
+                                                dep.line_number,
+                                            );
+                                            match edge_files.get_mut(&(i, j)) {
+                                                Some(current) if *current <= candidate => {}
+                                                Some(current) => *current = candidate,
+                                                None => {
+                                                    edge_files.insert((i, j), candidate);
+                                                }
+                                            }
                                         }
                                     }
                                 }

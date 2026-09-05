@@ -1,119 +1,33 @@
-//! Issue-kind coverage across every report format (#339, epic #338).
+//! The format-class contract (#350, epic #338, `CONTEXT.md` § Report formats).
 //!
 //! Runs the CLI end-to-end over `tests/fixtures/every_issue_kind`, a
-//! project built so the audit produces at least one of every Issue kind
-//! (see `CONTEXT.md` § Issue kinds), then records which kinds each
-//! format's output mentions.
+//! project built so the audit produces at least one of every Issue kind,
+//! then asserts the rule every format must obey:
 //!
-//! `EXPECTED` pins the matrix. It starts at today's coverage so it is
-//! green on day one; a format ticket in #338 flips its row as it
-//! migrates to `issues()`, and the contract ticket (#350) replaces the
-//! table with the format-class rule from `CONTEXT.md`.
+//! - an **Issue-listing format** (text, json, xml, sonar, md, html,
+//!   dashboard, pr, briefing, explorer) carries every kind that has members
+//!   — here, all nine;
+//! - a **graph format** (mermaid, dot, bundle) accents every edge-shaped
+//!   kind (Coupling, Cycle, Rule, Layer, Stability) and may omit node-shaped
+//!   ones;
+//! - the **trend format** (strategy) has a series per kind with a recorded
+//!   count for the fixture's snapshot.
+//!
+//! Every check is against *data*, not prose: a format that names all nine
+//! kinds in a static legend but emits no Issue fails here.
 
-use std::collections::BTreeMap;
+use noupling_core::analyzer::IssueKind;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-// ── Issue kinds and how to spot them in an output ────────────────────────
-//
-// Markers are lowercase substrings; a kind counts as "mentioned" if any
-// marker appears in the lowercased output. They deliberately accept the
-// current per-format wording (text headings, JSON keys, explorer
-// contract fields). Once Issue cards exist (#340) every listing format
-// prints the glossary kind name, and these can tighten to that.
-//
-// Coupling Violation covers the `sibling` direction only. #339 also
-// asked for `upward`, but the coupling detector never emits that
-// direction today (it produces sibling and circular), so no fixture can
-// trigger it. Add an `upward` marker here when the detector does.
-
-const KINDS: &[(&str, &[&str])] = &[
-    (
-        "coupling_violation",
-        &[
-            "coupling violation",
-            "coupling_violation",
-            "sibling",
-            "\u{2194}",
-        ],
-    ),
-    ("cycle", &["circular", "cycle", "\u{21bb}"]),
-    (
-        "rule_violation",
-        &["rule violation", "rule_violation", "dependency rule"],
-    ),
-    ("layer_violation", &["layer violation", "layer_violation"]),
-    (
-        "gravity_well",
-        &["gravity well", "gravity_well", "gravitywell"],
-    ),
-    (
-        "red_flag",
-        &[
-            "red flag",
-            "red_flag",
-            "redflag",
-            "fused sibling",
-            "fused_sibling",
-        ],
-    ),
-    (
-        "stability_violation",
-        &["stability violation", "stability_violation"],
-    ),
-    (
-        "zone_flag",
-        &[
-            "zone flag",
-            "zone_flag",
-            "zone of pain",
-            "zone_of_pain",
-            "zone of uselessness",
-            "zone_of_uselessness",
-        ],
-    ),
-    ("low_cohesion", &["low cohesion", "low_cohesion"]),
-];
-
-/// Every kind, in `KINDS` order. Derived so a new kind is added in one place.
-fn all_kinds() -> Vec<&'static str> {
-    KINDS.iter().map(|(kind, _)| *kind).collect()
-}
-
-/// Sentinel for an `EXPECTED` row that covers every kind.
-const ALL_KINDS: &[&str] = &["*"];
-
-/// What a graph format must carry: every edge-shaped kind (`CONTEXT.md`
-/// § Graph format). Node-shaped kinds may be omitted from a drawing.
-const EDGE_SHAPED_KINDS: &[&str] = &[
-    "coupling_violation",
-    "cycle",
-    "rule_violation",
-    "layer_violation",
-    "stability_violation",
-];
-
-// ── Expected coverage per format ─────────────────────────────────────────
-//
-// One row per format. Flip a row to `ALL_KINDS` when its ticket lands.
-// Every format must produce a non-empty artifact; an empty row means
-// "renders, but mentions no Issue kind", never "did not render".
-
-const EXPECTED: &[(&str, &[&str])] = &[
-    ("text", ALL_KINDS),
-    ("json", ALL_KINDS),
-    ("xml", ALL_KINDS),
-    ("sonar", ALL_KINDS),
-    ("md", ALL_KINDS),
-    ("html", ALL_KINDS),
-    ("dashboard", ALL_KINDS),
-    ("bundle", EDGE_SHAPED_KINDS),
-    ("pr", ALL_KINDS),
-    ("briefing", ALL_KINDS),
-    ("mermaid", EDGE_SHAPED_KINDS),
-    ("dot", EDGE_SHAPED_KINDS),
-    ("strategy", ALL_KINDS),
-    ("explorer", ALL_KINDS),
+/// The kinds a graph format must accent (`CONTEXT.md` § Edge-shaped Issue).
+const EDGE_SHAPED_KINDS: [IssueKind; 5] = [
+    IssueKind::CouplingViolation,
+    IssueKind::Cycle,
+    IssueKind::RuleViolation,
+    IssueKind::LayerViolation,
+    IssueKind::StabilityViolation,
 ];
 
 // ── Harness ──────────────────────────────────────────────────────────────
@@ -164,30 +78,6 @@ fn read_artifact(path: &Path) -> String {
     content
 }
 
-/// Concatenate every file under a directory-style report (md, html).
-fn read_tree(dir: &Path) -> String {
-    assert!(
-        dir.is_dir(),
-        "report directory {} was not produced",
-        dir.display()
-    );
-    let mut buf = String::new();
-    for entry in std::fs::read_dir(dir).expect("read report dir") {
-        let entry = entry.expect("dir entry");
-        if entry.file_type().expect("file type").is_dir() {
-            buf.push_str(&read_tree(&entry.path()));
-        } else {
-            buf.push_str(&read_artifact(&entry.path()));
-        }
-    }
-    assert!(
-        !buf.is_empty(),
-        "report directory {} is empty",
-        dir.display()
-    );
-    buf
-}
-
 /// Copy the fixture into a fresh tempdir so scans never touch the tracked tree.
 fn prepare_fixture() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -195,39 +85,10 @@ fn prepare_fixture() -> tempfile::TempDir {
     tmp
 }
 
-/// Scan + audit + every format. Returns format name → output text.
-fn render_all_formats(project: &Path) -> BTreeMap<&'static str, String> {
-    let root = project.to_str().unwrap();
-    run_noupling(&["scan", root]);
-    let text = run_noupling(&["audit", root]);
-    run_noupling(&["report", "--format", "all", root]);
-    run_noupling(&["report", "--format", "explorer", root]);
-
-    let out = project.join(".noupling");
-    let file = |name: &str| read_artifact(&out.join(name));
-
-    let mut outputs = BTreeMap::new();
-    outputs.insert("text", text);
-    outputs.insert("json", file("report.json"));
-    outputs.insert("xml", file("report.xml"));
-    outputs.insert("sonar", file("noupling-sonar.json"));
-    outputs.insert("md", read_tree(&out.join("report-md")));
-    outputs.insert("html", read_tree(&out.join("report")));
-    outputs.insert("dashboard", file("dashboard.html"));
-    outputs.insert("bundle", file("bundle.html"));
-    outputs.insert("pr", file("pr.md"));
-    outputs.insert("briefing", file("briefing.md"));
-    outputs.insert("mermaid", file("report.mermaid"));
-    outputs.insert("dot", file("report.dot"));
-    outputs.insert("strategy", file("strategy.html"));
-    outputs.insert("explorer", explorer_contract(&file("explorer.html")));
-    outputs
-}
-
 /// The Explorer bundles its field guide and help prose, which name every
 /// Issue kind regardless of what the audit found. Match only the embedded
 /// Data Contract so the row reflects data, not documentation.
-fn explorer_contract(html: &str) -> String {
+fn explorer_contract(html: &str) -> serde_json::Value {
     let open = r#"<script id="noupling-data" type="application/json">"#;
     let start = html
         .find(open)
@@ -237,102 +98,193 @@ fn explorer_contract(html: &str) -> String {
         .find("</script>")
         .map(|j| start + j)
         .expect("noupling-data script is closed");
-    html[start..end].to_string()
+    serde_json::from_str(&html[start..end]).expect("contract parses")
 }
 
-fn kinds_mentioned(output: &str) -> Vec<&'static str> {
-    let lower = output.to_lowercase();
-    KINDS
+/// The `D = {…};` / `rawData = {…};` block a single-file HTML report
+/// embeds. CRLF-safe.
+fn embedded_json(html: &str, assignment: &str) -> serde_json::Value {
+    let start = html
+        .find(assignment)
+        .unwrap_or_else(|| panic!("no `{assignment}` block"))
+        + assignment.len();
+    let rest = &html[start..];
+    let end = rest
+        .find(";\r")
+        .or_else(|| rest.find(";\n"))
+        .expect("assignment terminated");
+    serde_json::from_str(&rest[..end]).expect("embedded JSON parses")
+}
+
+/// Kind ids present in an `issues` array of Issue cards.
+fn kinds_in_issue_cards(issues: &serde_json::Value) -> BTreeSet<String> {
+    issues
+        .as_array()
+        .expect("issues array")
         .iter()
-        .filter(|(_, markers)| markers.iter().any(|m| lower.contains(m)))
-        .map(|(kind, _)| *kind)
+        .map(|i| i["kind"].as_str().expect("kind").to_string())
         .collect()
 }
 
-fn format_matrix(actual: &BTreeMap<&str, Vec<&str>>) -> String {
-    const COL: usize = 10;
-    let kinds = all_kinds();
-    let mut s = format!("{:<12}", "format");
-    for k in &kinds {
-        s.push_str(&format!("{:<COL$}", &k[..k.len().min(COL - 1)]));
-    }
-    s.push('\n');
-    for (fmt, mentioned) in actual {
-        s.push_str(&format!("{fmt:<12}"));
-        for k in &kinds {
-            let mark = if mentioned.contains(k) { "X" } else { "." };
-            s.push_str(&format!("{mark:<COL$}"));
-        }
-        s.push('\n');
-    }
-    s
+/// Assert that `present(kind)` holds for every required kind.
+fn assert_each_kind(format: &str, required: &[IssueKind], present: impl Fn(IssueKind) -> bool) {
+    let missing: Vec<&str> = required
+        .iter()
+        .copied()
+        .filter(|k| !present(*k))
+        .map(IssueKind::id)
+        .collect();
+    assert!(missing.is_empty(), "{format} must carry {missing:?}");
+}
+
+/// A card-rendering text format shows `<BAND><sep><Kind name>:` per card
+/// (`[HIGH] Cycle:` in text / md / briefing, a band chip then the kind in
+/// html). Only real cards match; legends and count tables do not.
+fn has_card(output: &str, sep: &str, kind: IssueKind) -> bool {
+    ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+        .iter()
+        .any(|band| output.contains(&format!("{band}{sep}{}:", kind.name())))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
-/// The fixture's contract: `audit` surfaces every Issue kind.
+/// The format-class rule, asserted per format against its data. The first
+/// assertion doubles as the fixture's own contract: `audit` surfaces every
+/// Issue kind.
 #[test]
-fn fixture_audit_surfaces_every_issue_kind() {
+fn every_format_obeys_its_format_class_rule() {
     let tmp = prepare_fixture();
-    let root = tmp.path().to_str().unwrap();
+    let project = tmp.path();
+    let root = project.to_str().unwrap();
     run_noupling(&["scan", root]);
-    let text = run_noupling(&["audit", root]);
+    run_noupling(&["report", "--format", "all", root]);
+    run_noupling(&["report", "--format", "explorer", root]);
+    let out = project.join(".noupling");
+    let file = |name: &str| read_artifact(&out.join(name));
+    let all = &IssueKind::ALL;
 
-    let found = kinds_mentioned(&text);
-    let missing: Vec<_> = all_kinds()
-        .into_iter()
-        .filter(|k| !found.contains(k))
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "audit output is missing Issue kinds {:?}\n--- audit output ---\n{}",
-        missing,
-        text
-    );
-}
+    // ── Issue-listing formats: every kind ──
+    // report.txt is the same text `audit` prints (the Text adapter).
+    let text = file("report.txt");
+    assert_each_kind("text", all, |k| has_card(&text, "] ", k));
 
-/// The coverage matrix: which Issue kinds each format mentions.
-#[test]
-fn every_format_matches_the_expected_issue_kind_coverage() {
-    let tmp = prepare_fixture();
-    let outputs = render_all_formats(tmp.path());
-
-    let actual: BTreeMap<&str, Vec<&str>> = outputs
-        .iter()
-        .map(|(fmt, out)| (*fmt, kinds_mentioned(out)))
-        .collect();
-
-    let mut mismatches = Vec::new();
-    for (fmt, expected) in EXPECTED {
-        let got = actual
-            .get(fmt)
-            .unwrap_or_else(|| panic!("format {fmt} was not rendered"));
-        let mut expected_sorted: Vec<&str> = if *expected == ALL_KINDS {
-            all_kinds()
-        } else {
-            expected.to_vec()
-        };
-        expected_sorted.sort_unstable();
-        let mut got_sorted = got.clone();
-        got_sorted.sort_unstable();
-        if expected_sorted != got_sorted {
-            mismatches.push(format!(
-                "{fmt}: expected {expected_sorted:?}, got {got_sorted:?}"
-            ));
-        }
+    let json: serde_json::Value = serde_json::from_str(&file("report.json")).unwrap();
+    let json_kinds = kinds_in_issue_cards(&json["issues"]);
+    assert_each_kind("json", all, |k| json_kinds.contains(k.id()));
+    for removed in [
+        "coupling_violations",
+        "circular_dependencies",
+        "gravity_wells",
+        "red_flags",
+        "stability_violations",
+        "distance",
+        "cohesion",
+    ] {
+        assert!(
+            json.get(removed).is_none(),
+            "report.json must not carry the removed per-kind array `{removed}` (ADR 0002)"
+        );
     }
-    let rendered: Vec<&str> = EXPECTED.iter().map(|(f, _)| *f).collect();
-    let extra: Vec<&&str> = actual.keys().filter(|k| !rendered.contains(k)).collect();
-    assert!(
-        extra.is_empty(),
-        "formats rendered but missing from EXPECTED: {extra:?}"
-    );
-    assert!(
-        mismatches.is_empty(),
-        "Issue-kind coverage drifted from EXPECTED:\n{}\n\nactual matrix:\n{}",
-        mismatches.join("\n"),
-        format_matrix(&actual)
-    );
+    for kept in ["hotspots", "abstractness", "instability", "directory_tree"] {
+        assert!(json.get(kept).is_some(), "Metric array `{kept}` stays");
+    }
+
+    let xml = file("report.xml");
+    assert_each_kind("xml", all, |k| {
+        xml.contains(&format!("<issue kind=\"{}\"", k.id()))
+    });
+
+    let sonar: serde_json::Value = serde_json::from_str(&file("noupling-sonar.json")).unwrap();
+    let rule_ids: BTreeSet<String> = sonar["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|i| i["ruleId"].as_str().map(str::to_string))
+        .collect();
+    assert_each_kind("sonar", all, |k| {
+        rule_ids.contains(&format!("noupling:{}", k.id()))
+    });
+
+    // Directory-tree reports: the root page must carry every kind itself.
+    let md = file("report-md/README.md");
+    assert_each_kind("md", all, |k| has_card(&md, "] ", k));
+    let html = file("report/index.html");
+    assert_each_kind("html", all, |k| has_card(&html, "</span> ", k));
+
+    let dashboard = embedded_json(&file("dashboard.html"), "const D = ");
+    let dashboard_kinds = kinds_in_issue_cards(&dashboard["issues"]);
+    assert_each_kind("dashboard", all, |k| dashboard_kinds.contains(k.id()));
+
+    // pr summarises: every kind named with a non-zero count on the by-kind line.
+    let pr = file("pr.md");
+    let by_kind = pr
+        .lines()
+        .find(|l| l.starts_with("**By kind:**"))
+        .expect("pr carries a by-kind line");
+    assert_each_kind("pr", all, |k| {
+        by_kind
+            .split(" · ")
+            .any(|cell| cell.contains(k.name()) && !cell.trim_end().ends_with(" 0"))
+    });
+
+    // briefing: per-kind rows in the summary table.
+    let briefing = file("briefing.md");
+    assert_each_kind("briefing", all, |k| {
+        briefing.contains(&format!("{} | ", k.name()))
+    });
+
+    let explorer = explorer_contract(&file("explorer.html"));
+    let explorer_kinds = kinds_in_issue_cards(&explorer["issues"]);
+    assert_each_kind("explorer", all, |k| explorer_kinds.contains(k.id()));
+    assert!(explorer.get("gravity_wells").is_none() && explorer.get("red_flags").is_none());
+
+    // ── Graph formats: every edge-shaped kind accented on the drawing ──
+    // mermaid: one arrow shape per kind on edge lines (legend lines are `%%`).
+    let mermaid = file("report.mermaid");
+    let arrow = |k: IssueKind| match k {
+        IssueKind::Cycle => " -.->",
+        IssueKind::RuleViolation => " --x",
+        IssueKind::LayerViolation => " ==>",
+        IssueKind::CouplingViolation => " -->",
+        IssueKind::StabilityViolation => " --o",
+        _ => unreachable!("node-shaped kinds are not drawn"),
+    };
+    assert_each_kind("mermaid", &EDGE_SHAPED_KINDS, |k| {
+        mermaid
+            .lines()
+            .any(|l| !l.trim_start().starts_with("%%") && l.contains(arrow(k)))
+    });
+
+    // dot: accented edges carry a tooltip naming the kind (legend edges do not).
+    let dot = file("report.dot");
+    assert_each_kind("dot", &EDGE_SHAPED_KINDS, |k| {
+        dot.contains(&format!("tooltip=\"{}", k.name()))
+    });
+
+    let bundle = embedded_json(&file("bundle.html"), "const rawData = ");
+    let bundle_kinds: BTreeSet<String> = bundle["issue_edges"]
+        .as_array()
+        .expect("issue_edges")
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap().to_string())
+        .collect();
+    assert_each_kind("bundle", &EDGE_SHAPED_KINDS, |k| {
+        bundle_kinds.contains(k.id())
+    });
+
+    // ── Trend format: a series per kind with a recorded, non-zero count ──
+    let strategy = embedded_json(&file("strategy.html"), "const D = ");
+    let series = strategy["issue_kind_series"]
+        .as_array()
+        .expect("issue_kind_series");
+    assert_each_kind("strategy", all, |k| {
+        series.iter().any(|s| {
+            s["kind"] == k.id()
+                && s["counts"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|n| n.as_u64().unwrap_or(0) > 0))
+        })
+    });
 }
 
 /// The Explorer's Issues are the same cards as every other format: the
@@ -346,7 +298,7 @@ fn explorer_and_text_report_share_issue_wording() {
     let text = run_noupling(&["audit", root]);
     run_noupling(&["report", "--format", "explorer", root]);
     let html = read_artifact(&tmp.path().join(".noupling").join("explorer.html"));
-    let contract: serde_json::Value = serde_json::from_str(&explorer_contract(&html)).unwrap();
+    let contract = explorer_contract(&html);
 
     let issues = contract["issues"].as_array().expect("issues array");
     assert_eq!(contract["format_version"], 2);

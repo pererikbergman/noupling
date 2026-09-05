@@ -1,6 +1,6 @@
 //! Interactive Technical Leader Dashboard.
 
-use noupling_core::analyzer::{AuditResult, IssueCard, IssueKind};
+use noupling_core::analyzer::{common_parent_dir, AuditResult, IssueCard, IssueKind};
 use noupling_core::core::{Dependency, Module};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
@@ -150,24 +150,6 @@ pub fn generate_dashboard(
     Ok(())
 }
 
-fn common_parent(a: &str, b: &str) -> String {
-    let a_parts: Vec<&str> = a.split('/').collect();
-    let b_parts: Vec<&str> = b.split('/').collect();
-    let mut len = 0;
-    for (x, y) in a_parts.iter().zip(b_parts.iter()) {
-        if x == y {
-            len += 1;
-        } else {
-            break;
-        }
-    }
-    if len > 0 {
-        a_parts[..len].join("/")
-    } else {
-        String::new()
-    }
-}
-
 fn build_dashboard_data(
     modules: &[Module],
     dependencies: &[Dependency],
@@ -182,7 +164,7 @@ fn build_dashboard_data(
     let violation_parents: Vec<String> = result
         .violations
         .iter()
-        .map(|v| common_parent(&v.dir_a, &v.dir_b))
+        .map(|v| common_parent_dir(&[&v.dir_a, &v.dir_b]))
         .collect();
 
     // Find common prefix to get meaningful top-level directories (matching HTML report)

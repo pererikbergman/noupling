@@ -1,6 +1,6 @@
 //! Zoomable sunburst with aggregated dependency edges.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{common_parent_dir, AuditResult};
 use noupling_core::core::{Dependency, Module};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -160,7 +160,7 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
     for v in &result.violations {
         let a = strip_path_prefix(&v.dir_a, &common);
         let b = strip_path_prefix(&v.dir_b, &common);
-        let parent = common_parent_of(&a, &b);
+        let parent = common_parent_dir(&[&a, &b]);
         if !parent.is_empty() {
             *dir_violation_severity.entry(parent).or_insert(0.0) += v.severity;
         }
@@ -270,8 +270,10 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
     // Accented edges, one per edge-shaped Issue. Cycle hops use the hop
     // files when known (they aggregate onto the ring's directories at any
     // zoom level), otherwise the directory pair.
-    let mut issue_edges: Vec<IssueEdgeOut> = Vec::new();
-    let mut seen: HashSet<(String, String, &'static str)> = HashSet::new();
+    // One entry per (from, to, kind); baselined only when every Issue of
+    // that kind on the pair is baselined — the same folding graph.rs uses.
+    let mut by_key: std::collections::BTreeMap<(String, String, &'static str), IssueEdgeOut> =
+        std::collections::BTreeMap::new();
     for e in super::graph::issue_edges(result) {
         let (f, t) = (
             strip_path_prefix(&e.from, &common),
@@ -280,16 +282,18 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
         if f.is_empty() || t.is_empty() {
             continue;
         }
-        if seen.insert((f.clone(), t.clone(), e.kind.id())) {
-            issue_edges.push(IssueEdgeOut {
+        by_key
+            .entry((f.clone(), t.clone(), e.kind.id()))
+            .and_modify(|out| out.baselined &= e.baselined)
+            .or_insert(IssueEdgeOut {
                 from: f,
                 to: t,
                 kind: e.kind.id(),
                 kind_name: e.kind.name(),
                 baselined: e.baselined,
             });
-        }
     }
+    let issue_edges: Vec<IssueEdgeOut> = by_key.into_values().collect();
 
     // Build per-cycle hop lists (directories + import counts) so the JS
     // can project each cycle onto the current zoom level and highlight
@@ -474,25 +478,6 @@ fn find_common_path_prefix(paths: &[&str]) -> String {
 }
 
 /// Return the deepest common parent directory of two paths.
-/// e.g. ("a/b/c", "a/b/d") -> "a/b"
-fn common_parent_of(a: &str, b: &str) -> String {
-    let a_parts: Vec<&str> = a.split('/').collect();
-    let b_parts: Vec<&str> = b.split('/').collect();
-    let mut len = 0;
-    for (x, y) in a_parts.iter().zip(b_parts.iter()) {
-        if x == y {
-            len += 1;
-        } else {
-            break;
-        }
-    }
-    if len > 0 {
-        a_parts[..len].join("/")
-    } else {
-        String::new()
-    }
-}
-
 fn strip_path_prefix(path: &str, prefix: &str) -> String {
     if prefix.is_empty() {
         return path.to_string();

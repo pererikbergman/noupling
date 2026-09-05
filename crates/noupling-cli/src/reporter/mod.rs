@@ -42,210 +42,11 @@ pub use strategy::generate_strategy_report;
 pub use text::{format_monorepo_text, format_text};
 pub use xml::format_xml;
 
-// ---- test-only single-file Markdown emitter ----
-//
-// The production multi-file emitter is `md::generate_markdown_report`.
-// This single-file variant exists only so the markdown_* smoke tests
-// can assert on a string without writing to disk; it's kept here so
-// the tests sit alongside the public re-exports they exercise.
-
-#[cfg(test)]
-use noupling_core::analyzer::AuditResult;
-#[cfg(test)]
-use noupling_core::core::Module;
-
-#[cfg(test)]
-fn _format_markdown_single(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> String {
-    let report = JsonReport::from_audit(modules, result, snapshot_id);
-    let mut md = String::new();
-
-    // Header
-    md.push_str("# noupling Audit Report\n\n");
-    md.push_str(&format!("**Snapshot:** `{}`\n\n", snapshot_id));
-
-    // Summary
-    md.push_str("## Summary\n\n");
-    md.push_str("| Metric | Value |\n");
-    md.push_str("| :--- | :--- |\n");
-    md.push_str(&format!("| Health Score | {:.1}/100 |\n", report.score));
-    if report.tri > 0.0 {
-        md.push_str(&format!("| Total Risk Index (TRI) | {:.1} |\n", report.tri));
-    }
-    md.push_str(&format!("| Total Modules | {} |\n", report.total_modules));
-    md.push_str(&format!(
-        "| Critical Violations | {} |\n",
-        report.critical_violations
-    ));
-    md.push_str(&format!(
-        "| Circular Dependencies | {} |\n",
-        report.total_circular
-    ));
-    md.push_str(&format!(
-        "| Coupling Violations | {} |\n",
-        report.total_coupling
-    ));
-
-    // Metrics guide
-    md.push_str("\n## Metrics Guide\n\n");
-    md.push_str("| Metric | Description |\n");
-    md.push_str("| :--- | :--- |\n");
-    md.push_str("| **Health Score** | Overall codebase health (0-100). Formula: `100 × (1 - TRI / (modules × max_weight))` |\n");
-    md.push_str("| **TRI** | Total Risk Index — sum of all violation RRIs. Lower is better |\n");
-    md.push_str("| **RRI** | Relationship Risk Index — risk for one violation. `direction_weight × number_of_imports` |\n");
-    md.push_str("| **Severity** | Legacy metric based on depth. Being replaced by RRI |\n");
-    md.push_str("| **Total XS** | Total imports to remove to fix all violations |\n\n");
-    md.push_str("**Direction types and weights:**\n\n");
-    md.push_str("| Symbol | Direction | Weight | Meaning |\n");
-    md.push_str("| :--- | :--- | :--- | :--- |\n");
-    md.push_str("| ↓ | Downward | 2 | Parent imports child — normal architectural flow |\n");
-    md.push_str("| ↔ | Sibling | 4 | Same-level directories import each other — missing shared abstraction |\n");
-    md.push_str("| ↑ | Upward | 6 | Child imports parent — destroys module reusability |\n");
-    md.push_str("| ↻ | Circular | 10 | Mutual or transitive cycle — breaks builds, makes testing impossible |\n");
-
-    // Circular dependencies grouped by order
-    if !report.circular_dependencies.is_empty() {
-        md.push_str("\n## Circular Dependencies\n\n");
-        md.push_str("Modules that depend on each other in a loop. These have the highest risk weight (10) because they break build isolation and make unit testing impossible.\n");
-        for (label, cycles) in &report.circular_dependencies {
-            md.push_str(&format!("\n### {} ({} found)\n\n", label, cycles.len()));
-            for (idx, cycle) in cycles.iter().enumerate() {
-                // Short cycle path
-                let short = cycle.cycle_short_path.join(" -> ");
-                md.push_str(&format!(
-                    "**Cycle {}** (severity: {:.2}): `{}`\n\n",
-                    idx + 1,
-                    cycle.severity,
-                    short
-                ));
-
-                // Hop details table
-                md.push_str("| Directory | File | Target |\n");
-                md.push_str("| :--- | :--- | :--- |\n");
-                for hop in &cycle.hop_files {
-                    let from_short = std::path::Path::new(&hop.from_file)
-                        .file_name()
-                        .and_then(|f| f.to_str())
-                        .unwrap_or(&hop.from_file);
-                    let to_short = if hop.to_file.is_empty() {
-                        "-".to_string()
-                    } else {
-                        std::path::Path::new(&hop.to_file)
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or(&hop.to_file)
-                            .to_string()
-                    };
-                    md.push_str(&format!(
-                        "| {} | `{}` | `{}` |\n",
-                        hop.from_dir, from_short, to_short
-                    ));
-                }
-                md.push('\n');
-
-                // Full paths
-                md.push_str("<details><summary>Full paths</summary>\n\n");
-                for hop in &cycle.hop_files {
-                    if !hop.from_file.is_empty() {
-                        md.push_str(&format!("- **{}**: `{}`\n", hop.from_dir, hop.from_file));
-                    }
-                }
-                md.push_str("\n</details>\n\n");
-            }
-        }
-    }
-
-    // Coupling violations
-    if !report.coupling_violations.is_empty() {
-        md.push_str("## Coupling Violations\n\n");
-        md.push_str("Sibling directories that import each other. Each violation's **RRI** (Relationship Risk Index) = direction weight × number of imports. **Direction** shows the dependency type (↓ downward, ↔ sibling, ↑ upward, ↻ circular).\n\n");
-        md.push_str("| Severity | RRI | Direction | From | To | Dir A | Dir B | Depth |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
-        for v in &report.coupling_violations {
-            let from_short = std::path::Path::new(&v.from_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.from_module);
-            let to_short = std::path::Path::new(&v.to_module)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.to_module);
-            let dir_a_short = std::path::Path::new(&v.dir_a)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.dir_a);
-            let dir_b_short = std::path::Path::new(&v.dir_b)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(&v.dir_b);
-            md.push_str(&format!(
-                "| {:.2} | {:.0} | {} | `{}` | `{}` | {} | {} | {} |\n",
-                v.severity,
-                v.rri,
-                v.direction,
-                from_short,
-                to_short,
-                dir_a_short,
-                dir_b_short,
-                v.depth
-            ));
-        }
-        md.push('\n');
-    }
-
-    // Directory tree
-    md.push_str("## Directory Tree\n\n");
-    md.push_str("| Path | Modules | Score | Violations | Circular |\n");
-    md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
-    for dir in &report.directory_tree {
-        let warning = if dir.has_violations { " !" } else { "" };
-        md.push_str(&format!(
-            "| `{}`{} | {} | {:.1} | {} | {} |\n",
-            dir.path,
-            warning,
-            dir.module_count,
-            dir.score,
-            dir.violations_count,
-            dir.circular_count,
-        ));
-    }
-
-    // Gravity wells
-    if !report.gravity_wells.is_empty() {
-        md.push_str("\n## Gravity Wells\n\n");
-        md.push_str("Modules with disproportionately high aggregate risk (total RRI > 2× median). These \"God Objects\" pull the system into their orbit — changing them affects many other modules. Consider breaking them into smaller, focused units.\n\n");
-        md.push_str("| Module | Total RRI | Relationships | Directions |\n");
-        md.push_str("| :--- | :--- | :--- | :--- |\n");
-        for g in &report.gravity_wells {
-            md.push_str(&format!(
-                "| `{}` | {:.0} | {} | {} |\n",
-                g.module_path, g.total_rri, g.relationship_count, g.direction_count,
-            ));
-        }
-        md.push('\n');
-    }
-
-    // Red flags
-    if !report.red_flags.is_empty() {
-        md.push_str("\n## Red Flags\n\n");
-        md.push_str("Architectural anti-patterns that signal structural problems:\n");
-        md.push_str("- **FusedSibling**: Two modules with unusually high coupling density — consider merging or extracting a shared layer\n");
-        md.push_str("- **TrappedChild**: A module that imports from its parent — cannot be reused independently\n\n");
-        for f in &report.red_flags {
-            md.push_str(&format!(
-                "- **{}** (RRI: {:.0}) {}\n",
-                f.flag_type, f.rri, f.recommendation,
-            ));
-        }
-        md.push('\n');
-    }
-
-    md
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use noupling_core::analyzer::{AuditResultBuilder, CouplingViolation};
+    use noupling_core::core::Module;
 
     fn make_violation(from: &str, to: &str, severity: f64, depth: i32) -> CouplingViolation {
         CouplingViolation {
@@ -347,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn json_report_includes_stability_violations() {
+    fn json_report_stability_violations_live_in_issues_not_a_per_kind_array() {
         use noupling_core::analyzer::StabilityViolation;
         let modules = vec![];
         let result = AuditResultBuilder::new()
@@ -362,12 +163,18 @@ mod tests {
         let report = JsonReport::from_audit(&modules, &result, "snap-s");
         let json = report.to_json().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let arr = parsed["stability_violations"]
+        // ADR 0002 / #350: the per-kind array is gone; filter `issues` by kind.
+        assert!(parsed.get("stability_violations").is_none());
+        let stability: Vec<&serde_json::Value> = parsed["issues"]
             .as_array()
-            .expect("stability_violations array");
-        assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0]["from_dir"], "src/stable");
-        assert_eq!(arr[0]["to_dir"], "src/unstable");
+            .unwrap()
+            .iter()
+            .filter(|i| i["kind"] == "stability_violation")
+            .collect();
+        assert_eq!(stability.len(), 1);
+        assert_eq!(stability[0]["subject"]["from"], "src/stable");
+        assert_eq!(stability[0]["subject"]["to"], "src/unstable");
+        assert_eq!(stability[0]["detail"]["from_instability"], 0.17);
     }
 
     #[test]
@@ -829,6 +636,51 @@ mod tests {
         );
     }
 
+    /// Nested detail payloads (a Cycle's hops) survive into XML as child
+    /// elements, so the removed `<circular-dependencies>` loses nothing.
+    #[test]
+    fn xml_detail_carries_nested_payloads_as_child_elements() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
+        let cycle = CouplingViolation {
+            dir_a: "src/p".into(),
+            dir_b: "src/q".into(),
+            from_module: "src/p".into(),
+            to_module: "src/q".into(),
+            line_number: 0,
+            depth: 1,
+            weight: 0,
+            severity: 0.6,
+            direction: DependencyDirection::Circular,
+            rri: 20.0,
+            is_circular: true,
+            cycle_path: vec!["src/p".into(), "src/q".into(), "src/p".into()],
+            cycle_hop_files: vec![
+                ("src/p/a.rs".into(), "src/q/b.rs".into(), 3),
+                ("src/q/b.rs".into(), "src/p/a.rs".into(), 9),
+            ],
+            cycle_order: 2,
+            cycle_hop_counts: vec![1, 3],
+            weakest_link: Some("src/p -> src/q (1 import)".into()),
+            break_cost: 1,
+            score_impact: 0.0,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_violations(vec![cycle])
+            .build();
+        let xml = format_xml(&[], &result, "snap-x");
+        assert!(xml.contains("<detail break_cost=\"1\""), "{xml}");
+        assert!(
+            xml.contains(
+                "<item from_file=\"src/p/a.rs\" line_number=\"3\" to_file=\"src/q/b.rs\"/>"
+            ),
+            "hop files as child items: {xml}"
+        );
+        assert!(xml.contains("<hop_import_counts>"), "{xml}");
+        assert!(xml.contains("<item>3</item>"), "{xml}");
+        assert!(xml.contains("</detail>"), "{xml}");
+    }
+
     /// Sonar emits one generic issue per Issue, for every kind, with the
     /// band mapped to a Sonar severity.
     #[test]
@@ -1018,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn json_report_cohesion_array_includes_kind_and_nullable_cohesion() {
+    fn json_report_low_cohesion_lives_in_issues_and_containers_never_flag() {
         use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};
         let modules = vec![];
         let result = AuditResultBuilder::new()
@@ -1035,8 +887,8 @@ mod tests {
                     dir: "src/scanner".into(),
                     kind: DirectoryKind::Package,
                     n_children: 3,
-                    internal_deps: 2,
-                    cohesion: Some(0.333),
+                    internal_deps: 0,
+                    cohesion: Some(0.0),
                 },
             ])
             .build();
@@ -1045,21 +897,18 @@ mod tests {
         let json = report.to_json().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-        let arr = parsed["cohesion"].as_array().expect("cohesion array");
-        assert_eq!(arr.len(), 2);
-
-        let features = arr.iter().find(|e| e["dir"] == "src/features").unwrap();
-        assert_eq!(features["kind"], "Container");
-        assert!(
-            features["cohesion"].is_null(),
-            "container cohesion must be null"
-        );
-
-        let scanner = arr.iter().find(|e| e["dir"] == "src/scanner").unwrap();
-        assert_eq!(scanner["kind"], "Package");
-        assert_eq!(scanner["n_children"], 3);
-        let val = scanner["cohesion"].as_f64().unwrap();
-        assert!((val - 0.333).abs() < 1e-6);
+        // ADR 0002 / #350: no `cohesion` array; Low Cohesion is an Issue.
+        assert!(parsed.get("cohesion").is_none());
+        let low: Vec<&serde_json::Value> = parsed["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|i| i["kind"] == "low_cohesion")
+            .collect();
+        assert_eq!(low.len(), 1, "the Container (cohesion null) never flags");
+        assert_eq!(low[0]["subject"]["path"], "src/scanner");
+        assert_eq!(low[0]["detail"]["n_children"], 3);
+        assert_eq!(low[0]["detail"]["cohesion"], 0.0);
     }
 
     #[test]
@@ -1163,46 +1012,5 @@ mod tests {
             "missing concrete count: {}",
             text
         );
-    }
-
-    #[test]
-    fn markdown_has_heading_and_summary_table() {
-        let modules = vec![];
-        let result = AuditResultBuilder::new().with_total_modules(5).build();
-
-        let md = _format_markdown_single(&modules, &result, "snap-1");
-        assert!(md.contains("# noupling Audit Report"));
-        assert!(md.contains("| Health Score | 100.0/100 |"));
-    }
-
-    #[test]
-    fn markdown_shows_circular_section() {
-        let modules = vec![];
-        let mut v = make_violation("a.rs", "b.rs", 1.0, 0);
-        v.is_circular = true;
-        v.cycle_order = 2;
-        v.cycle_path = vec![
-            "dir_a".to_string(),
-            "dir_b".to_string(),
-            "dir_a".to_string(),
-        ];
-        let result = AuditResultBuilder::new()
-            .with_violations(vec![v])
-            .with_score(50.0)
-            .with_total_modules(2)
-            .build();
-
-        let md = _format_markdown_single(&modules, &result, "snap-3");
-        assert!(md.contains("## Circular Dependencies"));
-        assert!(md.contains("Mutual Dependencies (Order 2)"));
-    }
-
-    #[test]
-    fn markdown_has_directory_tree() {
-        let modules = vec![];
-        let result = AuditResultBuilder::new().with_total_modules(3).build();
-
-        let md = _format_markdown_single(&modules, &result, "snap-4");
-        assert!(md.contains("## Directory Tree"));
     }
 }

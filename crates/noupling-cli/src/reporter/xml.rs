@@ -1,7 +1,9 @@
 //! XML format adapter. Reads the canonical `JsonReport` and serialises
 //! it as a tabular `<noupling-report>` document: the shared `<issues>`
-//! list (every Issue kind, ADR 0002) plus the legacy circular, coupling,
-//! directory-tree, gravity-well, and red-flag children.
+//! list (every Issue kind, ADR 0002) plus the directory tree. The
+//! per-kind `<circular-dependencies>`, `<coupling-violations>`,
+//! `<gravity-wells>` and `<red-flags>` children were removed in 0.9.0
+//! (#350); read `<issues>` and filter on `kind`.
 
 use noupling_core::analyzer::{AuditResult, SubjectCard};
 use noupling_core::core::Module;
@@ -21,8 +23,7 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         report.critical_violations, report.total_circular, report.total_coupling,
     ));
 
-    // Issues — every kind, from the shared Issue cards (ADR 0002). The
-    // per-kind sections below stay until #350 removes them.
+    // Issues — every kind, from the shared Issue cards (ADR 0002).
     xml.push_str(&format!("  <issues count=\"{}\">\n", report.issues.len()));
     for card in &report.issues {
         xml.push_str(&format!(
@@ -56,91 +57,13 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
             xml_escape(&card.reason),
             xml_escape(&card.recommendation),
         ));
-        // Scalar detail fields become attributes; nested ones (cycle hops)
-        // are the JSON report's job.
-        let mut attrs = String::new();
-        if let Some(obj) = card.detail.as_object() {
-            for (k, v) in obj {
-                let text = match v {
-                    serde_json::Value::String(t) => t.clone(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::Bool(b) => b.to_string(),
-                    serde_json::Value::Null
-                    | serde_json::Value::Array(_)
-                    | serde_json::Value::Object(_) => continue,
-                };
-                attrs.push_str(&format!(" {}=\"{}\"", xml_escape(k), xml_escape(&text)));
-            }
-        }
-        xml.push_str(&format!("      <detail{}/>\n", attrs));
+        // Scalar detail fields become attributes of <detail/>; nested ones
+        // (a Cycle's hops and hop counts, a Red Flag's modules) become child
+        // elements so XML consumers lose nothing the JSON card carries.
+        xml.push_str(&detail_element(&card.detail, "      "));
         xml.push_str("    </issue>\n");
     }
     xml.push_str("  </issues>\n");
-
-    // Circular dependencies
-    if !report.circular_dependencies.is_empty() {
-        xml.push_str("  <circular-dependencies>\n");
-        for (label, cycles) in &report.circular_dependencies {
-            xml.push_str(&format!(
-                "    <group label=\"{}\" count=\"{}\">\n",
-                xml_escape(label),
-                cycles.len()
-            ));
-            for cycle in cycles {
-                let wl_attr = cycle
-                    .weakest_link
-                    .as_ref()
-                    .map(|wl| {
-                        format!(
-                            " weakestLink=\"{}\" breakCost=\"{}\"",
-                            xml_escape(wl),
-                            cycle.break_cost
-                        )
-                    })
-                    .unwrap_or_default();
-                xml.push_str(&format!(
-                    "      <cycle order=\"{}\" severity=\"{:.2}\"{}>\n",
-                    cycle.cycle_order, cycle.severity, wl_attr
-                ));
-                xml.push_str("        <path>\n");
-                for dir in &cycle.cycle_path {
-                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
-                }
-                xml.push_str("        </path>\n");
-                xml.push_str("        <short-path>\n");
-                for dir in &cycle.cycle_short_path {
-                    xml.push_str(&format!("          <dir>{}</dir>\n", xml_escape(dir)));
-                }
-                xml.push_str("        </short-path>\n");
-                xml.push_str("        <hops>\n");
-                for hop in &cycle.hop_files {
-                    xml.push_str(&format!(
-                        "          <hop fromDir=\"{}\" fromFile=\"{}\" toFile=\"{}\"/>\n",
-                        xml_escape(&hop.from_dir),
-                        xml_escape(&hop.from_file),
-                        xml_escape(&hop.to_file),
-                    ));
-                }
-                xml.push_str("        </hops>\n");
-                xml.push_str("      </cycle>\n");
-            }
-            xml.push_str("    </group>\n");
-        }
-        xml.push_str("  </circular-dependencies>\n");
-    }
-
-    // Coupling violations
-    if !report.coupling_violations.is_empty() {
-        xml.push_str("  <coupling-violations>\n");
-        for v in &report.coupling_violations {
-            xml.push_str(&format!(
-                "    <violation severity=\"{:.2}\" rri=\"{:.1}\" direction=\"{}\" depth=\"{}\" fromModule=\"{}\" toModule=\"{}\" dirA=\"{}\" dirB=\"{}\"/>\n",
-                v.severity, v.rri, xml_escape(&v.direction), v.depth, xml_escape(&v.from_module), xml_escape(&v.to_module),
-                xml_escape(&v.dir_a), xml_escape(&v.dir_b),
-            ));
-        }
-        xml.push_str("  </coupling-violations>\n");
-    }
 
     // Directory tree
     xml.push_str("  <directory-tree>\n");
@@ -160,34 +83,65 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
     }
     xml.push_str("  </directory-tree>\n");
 
-    // Gravity wells
-    if !report.gravity_wells.is_empty() {
-        xml.push_str("  <gravity-wells>\n");
-        for g in &report.gravity_wells {
-            xml.push_str(&format!(
-                "    <well module=\"{}\" totalRri=\"{:.1}\" relationships=\"{}\" directions=\"{}\"/>\n",
-                xml_escape(&g.module_path), g.total_rri, g.relationship_count, g.direction_count,
-            ));
-        }
-        xml.push_str("  </gravity-wells>\n");
-    }
-
-    // Red flags
-    if !report.red_flags.is_empty() {
-        xml.push_str("  <red-flags>\n");
-        for f in &report.red_flags {
-            xml.push_str(&format!(
-                "    <flag type=\"{}\" rri=\"{:.1}\">{}</flag>\n",
-                xml_escape(&f.flag_type),
-                f.rri,
-                xml_escape(&f.recommendation),
-            ));
-        }
-        xml.push_str("  </red-flags>\n");
-    }
-
     xml.push_str("</noupling-report>\n");
     xml
+}
+
+/// `<detail a="1" b="x">` with one child element per nested value:
+/// arrays of objects → `<name><item k="v" …/></name>`, arrays of scalars →
+/// `<name><item>v</item></name>`, objects → `<name k="v" …/>`.
+fn detail_element(detail: &serde_json::Value, indent: &str) -> String {
+    use serde_json::Value;
+    let scalar = |v: &Value| -> Option<String> {
+        match v {
+            Value::String(t) => Some(t.clone()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Bool(b) => Some(b.to_string()),
+            Value::Null | Value::Array(_) | Value::Object(_) => None,
+        }
+    };
+    let attrs_of = |obj: &serde_json::Map<String, Value>| -> String {
+        obj.iter()
+            .filter_map(|(k, v)| {
+                scalar(v).map(|t| format!(" {}=\"{}\"", xml_escape(k), xml_escape(&t)))
+            })
+            .collect()
+    };
+    let Some(obj) = detail.as_object() else {
+        return format!("{indent}<detail/>\n");
+    };
+    let nested: Vec<(&String, &Value)> = obj
+        .iter()
+        .filter(|(_, v)| matches!(v, Value::Array(_) | Value::Object(_)))
+        .collect();
+    if nested.is_empty() {
+        return format!("{indent}<detail{}/>\n", attrs_of(obj));
+    }
+    let mut out = format!("{indent}<detail{}>\n", attrs_of(obj));
+    for (name, value) in nested {
+        let name = xml_escape(name);
+        match value {
+            Value::Object(o) => out.push_str(&format!("{indent}  <{name}{}/>\n", attrs_of(o))),
+            Value::Array(items) => {
+                out.push_str(&format!("{indent}  <{name}>\n"));
+                for item in items {
+                    match item {
+                        Value::Object(o) => {
+                            out.push_str(&format!("{indent}    <item{}/>\n", attrs_of(o)))
+                        }
+                        other => out.push_str(&format!(
+                            "{indent}    <item>{}</item>\n",
+                            xml_escape(&scalar(other).unwrap_or_default())
+                        )),
+                    }
+                }
+                out.push_str(&format!("{indent}  </{name}>\n"));
+            }
+            _ => {}
+        }
+    }
+    out.push_str(&format!("{indent}</detail>\n"));
+    out
 }
 
 fn xml_escape(s: &str) -> String {

@@ -151,11 +151,12 @@ fn report_json_produces_parseable_json() {
         "missing/wrong-type 'total_modules'"
     );
     assert!(
-        parsed
-            .get("coupling_violations")
-            .and_then(|v| v.as_array())
-            .is_some(),
-        "missing/wrong-type 'coupling_violations'"
+        parsed.get("issues").and_then(|v| v.as_array()).is_some(),
+        "missing/wrong-type 'issues' (the one Issue array, ADR 0002)"
+    );
+    assert!(
+        parsed.get("coupling_violations").is_none(),
+        "per-kind arrays were removed in 0.9.0 (#350)"
     );
     assert!(
         parsed.get("hotspots").and_then(|v| v.as_array()).is_some(),

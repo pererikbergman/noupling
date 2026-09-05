@@ -114,8 +114,6 @@ const rawData = {json};
 const tooltip = document.getElementById("tooltip");
 const allDeps = rawData.deps;
 const issueEdges = rawData.issue_edges;
-// Drawing precedence when several Issues land on one arc-to-arc edge.
-const KIND_RANK = {{ cycle: 5, rule_violation: 4, layer_violation: 3, coupling_violation: 2, stability_violation: 1 }};
 const allCycles = rawData.cycles || [];
 let currentBeta = 0.85;
 let showViolationsOnly = false;
@@ -331,25 +329,26 @@ function drawEdges() {{
     if (children.length === 0) {{ edgeGroup.selectAll("path").remove(); return; }}
 
     const normalEdges = aggregateEdges(allDeps, children);
-    // Aggregate Issue edges per visible arc pair, keeping the most
-    // structural kind and muting only when every Issue on it is baselined.
+    // Aggregate Issue edges per visible arc pair *and kind* — one accented
+    // arc per kind, so a pair that is both a Coupling and a Stability
+    // Violation shows both (never one kind hiding another). Muted only when
+    // every Issue of that kind on the pair is baselined.
     const vMap = new Map();
     for (const ie of issueEdges) {{
         const from = findOwner(ie.from, children);
         const to = findOwner(ie.to, children);
         if (!from || !to || from === to) continue;
-        const key = from.fullPath + "|" + to.fullPath;
+        const key = from.fullPath + "|" + to.fullPath + "|" + ie.kind;
         const cur = vMap.get(key);
         if (!cur) {{
-            vMap.set(key, {{ from, to, count: 1, kind: ie.kind, kindName: ie.kind_name, baselined: ie.baselined }});
+            vMap.set(key, {{ from, to, count: 1, kind: ie.kind, kindName: ie.kind_name, baselined: ie.baselined, isViolation: true }});
         }} else {{
             cur.count++;
-            if ((KIND_RANK[ie.kind] || 0) > (KIND_RANK[cur.kind] || 0)) {{ cur.kind = ie.kind; cur.kindName = ie.kind_name; }}
             cur.baselined = cur.baselined && ie.baselined;
         }}
     }}
     const vEdges = Array.from(vMap.values());
-    const vByKey = new Map(vEdges.map(e => [e.from.fullPath + "|" + e.to.fullPath, e]));
+    const pairsWithIssues = new Set(vEdges.map(e => e.from.fullPath + "|" + e.to.fullPath));
 
     // Build a set of cycle edge keys so we can suppress duplicate normal/violation
     // rendering of the same arc-to-arc edge — cycle edges take priority and are
@@ -363,15 +362,16 @@ function drawEdges() {{
         }}
     }});
 
-    let displayEdges;
-    if (showViolationsOnly) {{
-        displayEdges = vEdges.map(e => ({{ ...e, isViolation: true }}));
-    }} else {{
-        displayEdges = normalEdges.map(e => {{
-            const v = vByKey.get(e.from.fullPath + "|" + e.to.fullPath);
-            return v ? {{ ...e, isViolation: true, kind: v.kind, kindName: v.kindName, baselined: v.baselined }} : {{ ...e, isViolation: false }};
-        }});
-    }}
+    // Plain dependency arcs for pairs that carry no Issue, then one accented
+    // arc per (pair, kind). In "violations only" mode the plain arcs are dropped.
+    let displayEdges = showViolationsOnly
+        ? [...vEdges]
+        : [
+            ...normalEdges
+                .filter(e => !pairsWithIssues.has(e.from.fullPath + "|" + e.to.fullPath))
+                .map(e => ({{ ...e, isViolation: false }})),
+            ...vEdges,
+        ];
     // Drop normal/violation edges that will be re-rendered as red cycle edges.
     displayEdges = displayEdges.filter(e =>
         !cycleEdgeKeys.has(e.from.fullPath + "|" + e.to.fullPath)
@@ -407,7 +407,8 @@ function drawEdges() {{
             const fromName = d.from.data.name;
             const toName = d.to.data.name;
             const type = d.isViolation ? `<span style="color:#ef4444">${{d.kindName}}${{d.baselined ? " (baselined)" : ""}}</span>` : "dependency";
-            tooltip.innerHTML = `<strong>${{fromName}}</strong> &rarr; <strong>${{toName}}</strong><br>${{d.count}} import${{d.count !== 1 ? "s" : ""}} &middot; ${{type}}`;
+            const what = d.isViolation ? `${{d.count}} issue${{d.count !== 1 ? "s" : ""}}` : `${{d.count}} import${{d.count !== 1 ? "s" : ""}}`;
+            tooltip.innerHTML = `<strong>${{fromName}}</strong> &rarr; <strong>${{toName}}</strong><br>${{what}} &middot; ${{type}}`;
             tooltip.style.opacity = 1;
         }})
         .on("mousemove", (event) => {{

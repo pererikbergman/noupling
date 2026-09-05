@@ -594,6 +594,40 @@ mod tests {
         assert_eq!(plain[0], "src/ring/alpha");
     }
 
+    /// A ring hop with several imports picks the same representative file
+    /// whichever module ids the scan handed out.
+    #[test]
+    fn cycle_hop_files_are_the_smallest_edge_regardless_of_module_ids() {
+        let build = |ids: [&str; 4]| {
+            let modules = vec![
+                make_module(ids[0], "src/ring/alpha/a1.rs"),
+                make_module(ids[1], "src/ring/alpha/a2.rs"),
+                make_module(ids[2], "src/ring/beta/b1.rs"),
+                make_module(ids[3], "src/ring/beta/b2.rs"),
+            ];
+            let deps = vec![
+                make_dep(ids[0], ids[2], 1),
+                make_dep(ids[1], ids[3], 1),
+                make_dep(ids[2], ids[0], 1),
+                make_dep(ids[3], ids[1], 1),
+            ];
+            compute_coupling_violations(&modules, &deps)
+                .into_iter()
+                .find(|v| v.is_circular)
+                .map(|v| v.cycle_hop_files)
+                .expect("ring")
+        };
+        let first = build(["a1", "a2", "b1", "b2"]);
+        for ids in [
+            ["zz", "aa", "mm", "bb"],
+            ["9f8e", "0c0d", "a1b2", "ffff"],
+            ["q", "k", "x", "c"],
+        ] {
+            assert_eq!(build(ids), first);
+        }
+        assert_eq!(first[0].0, "src/ring/alpha/a1.rs");
+    }
+
     #[test]
     fn representative_edge_of_a_pair_is_the_smallest_regardless_of_input_order() {
         let build = |left: &str, r1: &str, r2: &str| {
