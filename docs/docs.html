@@ -403,7 +403,7 @@ noupling audit .</code></pre>
       </table>
 
       <h3 id="issue-card">The <code>issues</code> array (Issue cards)</h3>
-      <p>Every format that carries data — <code>json</code>, <code>xml</code> and <code>sonar</code> today, with the Explorer's embedded Data Contract following in 0.9.0 — lists the same Issues, serialised once as <strong>Issue cards</strong>. In <code>report.json</code> they are the top-level <code>issues</code> array, in canonical order: severity band descending, then kind, then subject path. Filter by <code>kind</code>; every kind is present when the audit found one.</p>
+      <p>Every format that carries data — <code>json</code>, <code>xml</code>, <code>sonar</code>, and the Explorer's embedded Data Contract (each card extended with <code>participants</code>, the node ids it is about) — lists the same Issues, serialised once as <strong>Issue cards</strong>. In <code>report.json</code> they are the top-level <code>issues</code> array, in canonical order: severity band descending, then kind, then subject path. Filter by <code>kind</code>; every kind is present when the audit found one.</p>
 <pre><code>{
   "kind": "cycle",                       // machine id, one of the nine kinds below
   "kind_name": "Cycle",                  // glossary name

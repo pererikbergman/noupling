@@ -125,7 +125,7 @@ fn template_carries_data_injection_contract() {
 }
 
 #[test]
-fn render_embeds_data_contract_with_format_version_1() {
+fn render_embeds_data_contract_with_format_version_2() {
     let (settings, snapshot) = default_inputs();
     let audit = AuditResultBuilder::new().build();
 
@@ -140,7 +140,12 @@ fn render_embeds_data_contract_with_format_version_1() {
     .expect("render must succeed");
 
     let contract = extract_data_contract(&html);
-    assert_eq!(contract["format_version"], 1);
+    // v2 (#345, ADR 0002): Issues arrive as the shared `issues` array; the
+    // per-kind `gravity_wells` / `red_flags` lists are gone.
+    assert_eq!(contract["format_version"], 2);
+    assert!(contract["issues"].is_array());
+    assert!(contract.get("gravity_wells").is_none());
+    assert!(contract.get("red_flags").is_none());
 }
 
 #[test]
@@ -548,23 +553,140 @@ fn health_score_and_summary_counts_come_from_audit() {
 
     let contract = extract_data_contract(&html);
     assert_eq!(contract["health_score"], 82.0);
-    assert_eq!(contract["summary_counts"]["violations"], 2);
-    assert_eq!(
-        contract["summary_counts"]["cycles"], 1,
-        "circular violations counted as cycles"
+    let counts = &contract["summary_counts"];
+    assert_eq!(counts["violations"], 2);
+    assert_eq!(counts["cycles"], 1, "circular violations counted as cycles");
+    assert_eq!(counts["gravity_wells"], 1);
+    assert_eq!(counts["red_flags"], 1);
+    // v2: Issue totals and a per-kind row for every kind, zero included.
+    assert_eq!(counts["issues"], 4);
+    assert_eq!(counts["new_issues"], 4);
+    assert_eq!(counts["baselined_issues"], 0);
+    let by_kind = counts["by_kind"].as_array().unwrap();
+    assert_eq!(by_kind.len(), 9);
+    let cycle = by_kind.iter().find(|k| k["kind"] == "cycle").unwrap();
+    assert_eq!(cycle["count"], 1);
+    assert_eq!(cycle["kind_name"], "Cycle");
+}
+
+/// The `issues` array is the JSON report's Issue cards (same code path),
+/// each extended with the participant node ids focus mode keys off.
+#[test]
+fn issues_are_the_shared_issue_cards_with_participants() {
+    let (settings, snapshot) = default_inputs();
+    let mut well_edge = violation("src/infra/db.rs", "src/ui/form.tsx", false);
+    well_edge.dir_a = "src/infra".into();
+    well_edge.dir_b = "src/ui".into();
+    well_edge.score_impact = 2.5;
+    let audit = AuditResultBuilder::new()
+        .with_score(97.5)
+        .with_total_modules(10)
+        .with_violations(vec![well_edge])
+        .with_gravity_wells(vec![GravityWell {
+            module_path: "src/infra/db.rs".into(),
+            total_rri: 40.0,
+            relationship_count: 1,
+            downward_rri: 0.0,
+            sibling_rri: 40.0,
+            upward_rri: 0.0,
+            circular_rri: 0.0,
+            direction_count: 1,
+        }])
+        .build();
+    let expected: Vec<Value> = audit
+        .issues()
+        .iter()
+        .map(|i| serde_json::to_value(i.to_card()).unwrap())
+        .collect();
+
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
+    let contract = extract_data_contract(&html);
+    let issues = contract["issues"].as_array().unwrap();
+    assert_eq!(issues.len(), expected.len());
+    for (got, want) in issues.iter().zip(&expected) {
+        // Every card field is present verbatim …
+        for (k, v) in want.as_object().unwrap() {
+            assert_eq!(&got[k], v, "field {k} differs");
+        }
+        // … plus participants.
+        assert!(got["participants"].is_array(), "{got}");
+    }
+    let well = issues.iter().find(|i| i["kind"] == "gravity_well").unwrap();
+    let participants: Vec<&str> = well["participants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert!(participants.contains(&"src/infra/db.rs"));
+    assert!(
+        participants.contains(&"src/ui/form.tsx"),
+        "the modules pulling on the well are participants (#333): {participants:?}"
     );
-    assert_eq!(contract["summary_counts"]["gravity_wells"], 1);
-    assert_eq!(contract["summary_counts"]["red_flags"], 1);
 }
 
 #[test]
-fn score_breakdown_explains_the_health_score_math() {
-    // 1 coupling + 1 cycle, each severity 0.5, score 95 → 5 points lost.
+fn baselined_issues_are_flagged_in_the_contract() {
+    use noupling_core::baseline::Baseline;
     let (settings, snapshot) = default_inputs();
+    let mut audit = AuditResultBuilder::new()
+        .with_total_modules(4)
+        .with_violations(vec![
+            violation("src/a/x.rs", "src/b/y.rs", false),
+            violation("p", "q", true),
+        ])
+        .build();
+    audit.violations[0].dir_a = "src/a".into();
+    audit.violations[0].dir_b = "src/b".into();
+    audit.apply_baseline(&Baseline {
+        fingerprints: ["coupling_violation:src/a -> src/b".to_string()]
+            .into_iter()
+            .collect(),
+        legacy_format: false,
+    });
+
+    let html = render(
+        &[],
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .unwrap();
+    let contract = extract_data_contract(&html);
+    let issues = contract["issues"].as_array().unwrap();
+    let coupling = issues
+        .iter()
+        .find(|i| i["kind"] == "coupling_violation")
+        .unwrap();
+    assert_eq!(coupling["baselined"], true);
+    let cycle = issues.iter().find(|i| i["kind"] == "cycle").unwrap();
+    assert_eq!(cycle["baselined"], false);
+    assert_eq!(contract["summary_counts"]["new_issues"], 1);
+    assert_eq!(contract["summary_counts"]["baselined_issues"], 1);
+}
+
+#[test]
+fn score_breakdown_sums_score_impact_to_points_lost() {
+    // 1 coupling (impact 2) + 1 cycle (impact 3), score 95 → 5 points lost.
+    let (settings, snapshot) = default_inputs();
+    let mut coupling = violation("a", "b", false);
+    coupling.score_impact = 2.0;
+    let mut cycle = violation("x", "y", true);
+    cycle.score_impact = 3.0;
     let audit = AuditResultBuilder::new()
         .with_score(95.0)
         .with_total_modules(20)
-        .with_violations(vec![violation("a", "b", false), violation("x", "y", true)])
+        .with_violations(vec![cycle, coupling])
         .build();
 
     let html = render(
@@ -580,15 +702,27 @@ fn score_breakdown_explains_the_health_score_math() {
     let contract = extract_data_contract(&html);
     let b = &contract["score_breakdown"];
     assert_eq!(b["total_modules"], 20);
-    assert_eq!(b["total_severity"], 1.0);
     assert_eq!(b["points_lost"], 5.0);
-    assert_eq!(b["cycles_severity"], 0.5);
-    assert_eq!(b["coupling_severity"], 0.5);
-    assert_eq!(b["top_contributors"].as_array().unwrap().len(), 2);
-    // Order is severity desc; both 0.5 so order is input-order.
-    assert_eq!(b["top_contributors"][0]["from"], "a");
-    assert_eq!(b["top_contributors"][0]["kind"], "coupling");
-    assert_eq!(b["top_contributors"][1]["kind"], "cycle");
+    let by_kind = b["by_kind"].as_array().unwrap();
+    let sum: f64 = by_kind.iter().map(|k| k["points"].as_f64().unwrap()).sum();
+    assert!(
+        (sum - 5.0).abs() < 1e-9,
+        "per-kind points sum to points lost: {by_kind:?}"
+    );
+    assert!(by_kind
+        .iter()
+        .any(|k| k["kind"] == "cycle" && k["points"] == 3.0));
+    assert!(by_kind
+        .iter()
+        .any(|k| k["kind"] == "coupling_violation" && k["points"] == 2.0));
+    // Top contributors are Issues, ordered by score impact.
+    let top = b["top_contributors"].as_array().unwrap();
+    assert_eq!(top.len(), 2);
+    assert_eq!(top[0]["kind"], "cycle");
+    assert_eq!(top[0]["points"], 3.0);
+    assert_eq!(top[0]["fingerprint"], "cycle:x -> y");
+    assert_eq!(top[1]["kind"], "coupling_violation");
+    assert_eq!(top[1]["focus_id"], "a");
 }
 
 #[test]

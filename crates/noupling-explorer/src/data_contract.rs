@@ -5,7 +5,7 @@
 //! across versions; the template treats unknown keys as optional.
 
 use globset::Glob;
-use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::analyzer::{AuditResult, Issue, IssueCard, IssueDetail, IssueKind};
 use noupling_core::core::{Dependency, Module, ModuleType, Snapshot};
 use noupling_core::settings::{DependencyRule, Layer, Settings};
 use serde::Serialize;
@@ -34,10 +34,15 @@ pub(crate) struct DataContract {
     pub effective_rules: Vec<EffectiveRuleEntry>,
     pub nodes: Vec<NodeEntry>,
     pub edges: Vec<EdgeEntry>,
+    /// Ring geometry for the canvas (min-cut overlay, cycle accents).
+    /// The Cycle *Issue* — band, reason, recommendation — is in `issues`.
     pub cycles: Vec<CycleEntry>,
+    /// Edge geometry for the canvas (which edges to accent). The
+    /// Coupling / Rule / Layer Violation *Issues* are in `issues`.
     pub violations: Vec<ViolationEntry>,
-    pub gravity_wells: Vec<GravityWellEntry>,
-    pub red_flags: Vec<RedFlagEntry>,
+    /// Every Issue, as the same Issue cards the JSON report emits
+    /// (ADR 0002, #345), plus the participant node ids focus mode uses.
+    pub issues: Vec<IssueEntry>,
     pub history: Vec<HistoryEntry>,
     /// Pre-computed module clusters for the Force view. Tightly
     /// coupled groups detected via label propagation; the Force view
@@ -53,44 +58,47 @@ pub(crate) struct ClusterEntry {
     pub members: Vec<String>,
 }
 
-/// Explains how `health_score` was derived. The score formula is
-/// `100 × (1 − Σ severity / total_modules)`, so the user-visible
-/// "82/100" is opaque without the inputs. The Explorer surfaces this
-/// breakdown behind a clickable score so users can see *why* the
-/// number is what it is.
+/// Explains how `health_score` was derived: the points lost, split by
+/// Issue kind, and the Issues that cost the most. Sums come from each
+/// Issue's score impact (#342), so every row adds up to `points_lost`.
 #[derive(Debug, Serialize)]
 pub(crate) struct ScoreBreakdown {
     pub total_modules: usize,
-    pub total_severity: f64,
     pub points_lost: f64,
-    pub cycles_severity: f64,
-    pub coupling_severity: f64,
-    /// Top contributors sorted by severity descending. Capped at 5
-    /// — anything longer is noise in a dialog the user reads once.
+    /// One row per kind that scores, canonical order, zero rows omitted.
+    pub by_kind: Vec<KindPoints>,
+    /// Top Issues by score impact. Capped at 5 — anything longer is noise
+    /// in a dialog the user reads once.
     pub top_contributors: Vec<ScoreContributor>,
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct ScoreContributor {
-    pub from: String,
-    pub to: String,
-    pub severity: f64,
+pub(crate) struct KindPoints {
     pub kind: &'static str,
+    pub kind_name: &'static str,
+    pub points: f64,
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct GravityWellEntry {
-    pub module_path: String,
-    pub total_rri: f64,
-    pub relationship_count: usize,
+pub(crate) struct ScoreContributor {
+    pub kind: &'static str,
+    pub kind_name: &'static str,
+    /// The Issue's subject, rendered (`from -> to`, a path, or a ring).
+    pub subject: String,
+    /// The node to select when the row is clicked.
+    pub focus_id: String,
+    pub points: f64,
+    pub fingerprint: String,
 }
 
+/// One Issue in the contract: the shared Issue card verbatim, plus the
+/// node ids that participate in it (what focus mode expands and
+/// highlights, #333).
 #[derive(Debug, Serialize)]
-pub(crate) struct RedFlagEntry {
-    pub flag_type: String,
-    pub modules: Vec<String>,
-    pub rri: f64,
-    pub recommendation: String,
+pub(crate) struct IssueEntry {
+    #[serde(flatten)]
+    pub card: IssueCard,
+    pub participants: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,6 +195,19 @@ pub(crate) struct SummaryCounts {
     pub cycles: usize,
     pub gravity_wells: usize,
     pub red_flags: usize,
+    /// Every Issue, and how many the baseline accepts (#343).
+    pub issues: usize,
+    pub new_issues: usize,
+    pub baselined_issues: usize,
+    /// One row per kind, all nine, zero included, canonical order.
+    pub by_kind: Vec<KindCount>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct KindCount {
+    pub kind: &'static str,
+    pub kind_name: &'static str,
+    pub count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -272,7 +293,7 @@ impl<'a> ContractBuilder<'a> {
     /// order is explicit here, instead of implicit in a struct literal.
     pub(crate) fn build(&self) -> DataContract {
         DataContract {
-            format_version: 1,
+            format_version: 2,
             noupling_version: env!("CARGO_PKG_VERSION").to_string(),
             generated_at: self.snapshot.timestamp.clone(),
             report_options: self.report_options(),
@@ -288,8 +309,7 @@ impl<'a> ContractBuilder<'a> {
             edges: self.edges(),
             cycles: self.cycles(),
             violations: self.violations(),
-            gravity_wells: self.gravity_wells(),
-            red_flags: self.red_flags(),
+            issues: self.issues(),
             history: self.history(),
             clusters: self.clusters(),
         }
@@ -316,6 +336,7 @@ impl<'a> ContractBuilder<'a> {
     }
 
     pub(crate) fn summary_counts(&self) -> SummaryCounts {
+        let issues = self.audit_result.issues();
         SummaryCounts {
             violations: self.audit_result.violations.len(),
             cycles: self
@@ -326,7 +347,31 @@ impl<'a> ContractBuilder<'a> {
                 .count(),
             gravity_wells: self.audit_result.gravity_wells.len(),
             red_flags: self.audit_result.red_flags.len(),
+            issues: issues.len(),
+            new_issues: issues.iter().filter(|i| !i.baselined).count(),
+            baselined_issues: issues.iter().filter(|i| i.baselined).count(),
+            by_kind: IssueKind::ALL
+                .iter()
+                .map(|k| KindCount {
+                    kind: k.id(),
+                    kind_name: k.name(),
+                    count: issues.iter().filter(|i| i.kind() == *k).count(),
+                })
+                .collect(),
         }
+    }
+
+    /// The shared Issue cards (same code path as the JSON report), each
+    /// with the participant node ids focus mode expands and highlights.
+    pub(crate) fn issues(&self) -> Vec<IssueEntry> {
+        self.audit_result
+            .issues()
+            .iter()
+            .map(|issue| IssueEntry {
+                card: issue.to_card(),
+                participants: participants_of(issue, self.audit_result),
+            })
+            .collect()
     }
 
     pub(crate) fn layers(&self) -> Vec<LayerEntry> {
@@ -368,31 +413,6 @@ impl<'a> ContractBuilder<'a> {
 
     pub(crate) fn violations(&self) -> Vec<ViolationEntry> {
         build_violations(self.audit_result)
-    }
-
-    pub(crate) fn gravity_wells(&self) -> Vec<GravityWellEntry> {
-        self.audit_result
-            .gravity_wells
-            .iter()
-            .map(|g| GravityWellEntry {
-                module_path: g.module_path.clone(),
-                total_rri: g.total_rri,
-                relationship_count: g.relationship_count,
-            })
-            .collect()
-    }
-
-    pub(crate) fn red_flags(&self) -> Vec<RedFlagEntry> {
-        self.audit_result
-            .red_flags
-            .iter()
-            .map(|f| RedFlagEntry {
-                flag_type: format!("{:?}", f.flag_type),
-                modules: f.modules.clone(),
-                rri: f.rri,
-                recommendation: f.recommendation.clone(),
-            })
-            .collect()
     }
 
     pub(crate) fn history(&self) -> Vec<HistoryEntry> {
@@ -796,45 +816,101 @@ fn merge_enrichment(
 }
 
 fn build_score_breakdown(audit_result: &AuditResult) -> ScoreBreakdown {
-    let mut cycles_severity = 0.0_f64;
-    let mut coupling_severity = 0.0_f64;
-    for v in &audit_result.violations {
-        if v.is_circular {
-            cycles_severity += v.severity;
-        } else {
-            coupling_severity += v.severity;
-        }
-    }
-    let total_severity = cycles_severity + coupling_severity;
+    let issues = audit_result.issues();
     let points_lost = (100.0 - audit_result.score).clamp(0.0, 100.0);
+    let by_kind = IssueKind::ALL
+        .iter()
+        .map(|k| KindPoints {
+            kind: k.id(),
+            kind_name: k.name(),
+            points: issues
+                .iter()
+                .filter(|i| i.kind() == *k)
+                .map(Issue::score_impact)
+                .sum(),
+        })
+        .filter(|row| row.points > 0.0)
+        .collect();
 
-    // Audit already returns violations sorted by severity desc, but
-    // re-sort defensively so we don't rely on that invariant.
-    let mut sorted: Vec<&CouplingViolation> = audit_result.violations.iter().collect();
-    sorted.sort_by(|a, b| {
-        b.severity
-            .partial_cmp(&a.severity)
+    let mut scoring: Vec<&Issue> = issues.iter().filter(|i| i.score_impact() > 0.0).collect();
+    scoring.sort_by(|a, b| {
+        b.score_impact()
+            .partial_cmp(&a.score_impact())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let top_contributors = sorted
+    let top_contributors = scoring
         .into_iter()
         .take(5)
-        .map(|v| ScoreContributor {
-            from: v.from_module.clone(),
-            to: v.to_module.clone(),
-            severity: v.severity,
-            kind: if v.is_circular { "cycle" } else { "coupling" },
+        .map(|i| ScoreContributor {
+            kind: i.kind().id(),
+            kind_name: i.kind().name(),
+            subject: i.subject().to_string(),
+            focus_id: participants_of(i, audit_result)
+                .into_iter()
+                .next()
+                .unwrap_or_default(),
+            points: i.score_impact(),
+            fingerprint: i.fingerprint(),
         })
         .collect();
 
     ScoreBreakdown {
         total_modules: audit_result.total_modules,
-        total_severity,
         points_lost,
-        cycles_severity,
-        coupling_severity,
+        by_kind,
         top_contributors,
     }
+}
+
+/// The node ids an Issue is about: what focus mode expands, highlights
+/// and scopes to. Edge-shaped kinds list both ends; a Cycle its ring; a
+/// Gravity Well the well plus every module pulling on it (#333); the
+/// directory-shaped kinds their directory. Exhaustive on purpose.
+fn participants_of(issue: &Issue, audit_result: &AuditResult) -> Vec<String> {
+    let mut out: Vec<String> = match &issue.detail {
+        IssueDetail::CouplingViolation(v) => vec![v.from_module.clone(), v.to_module.clone()],
+        IssueDetail::Cycle(v) => {
+            // cycle_path closes back on its first member; members are the
+            // directories, but the canvas keys on files when hops are known.
+            let mut members: Vec<String> = v.cycle_path.clone();
+            if members.len() > 1 && members.first() == members.last() {
+                members.pop();
+            }
+            if !v.cycle_hop_files.is_empty() {
+                members = v
+                    .cycle_hop_files
+                    .iter()
+                    .map(|(from, _, _)| from.clone())
+                    .collect();
+            }
+            members
+        }
+        IssueDetail::RuleViolation(r) => vec![r.from_module.clone(), r.to_module.clone()],
+        IssueDetail::LayerViolation(l) => vec![l.from_module.clone(), l.to_module.clone()],
+        IssueDetail::GravityWell(g) => {
+            let mut ids = vec![g.module_path.clone()];
+            for v in audit_result
+                .violations
+                .iter()
+                .chain(audit_result.coupling_metrics.iter())
+            {
+                if v.from_module == g.module_path {
+                    ids.push(v.to_module.clone());
+                } else if v.to_module == g.module_path {
+                    ids.push(v.from_module.clone());
+                }
+            }
+            ids
+        }
+        IssueDetail::RedFlag(f) => f.modules.clone(),
+        IssueDetail::StabilityViolation(s) => vec![s.from_dir.clone(), s.to_dir.clone()],
+        IssueDetail::ZoneFlag(d) => vec![d.dir.clone()],
+        IssueDetail::LowCohesion(c) => vec![c.dir.clone()],
+    };
+    out.retain(|p| !p.is_empty());
+    let mut seen = HashSet::new();
+    out.retain(|p| seen.insert(p.clone()));
+    out
 }
 
 fn severity_band(s: f64) -> &'static str {

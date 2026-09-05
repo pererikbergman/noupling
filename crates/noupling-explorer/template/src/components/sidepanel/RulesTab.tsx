@@ -1,5 +1,6 @@
 import type { DataContract } from "../../types";
-import { firstViolationForRule } from "../../state/queries";
+import { firstViolationForRule, ruleOffenders } from "../../state/queries";
+import { bandClass, subjectFull } from "./IssuesTab";
 
 export function RulesTab({
   data,
@@ -31,7 +32,10 @@ export function RulesTab({
     }
     return (a.from + a.to).localeCompare(b.from + b.to);
   });
+  // The offender list: Rule and Layer Violation Issues, as core wrote them.
+  const offenders = ruleOffenders(data);
   return (
+    <div>
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {sorted.map((r, i) => {
         const broken = r.current_violation_count > 0;
@@ -90,5 +94,45 @@ export function RulesTab({
         );
       })}
     </ul>
+    {offenders.length > 0 && (
+      <section className="mt-3" data-testid="rule-offenders">
+        <h3 className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          Offenders · {offenders.length}
+        </h3>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {offenders.map((i) => (
+            <li key={i.fingerprint}>
+              <button
+                onClick={() => onSelect?.(i.participants[0])}
+                className={
+                  "block w-full rounded-sm border border-border bg-canvas px-2 py-1.5 text-left hover:bg-canvas/60 " +
+                  (i.baselined ? "opacity-60" : "")
+                }
+                title={`${i.reason} ${i.recommendation}`}
+              >
+                <div className="mb-0.5 flex items-center gap-1.5">
+                  <span
+                    className={
+                      "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider " +
+                      bandClass(i.severity)
+                    }
+                  >
+                    {i.severity}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted">{i.kind_name}</span>
+                  {i.baselined && (
+                    <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted">
+                      accepted
+                    </span>
+                  )}
+                </div>
+                <div className="truncate font-mono text-[10px] text-text">{subjectFull(i.subject)}</div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+    </div>
   );
 }

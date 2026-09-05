@@ -1,5 +1,5 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "noupling_version": "0.7.0",
   "generated_at": "2026-06-04T14:55:42Z",
   "report_options": {
@@ -13,88 +13,694 @@
     "file_count": 220,
     "edge_count": 481,
     "language_distribution": [
-      { "language": "rs", "file_count": 142 },
-      { "language": "ts", "file_count": 78 }
+      {
+        "language": "rs",
+        "file_count": 142
+      },
+      {
+        "language": "ts",
+        "file_count": 78
+      }
     ]
   },
   "health_score": 82,
   "score_breakdown": {
     "total_modules": 18,
-    "total_severity": 3.24,
-    "points_lost": 18,
-    "cycles_severity": 2.0,
-    "coupling_severity": 1.24,
+    "points_lost": 18.0,
+    "by_kind": [
+      {
+        "kind": "coupling_violation",
+        "kind_name": "Coupling Violation",
+        "points": 6.0
+      },
+      {
+        "kind": "cycle",
+        "kind_name": "Cycle",
+        "points": 12.0
+      }
+    ],
     "top_contributors": [
-      { "from": "src/data/PaymentRepository.ts", "to": "src/ui/PaymentForm.tsx", "severity": 0.9, "kind": "cycle" },
-      { "from": "src/ui/PaymentForm.tsx", "to": "src/data/PaymentRepository.ts", "severity": 0.9, "kind": "cycle" },
-      { "from": "src/domain/PricingService.ts", "to": "src/data/RatesRepository.ts", "severity": 0.62, "kind": "coupling" },
-      { "from": "src/ui/Receipt.tsx", "to": "src/data/PrinterClient.ts", "severity": 0.5, "kind": "coupling" },
-      { "from": "src/infra/Logger.ts", "to": "src/domain/AuditService.ts", "severity": 0.32, "kind": "coupling" }
+      {
+        "kind": "cycle",
+        "kind_name": "Cycle",
+        "subject": "src/domain -> src/infra -> src/domain",
+        "focus_id": "src/domain/user.rs",
+        "points": 12.0,
+        "fingerprint": "cycle:src/domain -> src/infra -> src/domain"
+      },
+      {
+        "kind": "coupling_violation",
+        "kind_name": "Coupling Violation",
+        "subject": "src/ui/CheckoutForm.tsx -> src/infra/db.rs",
+        "focus_id": "src/ui/CheckoutForm.tsx",
+        "points": 6.0,
+        "fingerprint": "coupling_violation:src/ui -> src/infra"
+      }
     ]
   },
-  "summary_counts": { "violations": 7, "cycles": 2, "gravity_wells": 1, "red_flags": 3 },
+  "summary_counts": {
+    "violations": 7,
+    "cycles": 2,
+    "gravity_wells": 1,
+    "red_flags": 3,
+    "issues": 9,
+    "new_issues": 8,
+    "baselined_issues": 1,
+    "by_kind": [
+      {
+        "kind": "coupling_violation",
+        "kind_name": "Coupling Violation",
+        "count": 1
+      },
+      {
+        "kind": "cycle",
+        "kind_name": "Cycle",
+        "count": 1
+      },
+      {
+        "kind": "rule_violation",
+        "kind_name": "Rule Violation",
+        "count": 1
+      },
+      {
+        "kind": "layer_violation",
+        "kind_name": "Layer Violation",
+        "count": 1
+      },
+      {
+        "kind": "gravity_well",
+        "kind_name": "Gravity Well",
+        "count": 1
+      },
+      {
+        "kind": "red_flag",
+        "kind_name": "Red Flag",
+        "count": 1
+      },
+      {
+        "kind": "stability_violation",
+        "kind_name": "Stability Violation",
+        "count": 1
+      },
+      {
+        "kind": "zone_flag",
+        "kind_name": "Zone Flag",
+        "count": 1
+      },
+      {
+        "kind": "low_cohesion",
+        "kind_name": "Low Cohesion",
+        "count": 1
+      }
+    ]
+  },
   "layers": [
-    { "name": "ui",     "pattern": "**/ui/**",     "allow_sibling": false, "index": 0, "file_count": 24, "afferent": 0, "efferent": 41, "instability": 1.0 },
-    { "name": "domain", "pattern": "**/domain/**", "allow_sibling": true,  "index": 1, "file_count": 67, "afferent": 31, "efferent": 18, "instability": 0.37 },
-    { "name": "infra",  "pattern": "**/infra/**",  "allow_sibling": false, "index": 2, "file_count": 18, "afferent": 42, "efferent": 4, "instability": 0.09 }
+    {
+      "name": "ui",
+      "pattern": "**/ui/**",
+      "allow_sibling": false,
+      "index": 0,
+      "file_count": 24,
+      "afferent": 0,
+      "efferent": 41,
+      "instability": 1.0
+    },
+    {
+      "name": "domain",
+      "pattern": "**/domain/**",
+      "allow_sibling": true,
+      "index": 1,
+      "file_count": 67,
+      "afferent": 31,
+      "efferent": 18,
+      "instability": 0.37
+    },
+    {
+      "name": "infra",
+      "pattern": "**/infra/**",
+      "allow_sibling": false,
+      "index": 2,
+      "file_count": 18,
+      "afferent": 42,
+      "efferent": 4,
+      "instability": 0.09
+    }
   ],
   "dependency_rules": [
-    { "from": "**/ui/**", "to": "**/infra/**", "allow": false, "message": "UI must not reach infrastructure directly. Use a domain service." }
+    {
+      "from": "**/ui/**",
+      "to": "**/infra/**",
+      "allow": false,
+      "message": "UI must not reach infrastructure directly. Use a domain service."
+    }
   ],
   "effective_rules": [
-    { "from": "**/ui/**", "to": "**/infra/**", "allow": false, "message": "UI must not reach infrastructure directly. Use a domain service.", "source": "dependency_rule", "current_violation_count": 1 },
-    { "from": "**/domain/**", "to": "**/ui/**", "allow": false, "message": "Layer 'domain' (index 1) may not depend on layer 'ui' (index 0) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 },
-    { "from": "**/infra/**", "to": "**/ui/**", "allow": false, "message": "Layer 'infra' (index 2) may not depend on layer 'ui' (index 0) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 },
-    { "from": "**/infra/**", "to": "**/domain/**", "allow": false, "message": "Layer 'infra' (index 2) may not depend on layer 'domain' (index 1) — layers flow downward.", "source": "layer_order", "current_violation_count": 0 }
+    {
+      "from": "**/ui/**",
+      "to": "**/infra/**",
+      "allow": false,
+      "message": "UI must not reach infrastructure directly. Use a domain service.",
+      "source": "dependency_rule",
+      "current_violation_count": 1
+    },
+    {
+      "from": "**/domain/**",
+      "to": "**/ui/**",
+      "allow": false,
+      "message": "Layer 'domain' (index 1) may not depend on layer 'ui' (index 0) \u2014 layers flow downward.",
+      "source": "layer_order",
+      "current_violation_count": 0
+    },
+    {
+      "from": "**/infra/**",
+      "to": "**/ui/**",
+      "allow": false,
+      "message": "Layer 'infra' (index 2) may not depend on layer 'ui' (index 0) \u2014 layers flow downward.",
+      "source": "layer_order",
+      "current_violation_count": 0
+    },
+    {
+      "from": "**/infra/**",
+      "to": "**/domain/**",
+      "allow": false,
+      "message": "Layer 'infra' (index 2) may not depend on layer 'domain' (index 1) \u2014 layers flow downward.",
+      "source": "layer_order",
+      "current_violation_count": 0
+    }
   ],
   "nodes": [
-    { "id": "src/ui/CheckoutForm.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 0, "efferent": 4, "instability": 1.0, "loc": 142 } },
-    { "id": "src/ui/CartView.tsx", "kind": "file", "parent": "src/ui", "layer": "ui", "metrics": { "afferent": 1, "efferent": 2, "instability": 0.67, "loc": 92 } },
-    { "id": "src/ui", "kind": "package", "parent": "src", "layer": "ui", "metrics": { "file_count": 24, "cohesion": 0.42, "llm": { "summary": "Checkout + receipt UI", "responsibility": "React components for the checkout flow, receipt rendering, and post-payment confirmation states.", "tags": ["ui"], "generated_at": "2026-06-05T10:30:00Z", "model": "claude-opus-4-7" } } },
-    { "id": "src/domain/payment.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 6, "efferent": 3, "instability": 0.33, "loc": 612 } },
-    { "id": "src/domain/cart.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 2, "efferent": 2, "instability": 0.5, "loc": 248 } },
-    { "id": "src/domain/user.rs", "kind": "file", "parent": "src/domain", "layer": "domain", "metrics": { "afferent": 1, "efferent": 1, "instability": 0.5, "loc": 160 } },
-    { "id": "src/domain", "kind": "package", "parent": "src", "layer": "domain", "metrics": { "file_count": 67, "cohesion": 0.71 } },
-    { "id": "src/infra/db.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 12, "efferent": 0, "instability": 0.0, "loc": 320 } },
-    { "id": "src/infra/stripe.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 2, "efferent": 0, "instability": 0.0, "loc": 80 } },
-    { "id": "src/infra/email.rs", "kind": "file", "parent": "src/infra", "layer": "infra", "metrics": { "afferent": 1, "efferent": 1, "instability": 0.5, "loc": 110 } },
-    { "id": "src/infra", "kind": "package", "parent": "src", "layer": "infra", "metrics": { "file_count": 18, "cohesion": 0.31 } },
-    { "id": "src", "kind": "container", "parent": null, "layer": null, "metrics": { "file_count": 220, "cohesion": null } }
+    {
+      "id": "src/ui/CheckoutForm.tsx",
+      "kind": "file",
+      "parent": "src/ui",
+      "layer": "ui",
+      "metrics": {
+        "afferent": 0,
+        "efferent": 4,
+        "instability": 1.0,
+        "loc": 142
+      }
+    },
+    {
+      "id": "src/ui/CartView.tsx",
+      "kind": "file",
+      "parent": "src/ui",
+      "layer": "ui",
+      "metrics": {
+        "afferent": 1,
+        "efferent": 2,
+        "instability": 0.67,
+        "loc": 92
+      }
+    },
+    {
+      "id": "src/ui",
+      "kind": "package",
+      "parent": "src",
+      "layer": "ui",
+      "metrics": {
+        "file_count": 24,
+        "cohesion": 0.42,
+        "llm": {
+          "summary": "Checkout + receipt UI",
+          "responsibility": "React components for the checkout flow, receipt rendering, and post-payment confirmation states.",
+          "tags": [
+            "ui"
+          ],
+          "generated_at": "2026-06-05T10:30:00Z",
+          "model": "claude-opus-4-7"
+        }
+      }
+    },
+    {
+      "id": "src/domain/payment.rs",
+      "kind": "file",
+      "parent": "src/domain",
+      "layer": "domain",
+      "metrics": {
+        "afferent": 6,
+        "efferent": 3,
+        "instability": 0.33,
+        "loc": 612
+      }
+    },
+    {
+      "id": "src/domain/cart.rs",
+      "kind": "file",
+      "parent": "src/domain",
+      "layer": "domain",
+      "metrics": {
+        "afferent": 2,
+        "efferent": 2,
+        "instability": 0.5,
+        "loc": 248
+      }
+    },
+    {
+      "id": "src/domain/user.rs",
+      "kind": "file",
+      "parent": "src/domain",
+      "layer": "domain",
+      "metrics": {
+        "afferent": 1,
+        "efferent": 1,
+        "instability": 0.5,
+        "loc": 160
+      }
+    },
+    {
+      "id": "src/domain",
+      "kind": "package",
+      "parent": "src",
+      "layer": "domain",
+      "metrics": {
+        "file_count": 67,
+        "cohesion": 0.71
+      }
+    },
+    {
+      "id": "src/infra/db.rs",
+      "kind": "file",
+      "parent": "src/infra",
+      "layer": "infra",
+      "metrics": {
+        "afferent": 12,
+        "efferent": 0,
+        "instability": 0.0,
+        "loc": 320
+      }
+    },
+    {
+      "id": "src/infra/stripe.rs",
+      "kind": "file",
+      "parent": "src/infra",
+      "layer": "infra",
+      "metrics": {
+        "afferent": 2,
+        "efferent": 0,
+        "instability": 0.0,
+        "loc": 80
+      }
+    },
+    {
+      "id": "src/infra/email.rs",
+      "kind": "file",
+      "parent": "src/infra",
+      "layer": "infra",
+      "metrics": {
+        "afferent": 1,
+        "efferent": 1,
+        "instability": 0.5,
+        "loc": 110
+      }
+    },
+    {
+      "id": "src/infra",
+      "kind": "package",
+      "parent": "src",
+      "layer": "infra",
+      "metrics": {
+        "file_count": 18,
+        "cohesion": 0.31
+      }
+    },
+    {
+      "id": "src",
+      "kind": "container",
+      "parent": null,
+      "layer": null,
+      "metrics": {
+        "file_count": 220,
+        "cohesion": null
+      }
+    }
   ],
   "edges": [
-    { "from": "src/ui/CheckoutForm.tsx", "to": "src/domain/payment.rs", "weight": 4, "violates_rule": null },
-    { "from": "src/ui/CheckoutForm.tsx", "to": "src/domain/cart.rs", "weight": 2, "violates_rule": null },
-    { "from": "src/ui/CheckoutForm.tsx", "to": "src/infra/db.rs", "weight": 1, "violates_rule": "UI must not reach infrastructure directly. Use a domain service." },
-    { "from": "src/ui/CartView.tsx", "to": "src/domain/cart.rs", "weight": 3, "violates_rule": null },
-    { "from": "src/domain/payment.rs", "to": "src/infra/db.rs", "weight": 2, "violates_rule": null },
-    { "from": "src/domain/payment.rs", "to": "src/infra/stripe.rs", "weight": 5, "violates_rule": null },
-    { "from": "src/domain/cart.rs", "to": "src/infra/db.rs", "weight": 1, "violates_rule": null },
-    { "from": "src/domain/user.rs", "to": "src/infra/db.rs", "weight": 3, "violates_rule": null },
-    { "from": "src/infra/email.rs", "to": "src/domain/user.rs", "weight": 1, "violates_rule": null }
+    {
+      "from": "src/ui/CheckoutForm.tsx",
+      "to": "src/domain/payment.rs",
+      "weight": 4,
+      "violates_rule": null
+    },
+    {
+      "from": "src/ui/CheckoutForm.tsx",
+      "to": "src/domain/cart.rs",
+      "weight": 2,
+      "violates_rule": null
+    },
+    {
+      "from": "src/ui/CheckoutForm.tsx",
+      "to": "src/infra/db.rs",
+      "weight": 1,
+      "violates_rule": "UI must not reach infrastructure directly. Use a domain service."
+    },
+    {
+      "from": "src/ui/CartView.tsx",
+      "to": "src/domain/cart.rs",
+      "weight": 3,
+      "violates_rule": null
+    },
+    {
+      "from": "src/domain/payment.rs",
+      "to": "src/infra/db.rs",
+      "weight": 2,
+      "violates_rule": null
+    },
+    {
+      "from": "src/domain/payment.rs",
+      "to": "src/infra/stripe.rs",
+      "weight": 5,
+      "violates_rule": null
+    },
+    {
+      "from": "src/domain/cart.rs",
+      "to": "src/infra/db.rs",
+      "weight": 1,
+      "violates_rule": null
+    },
+    {
+      "from": "src/domain/user.rs",
+      "to": "src/infra/db.rs",
+      "weight": 3,
+      "violates_rule": null
+    },
+    {
+      "from": "src/infra/email.rs",
+      "to": "src/domain/user.rs",
+      "weight": 1,
+      "violates_rule": null
+    }
   ],
   "cycles": [
     {
       "id": "cycle-1",
       "size": 2,
-      "members": ["src/infra/email.rs", "src/domain/user.rs"],
-      "minimum_cut": [{ "from": "src/infra/email.rs", "to": "src/domain/user.rs", "weight": 2, "vs_weight": 14 }]
+      "members": [
+        "src/infra/email.rs",
+        "src/domain/user.rs"
+      ],
+      "minimum_cut": [
+        {
+          "from": "src/infra/email.rs",
+          "to": "src/domain/user.rs",
+          "weight": 2,
+          "vs_weight": 14
+        }
+      ]
     }
   ],
   "violations": [
-    { "rule": { "from": "**/ui/**", "to": "**/infra/**" }, "edge": { "from": "src/ui/CheckoutForm.tsx", "to": "src/infra/db.rs" }, "severity": "high", "introduced_in": "2026-05-30" }
-  ],
-  "gravity_wells": [
-    { "module_path": "src/infra/db.rs", "total_rri": 38.0, "relationship_count": 6 }
-  ],
-  "red_flags": [
-    { "flag_type": "FusedSibling", "modules": ["src/domain/payment.rs", "src/domain/cart.rs"], "rri": 12.0, "recommendation": "Extract a shared abstraction or merge the modules." }
+    {
+      "rule": {
+        "from": "**/ui/**",
+        "to": "**/infra/**"
+      },
+      "edge": {
+        "from": "src/ui/CheckoutForm.tsx",
+        "to": "src/infra/db.rs"
+      },
+      "severity": "high",
+      "introduced_in": "2026-05-30"
+    }
   ],
   "history": [
-    { "snapshot_id": "snap-001", "taken_at": "2026-05-30T12:00:00Z", "health_score": 78 },
-    { "snapshot_id": "snap-002", "taken_at": "2026-06-04T14:55:42Z", "health_score": 82 }
+    {
+      "snapshot_id": "snap-001",
+      "taken_at": "2026-05-30T12:00:00Z",
+      "health_score": 78
+    },
+    {
+      "snapshot_id": "snap-002",
+      "taken_at": "2026-06-04T14:55:42Z",
+      "health_score": 82
+    }
   ],
   "clusters": [
-    { "id": "cluster-1", "members": ["src/ui", "src/domain"] },
-    { "id": "cluster-2", "members": ["src/domain", "src/infra"] }
+    {
+      "id": "cluster-1",
+      "members": [
+        "src/ui",
+        "src/domain"
+      ]
+    },
+    {
+      "id": "cluster-2",
+      "members": [
+        "src/domain",
+        "src/infra"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "kind": "coupling_violation",
+      "kind_name": "Coupling Violation",
+      "severity": "critical",
+      "subject": {
+        "type": "edge",
+        "from": "src/ui/CheckoutForm.tsx",
+        "to": "src/infra/db.rs"
+      },
+      "reason": "src/ui/CheckoutForm.tsx imports across sibling directories src/ui and src/infra (3 imports, severity 1.50, RRI 12).",
+      "recommendation": "Move the shared code into a common parent of src/ui and src/infra, or put it behind an interface both siblings depend on.",
+      "score_impact": 6.0,
+      "baselined": false,
+      "fingerprint": "coupling_violation:src/ui -> src/infra",
+      "detail": {
+        "dir_a": "src/ui",
+        "dir_b": "src/infra",
+        "line_number": 4,
+        "depth": 1,
+        "imports": 3,
+        "raw_severity": 1.5,
+        "rri": 12.0,
+        "direction": "sibling"
+      },
+      "participants": [
+        "src/ui/CheckoutForm.tsx",
+        "src/infra/db.rs"
+      ]
+    },
+    {
+      "kind": "cycle",
+      "kind_name": "Cycle",
+      "severity": "critical",
+      "subject": {
+        "type": "ring",
+        "members": [
+          "src/domain",
+          "src/infra",
+          "src/domain"
+        ]
+      },
+      "reason": "src/domain -> src/infra -> src/domain form a cycle of 2 directories (16 imports in the ring); the cheapest break is src/infra -> src/domain (2 imports).",
+      "recommendation": "Cut the cycle at src/infra -> src/domain by removing 2 imports or moving that code behind an interface.",
+      "score_impact": 12.0,
+      "baselined": false,
+      "fingerprint": "cycle:src/domain -> src/infra -> src/domain",
+      "detail": {
+        "order": 2,
+        "depth": 1,
+        "raw_severity": 2.0,
+        "rri": 160.0,
+        "hop_import_counts": [
+          14,
+          2
+        ],
+        "hops": [
+          {
+            "from_file": "src/domain/user.rs",
+            "to_file": "src/infra/email.rs",
+            "line_number": 3
+          },
+          {
+            "from_file": "src/infra/email.rs",
+            "to_file": "src/domain/user.rs",
+            "line_number": 7
+          }
+        ],
+        "weakest_link": "src/infra -> src/domain (2 imports)",
+        "break_cost": 2
+      },
+      "participants": [
+        "src/domain/user.rs",
+        "src/infra/email.rs"
+      ]
+    },
+    {
+      "kind": "rule_violation",
+      "kind_name": "Rule Violation",
+      "severity": "high",
+      "subject": {
+        "type": "edge",
+        "from": "src/ui/CheckoutForm.tsx",
+        "to": "src/infra/db.rs"
+      },
+      "reason": "src/ui/CheckoutForm.tsx imports src/infra/db.rs at line 4, which a dependency rule forbids: UI must not reach into infrastructure.",
+      "recommendation": "Remove the import or route it through a module the rule allows.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "rule_violation:src/ui/CheckoutForm.tsx -> src/infra/db.rs",
+      "detail": {
+        "line_number": 4,
+        "message": "UI must not reach into infrastructure"
+      },
+      "participants": [
+        "src/ui/CheckoutForm.tsx",
+        "src/infra/db.rs"
+      ]
+    },
+    {
+      "kind": "layer_violation",
+      "kind_name": "Layer Violation",
+      "severity": "high",
+      "subject": {
+        "type": "edge",
+        "from": "src/infra/email.rs",
+        "to": "src/domain/user.rs"
+      },
+      "reason": "src/infra/email.rs in layer infra imports src/domain/user.rs in the higher layer domain at line 7.",
+      "recommendation": "Remove the import or move the shared code into infra or a layer below it.",
+      "score_impact": 0.0,
+      "baselined": true,
+      "fingerprint": "layer_violation:src/infra/email.rs -> src/domain/user.rs",
+      "detail": {
+        "line_number": 7,
+        "from_layer": "infra",
+        "to_layer": "domain"
+      },
+      "participants": [
+        "src/infra/email.rs",
+        "src/domain/user.rs"
+      ]
+    },
+    {
+      "kind": "gravity_well",
+      "kind_name": "Gravity Well",
+      "severity": "medium",
+      "subject": {
+        "type": "module",
+        "path": "src/infra/db.rs"
+      },
+      "reason": "src/infra/db.rs carries a total RRI of 38 across 6 relationships \u2014 disproportionate to its neighbours, so everything nearby bends toward it.",
+      "recommendation": "Split src/infra/db.rs by responsibility so no single module anchors this much coupling.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "gravity_well:src/infra/db.rs",
+      "detail": {
+        "total_rri": 38.0,
+        "relationship_count": 6,
+        "direction_count": 2,
+        "downward_rri": 0.0,
+        "sibling_rri": 26.0,
+        "upward_rri": 0.0,
+        "circular_rri": 12.0
+      },
+      "participants": [
+        "src/infra/db.rs",
+        "src/ui/CheckoutForm.tsx",
+        "src/ui/PaymentForm.tsx",
+        "src/domain/payment.rs"
+      ]
+    },
+    {
+      "kind": "stability_violation",
+      "kind_name": "Stability Violation",
+      "severity": "medium",
+      "subject": {
+        "type": "edge",
+        "from": "src/domain",
+        "to": "src/infra"
+      },
+      "reason": "src/domain (I=0.33) depends on the less stable src/infra (I=0.60), against the Stable Dependencies Principle.",
+      "recommendation": "Depend on an abstraction instead, or make src/infra at least as stable as src/domain.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "stability_violation:src/domain -> src/infra",
+      "detail": {
+        "from_instability": 0.33,
+        "to_instability": 0.6
+      },
+      "participants": [
+        "src/domain",
+        "src/infra"
+      ]
+    },
+    {
+      "kind": "zone_flag",
+      "kind_name": "Zone Flag",
+      "severity": "medium",
+      "subject": {
+        "type": "module",
+        "path": "src/infra"
+      },
+      "reason": "src/infra is in the Zone of Pain: concrete (A=0.00) yet stable (I=0.10), D=0.90.",
+      "recommendation": "Introduce abstractions in src/infra so its dependants can vary without editing it.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "zone_flag:src/infra",
+      "detail": {
+        "zone": "pain",
+        "abstractness": 0.0,
+        "instability": 0.1,
+        "distance": 0.9
+      },
+      "participants": [
+        "src/infra"
+      ]
+    },
+    {
+      "kind": "red_flag",
+      "kind_name": "Red Flag",
+      "severity": "low",
+      "subject": {
+        "type": "edge",
+        "from": "src/domain/payment.rs",
+        "to": "src/domain/cart.rs"
+      },
+      "reason": "Fused sibling: src/domain/payment.rs and src/domain/cart.rs have 3 imports between their directories (median 1, RRI 12), far tighter than their peers.",
+      "recommendation": "Merge the two modules or extract the shared part into an abstraction both depend on.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "red_flag:fused_sibling:src/domain/payment -> src/domain/cart",
+      "detail": {
+        "flag_type": "fused_sibling",
+        "modules": [
+          "src/domain/payment.rs",
+          "src/domain/cart.rs"
+        ],
+        "dir_a": "src/domain/payment",
+        "dir_b": "src/domain/cart",
+        "rri": 12.0,
+        "imports": 3,
+        "median_density": 1.0
+      },
+      "participants": [
+        "src/domain/payment.rs",
+        "src/domain/cart.rs"
+      ]
+    },
+    {
+      "kind": "low_cohesion",
+      "kind_name": "Low Cohesion",
+      "severity": "low",
+      "subject": {
+        "type": "module",
+        "path": "src/ui"
+      },
+      "reason": "src/ui has cohesion 0.00: its 4 children share only 0 internal dependencies.",
+      "recommendation": "Split src/ui into packages whose files actually use each other, or fold it into a neighbour.",
+      "score_impact": 0.0,
+      "baselined": false,
+      "fingerprint": "low_cohesion:src/ui",
+      "detail": {
+        "cohesion": 0.0,
+        "n_children": 4,
+        "internal_deps": 0
+      },
+      "participants": [
+        "src/ui"
+      ]
+    }
   ]
 }

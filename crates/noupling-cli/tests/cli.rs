@@ -223,8 +223,8 @@ fn report_explorer_emits_self_contained_html() {
         "data block must be present"
     );
     assert!(
-        html.contains(r#""format_version":1"#),
-        "Data Contract must declare format_version: 1"
+        html.contains(r#""format_version":2"#),
+        "Data Contract must declare format_version: 2 (#345)"
     );
     // React mount point (the template renders into it from the injected data).
     assert!(

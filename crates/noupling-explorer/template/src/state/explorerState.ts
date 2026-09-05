@@ -337,21 +337,17 @@ export function applySpotFilter(filter: SpotFilter, data: DataContract): Set<str
     return ids;
   }
   if (filter === "gravity-wells") {
-    // The Data Contract doesn't directly enumerate gravity-well node ids,
-    // but the summary count comes from `audit_result.gravity_wells`. For now,
-    // approximate via nodes with the highest afferent count from edges.
-    const incoming = new Map<string, number>();
-    for (const e of data.edges) {
-      incoming.set(e.to, (incoming.get(e.to) ?? 0) + e.weight);
+    // The well modules themselves — the first participant of each Gravity
+    // Well Issue (the rest are the modules pulling on it).
+    const ids = new Set<string>();
+    for (const i of data.issues) {
+      if (i.kind === "gravity_well" && i.participants[0]) ids.add(i.participants[0]);
     }
-    const top = [...incoming.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, Math.max(1, data.summary_counts.gravity_wells))
-      .map(([id]) => id);
-    return new Set(top);
+    return ids;
   }
-  // "clean" — nodes touched by no violation, no cycle, no red flag.
+  // "clean" — nodes that participate in no Issue of any kind.
   const dirty = new Set<string>();
+  for (const i of data.issues) for (const id of i.participants) dirty.add(id);
   for (const c of data.cycles) for (const id of c.members) dirty.add(id);
   for (const v of data.violations) {
     dirty.add(v.edge.from);
