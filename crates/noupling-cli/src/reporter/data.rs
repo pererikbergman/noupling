@@ -95,14 +95,14 @@ pub struct JsonDirectory {
 
 impl JsonReport {
     pub fn from_audit(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> Self {
-        let critical_violations = result
-            .violations
+        // Header counts agree with `issues`: ring hops belong to their Cycle
+        // (#358), so they are not counted as violations of their own — critical
+        // or otherwise (#380).
+        let issue_violations = result.issue_violations();
+        let critical_violations = issue_violations
             .iter()
             .filter(|v| v.severity >= result.critical_severity)
             .count();
-
-        // Header counts agree with `issues`: ring hops belong to their Cycle (#358).
-        let issue_violations = result.issue_violations();
         let total_circular = issue_violations.iter().filter(|v| v.is_circular).count();
         let total_coupling = issue_violations.len() - total_circular;
 

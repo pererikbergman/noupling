@@ -185,6 +185,38 @@ mod tests {
         assert_eq!(count("src/loose/x"), (0, false), "participant, not anchor");
     }
 
+    /// A ring hop above the critical threshold is part of its Cycle, not a
+    /// second critical violation (#380; same folding as #358).
+    #[test]
+    fn critical_violations_folds_ring_hops_into_their_cycle() {
+        let mut cycle = make_violation("a/x.rs", "b/y.rs", 1.95, 1);
+        cycle.dir_a = "a".to_string();
+        cycle.dir_b = "b".to_string();
+        cycle.is_circular = true;
+        cycle.cycle_path = vec!["a".to_string(), "b".to_string(), "a".to_string()];
+        let mut hop_ab = make_violation("a/x.rs", "b/y.rs", 2.5, 1);
+        hop_ab.dir_a = "a".to_string();
+        hop_ab.dir_b = "b".to_string();
+        let mut hop_ba = make_violation("b/z.rs", "a/x.rs", 0.17, 1);
+        hop_ba.dir_a = "b".to_string();
+        hop_ba.dir_b = "a".to_string();
+        let mut plain = make_violation("c/p.rs", "d/q.rs", 0.67, 1);
+        plain.dir_a = "c".to_string();
+        plain.dir_b = "d".to_string();
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![cycle, hop_ab, hop_ba, plain])
+            .with_total_modules(6)
+            .build();
+
+        let report = JsonReport::from_audit(&[], &result, "snap-4");
+        assert_eq!(report.total_circular, 1);
+        assert_eq!(report.total_coupling, 1);
+        assert_eq!(
+            report.critical_violations, 2,
+            "one Cycle + one Coupling Violation"
+        );
+    }
+
     #[test]
     fn text_format_shows_score_and_violations() {
         let result = AuditResultBuilder::new()
