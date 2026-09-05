@@ -194,7 +194,7 @@ noupling hook uninstall [PATH]</code></pre>
     "min_cohesion": 0.1
   }
 }</code></pre>
-      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> flags violations as critical in reports.</p>
+      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> is the step to the <em>critical</em> severity band for Coupling Violations and Cycles (the <em>high</em> and <em>medium</em> steps scale with it at 0.4× and 0.2×), and the cutoff for the <code>critical_violations</code> header count.</p>
 
 
       <h2 id="risk-weights">Risk Weights</h2>

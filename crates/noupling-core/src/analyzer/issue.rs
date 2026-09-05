@@ -189,6 +189,9 @@ pub struct Issue {
     /// True when the project's baseline accepts this Issue: still reported,
     /// never counted as new (`CONTEXT.md` § Baseline).
     pub baselined: bool,
+    /// The severity band, assigned once by the audit from the configured
+    /// `critical_severity` threshold (see [`Issue::severity`]).
+    pub severity: SeverityBand,
     /// The analyzer record this Issue was derived from, one variant per kind.
     pub detail: IssueDetail,
 }
@@ -215,13 +218,15 @@ pub enum IssueDetail {
 // ── Band thresholds ─────────────────────────────────────────────────────
 //
 // Coupling Violations and Cycles carry the audit's `severity`; the critical
-// step is the `critical_severity` threshold reports already use (0.5).
-// Gravity Wells and Red Flags carry only an RRI (direction weight × import
-// density, default weights 2–10), so they map through an RRI ladder.
+// step is the project's `thresholds.critical_severity` (default 0.5), and
+// the high / medium steps scale with it (0.4× and 0.2×, i.e. 0.2 / 0.1 at
+// the default). Gravity Wells and Red Flags carry only an RRI (direction
+// weight × import density, default weights 2–10), so they map through a
+// fixed RRI ladder.
 
-const SEVERITY_CRITICAL: f64 = 0.5;
-const SEVERITY_HIGH: f64 = 0.2;
-const SEVERITY_MEDIUM: f64 = 0.1;
+/// Default `critical_severity`, used when a result was built without
+/// settings (`audit()` alone, or the test builder).
+pub const DEFAULT_CRITICAL_SEVERITY: f64 = 0.5;
 
 const RRI_CRITICAL: f64 = 80.0;
 const RRI_HIGH: f64 = 40.0;
@@ -232,12 +237,12 @@ const RRI_MEDIUM: f64 = 20.0;
 const LOW_COHESION_MAX: f64 = 0.1;
 const LOW_COHESION_MIN_CHILDREN: usize = 3;
 
-fn band_for_severity(severity: f64) -> SeverityBand {
-    if severity >= SEVERITY_CRITICAL {
+fn band_for_severity(severity: f64, critical: f64) -> SeverityBand {
+    if severity >= critical {
         SeverityBand::Critical
-    } else if severity >= SEVERITY_HIGH {
+    } else if severity >= critical * 0.4 {
         SeverityBand::High
-    } else if severity >= SEVERITY_MEDIUM {
+    } else if severity >= critical * 0.2 {
         SeverityBand::Medium
     } else {
         SeverityBand::Low
@@ -279,14 +284,20 @@ impl Issue {
         }
     }
 
-    /// The severity band. RRI-bearing kinds map through the critical
-    /// thresholds; Rule and Layer Violations break an explicit policy and
-    /// are high; Stability Violations and Zone Flags are medium; Low
-    /// Cohesion is low.
+    /// The severity band, as assigned by the audit.
     pub fn severity(&self) -> SeverityBand {
-        match &self.detail {
+        self.severity
+    }
+
+    /// Assign the band. Coupling Violations and Cycles map their severity
+    /// through the project's `critical_severity`; Rule and Layer Violations
+    /// break an explicit policy and are high; Gravity Wells and Red Flags map
+    /// their RRI through a fixed ladder; Stability Violations and Zone Flags
+    /// are medium; Low Cohesion is low.
+    fn band_for(detail: &IssueDetail, critical_severity: f64) -> SeverityBand {
+        match detail {
             IssueDetail::CouplingViolation(v) | IssueDetail::Cycle(v) => {
-                band_for_severity(v.severity)
+                band_for_severity(v.severity, critical_severity)
             }
             IssueDetail::RuleViolation(_) | IssueDetail::LayerViolation(_) => SeverityBand::High,
             IssueDetail::GravityWell(g) => band_for_rri(g.total_rri),
@@ -768,8 +779,9 @@ impl AuditResult {
     /// then subject path ascending. Deterministic for a given result.
     ///
     /// A derived view: the per-kind lists on the result are untouched.
-    /// Circular pairs surface once, as a [`Issue::Cycle`], and their hop
-    /// edges are never also emitted as Coupling Violations.
+    /// Circular pairs surface once, as a Cycle, and their hop edges are
+    /// never also emitted as Coupling Violations. Bands use the
+    /// `critical_severity` this result was judged under.
     pub fn issues(&self) -> Vec<Issue> {
         let mut cycles: Vec<CouplingViolation> = self
             .violations
@@ -835,6 +847,7 @@ impl AuditResult {
             .into_iter()
             .map(|detail| Issue {
                 baselined: false,
+                severity: Issue::band_for(&detail, self.critical_severity),
                 detail,
             })
             .collect();
@@ -1190,5 +1203,31 @@ mod tests {
             anchor_of(IssueKind::StabilityViolation, "src/stable"),
             "src"
         );
+    }
+
+    // ── critical_severity is honoured (#368) ──
+
+    #[test]
+    fn band_ladder_follows_the_configured_critical_severity() {
+        let modules = vec![
+            file("a", "src/slices/scanner/mod.rs"),
+            file("b", "src/slices/storage/mod.rs"),
+        ];
+        let deps = vec![dep("a", "b", 10)];
+
+        let default: Settings = serde_json::from_str("{}").unwrap();
+        let strict: Settings =
+            serde_json::from_str(r#"{"thresholds":{"critical_severity":0.2}}"#).unwrap();
+        let lenient: Settings =
+            serde_json::from_str(r#"{"thresholds":{"critical_severity":2.0}}"#).unwrap();
+
+        let band = |settings: &Settings| {
+            audit_with_settings(&modules, &deps, &[], settings).issues()[0].severity()
+        };
+        // One import at depth 3 → severity 0.25.
+        assert_eq!(band(&default), SeverityBand::High, "0.25 in [0.2, 0.5)");
+        assert_eq!(band(&strict), SeverityBand::Critical, "0.25 >= 0.2");
+        // Ladder scales with the threshold: high = 0.4×, medium = 0.2×.
+        assert_eq!(band(&lenient), SeverityBand::Low, "0.25 < 0.4 (2.0 × 0.2)");
     }
 }

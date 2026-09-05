@@ -119,6 +119,9 @@ pub struct AuditResult {
     /// The baseline applied to this result, if `--baseline` was given.
     /// `issues()` marks matching Issues `baselined`; nothing is dropped.
     pub baseline: Option<crate::baseline::Baseline>,
+    /// The `thresholds.critical_severity` this audit was judged under;
+    /// `issues()` bands Coupling Violations and Cycles against it (#368).
+    pub critical_severity: f64,
 }
 
 /// Test-only builder for `AuditResult` with sensible defaults.
@@ -171,6 +174,7 @@ impl AuditResultBuilder {
                 layers: Vec::new(),
                 layers_auto_detected: false,
                 baseline: None,
+                critical_severity: issue::DEFAULT_CRITICAL_SEVERITY,
             },
         }
     }
@@ -471,6 +475,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
             layers: Vec::new(),
             layers_auto_detected: false,
             baseline: None,
+            critical_severity: issue::DEFAULT_CRITICAL_SEVERITY,
         };
     }
 
@@ -530,6 +535,7 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
         layers: Vec::new(),
         layers_auto_detected: false,
         baseline: None,
+        critical_severity: issue::DEFAULT_CRITICAL_SEVERITY,
     };
     // Health score (severity-based until risk weights are applied).
     result.recalculate_score();
@@ -598,6 +604,7 @@ pub fn audit_with_settings(
     }
     result.layers = layers;
     result.layers_auto_detected = layers_auto_detected;
+    result.critical_severity = settings.thresholds.critical_severity;
     result
 }
 

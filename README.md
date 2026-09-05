@@ -230,7 +230,7 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | :--- | :--- | :--- |
 | `score_green` | Score threshold for "healthy" (green) | 90.0 |
 | `score_yellow` | Score threshold for "warning" (yellow) | 70.0 |
-| `critical_severity` | Violations above this are flagged critical | 0.5 |
+| `critical_severity` | Severity at which a Coupling Violation or Cycle is banded *critical* (high/medium steps scale with it) | 0.5 |
 | `minimum_severity` | Hide violations below this (reduce noise) | 0.2 |
 | `ignore_patterns` | Glob patterns for dirs/files to skip | 15 defaults |
 | `source_extensions` | File types to scan | 17 extensions |

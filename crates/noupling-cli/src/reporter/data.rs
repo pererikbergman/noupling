@@ -93,7 +93,7 @@ impl JsonReport {
         let critical_violations = result
             .violations
             .iter()
-            .filter(|v| v.severity >= 0.5)
+            .filter(|v| v.severity >= result.critical_severity)
             .count();
 
         let total_circular = result.violations.iter().filter(|v| v.is_circular).count();
