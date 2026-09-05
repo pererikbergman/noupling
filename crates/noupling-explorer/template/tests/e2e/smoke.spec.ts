@@ -81,6 +81,39 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(await cards.count()).toBeGreaterThan(0);
   });
 
+  test("Composition under issue focus shows the participants, not their siblings (#401)", async ({
+    page,
+  }) => {
+    // Focus the first Issue: the Coupling Violation CheckoutForm.tsx → db.rs
+    // (participants under src/ui and src/infra). Composition must show
+    // those two, and must not show only the untouched src/domain.
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("#side-panel ul li button[data-issue-key]").first().click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    await page.locator("button:has-text('Composition')").click();
+    const cards = page.locator("#root-canvas ul li button[title*='click to focus']");
+    const titles = await cards.evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
+    expect(titles.some((t) => t.startsWith("src/ui/CheckoutForm.tsx"))).toBe(true);
+    expect(titles.some((t) => t.startsWith("src/infra/db.rs"))).toBe(true);
+    // The untouched sibling stays on the canvas but dimmed (#335).
+    const domain = cards.filter({ has: page.locator("text=domain") }).first();
+    await expect(domain).toHaveAttribute("data-dimmed", "true");
+    const participant = cards.filter({ hasText: "CheckoutForm.tsx" }).first();
+    await expect(participant).toHaveAttribute("data-dimmed", "false");
+  });
+
+  test("critical and high band chips are coloured like medium, not plain text (#403)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    const chip = (band: string) =>
+      page.locator(`#side-panel ul li button[data-issue-key] span:text-is("${band}")`).first();
+    for (const band of ["critical", "high", "medium"]) {
+      const bg = await chip(band).evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(bg, `${band} chip background`).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    }
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {

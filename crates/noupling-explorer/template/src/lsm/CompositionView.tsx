@@ -16,17 +16,19 @@ export interface CompositionViewProps {
   nodes: NodeEntry[];
   edges: EdgeEntry[];
   onNodeClick?: (id: string) => void;
+  /** Under issue focus: the participants. Other cards stay, dimmed (#335, #401). */
+  focusIds?: Set<string> | null;
 }
 
-export function CompositionView({ nodes, onNodeClick }: CompositionViewProps) {
-  // Containers + packages only — files belong to other views.
-  const containers = nodes.filter((n) => n.kind !== "file");
-
-  if (containers.length === 0) {
+export function CompositionView({ nodes, onNodeClick, focusIds }: CompositionViewProps) {
+  // The same node set the LSM shows at this scope: directories, and the
+  // files that stand in for an expanded container under issue focus.
+  // Filtering files out here made a focused Issue show only the
+  // *non*-participants (#401).
+  if (nodes.length === 0) {
     return (
       <p className="m-6 max-w-md text-[12px] text-muted">
-        No containers in this scope. Drill out, or pick a codebase scope
-        that has nested directories.
+        Nothing at this level. Drill out, or clear the filter.
       </p>
     );
   }
@@ -35,8 +37,13 @@ export function CompositionView({ nodes, onNodeClick }: CompositionViewProps) {
     <div className="h-full overflow-auto p-4">
       <EnrichmentBanner />
       <ul className="m-0 mt-3 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2 lg:grid-cols-3">
-        {containers.map((n) => (
-          <ContainerCard key={n.id} node={n} onClick={() => onNodeClick?.(n.id)} />
+        {nodes.map((n) => (
+          <ContainerCard
+            key={n.id}
+            node={n}
+            dimmed={!!focusIds && focusIds.size > 0 && !focusIds.has(n.id)}
+            onClick={() => onNodeClick?.(n.id)}
+          />
         ))}
       </ul>
     </div>
@@ -46,9 +53,11 @@ export function CompositionView({ nodes, onNodeClick }: CompositionViewProps) {
 function ContainerCard({
   node,
   onClick,
+  dimmed = false,
 }: {
   node: NodeEntry;
   onClick: () => void;
+  dimmed?: boolean;
 }) {
   const fc =
     typeof node.metrics.file_count === "number" ? node.metrics.file_count : null;
@@ -67,7 +76,11 @@ function ContainerCard({
     <li>
       <button
         onClick={onClick}
-        className="block w-full rounded-md border border-border bg-canvas p-3 text-left text-[12px] hover:bg-canvas/60 hover:border-text/30 transition-colors"
+        data-dimmed={dimmed ? "true" : "false"}
+        className={
+          "block w-full rounded-md border border-border bg-canvas p-3 text-left text-[12px] transition-colors hover:border-text/30 hover:bg-canvas/60" +
+          (dimmed ? " opacity-40" : "")
+        }
         title={`${node.id} — click to focus`}
       >
         <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -91,7 +104,11 @@ function ContainerCard({
           </p>
         )}
         <p className="m-0 font-mono text-[10px] text-muted">
-          {fc !== null ? `${fc} file${fc === 1 ? "" : "s"}` : "—"}
+          {node.kind === "file"
+            ? "file"
+            : fc !== null
+              ? `${fc} file${fc === 1 ? "" : "s"}`
+              : "—"}
           {lang ? ` · ${lang}` : ""}
         </p>
       </button>

@@ -21,6 +21,11 @@ export default {
         "accent-ui": "rgb(var(--accent-ui) / <alpha-value>)",
         "accent-domain": "rgb(var(--accent-domain) / <alpha-value>)",
         "accent-infra": "rgb(var(--accent-infra) / <alpha-value>)",
+        // Band chips and edge accents (#403): without these entries the
+        // `bg-edge-cycle/20` classes in bandClass generated nothing and
+        // critical / high rendered as plain text.
+        "edge-cycle": "rgb(var(--edge-cycle) / <alpha-value>)",
+        "edge-violation": "rgb(var(--edge-violation) / <alpha-value>)",
       },
       borderRadius: { sm: "8px", md: "12px", lg: "16px" },
       fontFamily: {
