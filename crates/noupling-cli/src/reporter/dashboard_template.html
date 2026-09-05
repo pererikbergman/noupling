@@ -318,7 +318,8 @@ document.querySelectorAll("#module-table th").forEach(th => {{
     }});
 
     html += '</div><div style="margin-bottom:1rem"><div style="font-size:0.75rem;color:#64748b;margin-bottom:0.4rem;font-weight:600">By Type</div>';
-    [["Coupling", D.violation_types.coupling, "#f59e0b"], ["Circular", D.violation_types.circular, "#ef4444"]].forEach(([label, count, color]) => {{
+    const kindColor = id => (D.issue_kind_counts.find(k => k.kind === id) || {{}}).color || "#94a3b8";
+    [["Coupling", D.violation_types.coupling, kindColor("coupling_violation")], ["Circular", D.violation_types.circular, kindColor("cycle")]].forEach(([label, count, color]) => {{
         const w = Math.max((count / maxType) * 200, count > 0 ? 2 : 0);
         html += `<div class="bar"><span style="width:55px">${{label}}</span><div class="bar-fill" style="width:${{w}}px;background:${{color}}"></div><span>${{count}}</span></div>`;
     }});

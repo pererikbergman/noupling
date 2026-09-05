@@ -33,13 +33,21 @@ fn sonar_severity(band: SeverityBand) -> (&'static str, i32) {
 /// against indexed files and silently drops anything else, so a bare
 /// directory would lose the Issue.
 fn primary_location(issue: &Issue, modules: &[Module]) -> (String, i32) {
+    // Prefer a direct child file (it belongs to this directory, not to a
+    // child package with Issues of its own); fall back to the smallest path
+    // anywhere below, then to the directory itself.
     let file_in = |dir: &str| -> String {
         let prefix = format!("{}/", dir);
-        modules
-            .iter()
-            .filter(|m| m.path.starts_with(&prefix))
-            .map(|m| m.path.as_str())
+        let below = || {
+            modules
+                .iter()
+                .filter(|m| m.path.starts_with(&prefix))
+                .map(|m| m.path.as_str())
+        };
+        below()
+            .filter(|p| !p[prefix.len()..].contains('/'))
             .min()
+            .or_else(|| below().min())
             .unwrap_or(dir)
             .to_string()
     };
@@ -51,7 +59,9 @@ fn primary_location(issue: &Issue, modules: &[Module]) -> (String, i32) {
         },
         IssueDetail::RuleViolation(r) => (r.from_module.clone(), r.line_number.max(1)),
         IssueDetail::LayerViolation(l) => (l.from_module.clone(), l.line_number.max(1)),
-        IssueDetail::GravityWell(g) => (g.module_path.clone(), 1),
+        // A well driven by ring participation is a directory (cycle hops are
+        // directory pairs); pin it to a file like the other directory kinds.
+        IssueDetail::GravityWell(g) => (file_in(&g.module_path), 1),
         IssueDetail::RedFlag(f) => (f.modules.first().cloned().unwrap_or_default(), 1),
         IssueDetail::StabilityViolation(s) => (file_in(&s.from_dir), 1),
         IssueDetail::ZoneFlag(d) => (file_in(&d.dir), 1),

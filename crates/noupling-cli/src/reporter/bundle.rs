@@ -67,11 +67,16 @@ pub fn generate_bundle_report(
     let json = serde_json::to_string(&data)?;
 
     // One palette for every visual format: IssueKind::accent_color.
-    let palette_css: String = super::graph::EDGE_KINDS
+    let mut palette_css: String = super::graph::EDGE_KINDS
         .iter()
         .map(|k| format!(".edge-kind-{} {{ stroke: {}; }}", k.id(), k.accent_color()))
         .collect::<Vec<_>>()
         .join("\n");
+    // The ring overlay drawn on top of the arcs uses the Cycle colour too.
+    let cycle = noupling_core::analyzer::IssueKind::Cycle.accent_color();
+    palette_css.push_str(&format!(
+        "\n.edge-cycle {{ stroke: {cycle}; }}\n.edge-cycle-weakest {{ stroke: {cycle}; }}"
+    ));
     let kind_legend: String = super::graph::EDGE_KINDS
         .iter()
         .map(|k| {

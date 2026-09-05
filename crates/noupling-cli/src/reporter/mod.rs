@@ -842,9 +842,12 @@ mod tests {
             module_type: noupling_core::core::ModuleType::File,
             depth: 2,
         };
+        // A child package that sorts first must not steal the pin: direct
+        // children of the directory win.
         let modules = vec![
             file("z", "src/concrete/zz.rs"),
             file("t", "src/concrete/types.rs"),
+            file("n", "src/concrete/aaa/nested.rs"),
         ];
         let sonar = format_sonar(&modules, &result_with_a_zone_flag_and_a_rule_violation());
         let parsed: serde_json::Value = serde_json::from_str(&sonar).unwrap();

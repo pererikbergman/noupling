@@ -79,21 +79,21 @@ pub(super) const EDGE_KINDS: [IssueKind; 5] = [
 /// Muted colour for baselined edges of any kind.
 const MUTED: &str = "#94a3b8";
 
-/// Style per kind: (colour, mermaid arrow, dot attributes). Exhaustive so
-/// a new kind must say how it is drawn; node-shaped kinds are never drawn
-/// but still name a style so the match stays total.
-fn edge_style(kind: IssueKind) -> (&'static str, &'static str, &'static str) {
-    let colour = kind.accent_color();
+/// Drawing style per edge-shaped kind: (mermaid arrow, dot attributes).
+/// Colour is `IssueKind::accent_color`. Exhaustive so a new kind must say
+/// how it is drawn; node-shaped kinds never reach a drawing (`issue_edges`
+/// skips them) but must still name a style so the match stays total.
+fn edge_style(kind: IssueKind) -> (&'static str, &'static str) {
     match kind {
-        IssueKind::Cycle => (colour, "-.->", "style=dashed"),
-        IssueKind::RuleViolation => (colour, "--x", "style=bold, arrowhead=box"),
-        IssueKind::LayerViolation => (colour, "==>", "penwidth=2, arrowhead=tee"),
-        IssueKind::CouplingViolation => (colour, "-->", "style=solid"),
-        IssueKind::StabilityViolation => (colour, "--o", "style=dotted"),
+        IssueKind::Cycle => ("-.->", "style=dashed"),
+        IssueKind::RuleViolation => ("--x", "style=bold, arrowhead=box"),
+        IssueKind::LayerViolation => ("==>", "penwidth=2, arrowhead=tee"),
+        IssueKind::CouplingViolation => ("-->", "style=solid"),
+        IssueKind::StabilityViolation => ("--o", "style=dotted"),
         IssueKind::GravityWell
         | IssueKind::RedFlag
         | IssueKind::ZoneFlag
-        | IssueKind::LowCohesion => (MUTED, "-->", "style=invis"),
+        | IssueKind::LowCohesion => ("-->", "style=invis"),
     }
 }
 
@@ -131,13 +131,14 @@ fn build_dir_graph(
             }
             _ => (e.from.as_str(), e.to.as_str()),
         };
-        // Only a genuine self-edge is dropped; two distinct directories that
-        // share a basename still get their edge (drawn between the nodes
-        // the basename keying gives them).
-        if from_dir == to_dir {
+        // Nodes are keyed by basename, so two distinct directories sharing a
+        // basename collapse onto one node; an edge between them would draw
+        // as a self-loop asserting a directory imports itself. Drop those
+        // along with genuine self-edges.
+        let (from, to) = (short_name(from_dir), short_name(to_dir));
+        if from_dir == to_dir || from == to {
             continue;
         }
-        let (from, to) = (short_name(from_dir), short_name(to_dir));
         let entry = edges.entry((from, to)).or_insert(EdgeInfo {
             count: 0,
             kind: e.kind,
@@ -223,7 +224,8 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
         } else {
             String::new()
         };
-        let (colour, arrow, _) = edge_style(info.kind);
+        let (arrow, _) = edge_style(info.kind);
+        let colour = info.kind.accent_color();
         out.push_str(&format!(
             "    {} {}{} {}\n",
             sanitize(from),
@@ -248,7 +250,8 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
     // Legend
     out.push_str("    %% Legend — edge accents by Issue kind:\n");
     for kind in EDGE_KINDS {
-        let (colour, arrow, _) = edge_style(kind);
+        let (arrow, _) = edge_style(kind);
+        let colour = kind.accent_color();
         out.push_str(&format!(
             "    %%   {}  {}  ({})\n",
             arrow,
@@ -312,7 +315,8 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
 
     // Edges: per-kind style; muted when every Issue on the edge is baselined.
     for ((from, to), info) in &edges {
-        let (colour, _, dot_style) = edge_style(info.kind);
+        let (_, dot_style) = edge_style(info.kind);
+        let colour = info.kind.accent_color();
         let mut attrs = vec![dot_style.to_string()];
         if info.count > 1 {
             attrs.push(format!("label=\"{}\"", info.count));
@@ -339,7 +343,8 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push_str("        label=\"Legend\"; fontsize=10; color=\"#cbd5e1\";\n");
     out.push_str("        node [shape=plaintext, style=\"\", fontsize=9];\n");
     for (i, kind) in EDGE_KINDS.iter().enumerate() {
-        let (colour, _, dot_style) = edge_style(*kind);
+        let (_, dot_style) = edge_style(*kind);
+        let colour = kind.accent_color();
         out.push_str(&format!(
             "        l{i}a [label=\"\"]; l{i}b [label=\"{}\"]; l{i}a -> l{i}b [{}, color=\"{}\"];\n",
             kind.name(),
@@ -540,6 +545,26 @@ mod tests {
         assert_eq!(kind_of("src/infra/db.rs").kind, IssueKind::LayerViolation);
         assert_eq!(kind_of("src/stable").kind, IssueKind::StabilityViolation);
         assert_eq!(edges.len(), 6);
+    }
+
+    /// Two directories sharing a basename collapse onto one node; an edge
+    /// between them must not be drawn as a self-loop.
+    #[test]
+    fn edges_between_same_basename_directories_are_not_drawn_as_self_loops() {
+        use noupling_core::analyzer::RuleViolation;
+        let result = AuditResultBuilder::new()
+            .with_total_modules(2)
+            .with_rule_violations(vec![RuleViolation {
+                from_module: "src/api/models/user.rs".into(),
+                to_module: "src/db/models/user.rs".into(),
+                line_number: 1,
+                message: "no".into(),
+            }])
+            .build();
+        let mermaid = format_mermaid(&[], &result);
+        assert!(!mermaid.contains("models --x models"), "{mermaid}");
+        let dot = format_dot(&[], &result);
+        assert!(!dot.contains("models -> models"), "{dot}");
     }
 
     #[test]

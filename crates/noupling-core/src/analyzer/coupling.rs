@@ -558,6 +558,42 @@ mod tests {
         );
     }
 
+    /// An SCC with more than one elementary cycle must report the same ring
+    /// whichever node Tarjan pops first: the DFS starts from the smallest
+    /// member, so the result is a function of the graph alone.
+    #[test]
+    fn multi_cycle_scc_reports_the_same_ring_regardless_of_entry_order() {
+        let build = |extra: Option<(&str, &str, &str)>| {
+            let mut modules = vec![
+                make_module("a", "src/ring/alpha/a.rs"),
+                make_module("b", "src/ring/beta/b.rs"),
+                make_module("c", "src/ring/gamma/c.rs"),
+                make_module("d", "src/ring/delta/d.rs"),
+            ];
+            // alpha→beta→gamma→alpha and gamma→delta→alpha: two rings, one SCC.
+            let mut deps = vec![
+                make_dep("a", "b", 1),
+                make_dep("b", "c", 1),
+                make_dep("c", "a", 1),
+                make_dep("c", "d", 1),
+                make_dep("d", "a", 1),
+            ];
+            if let Some((id, path, target)) = extra {
+                modules.push(make_module(id, path));
+                deps.push(make_dep(id, target, 1));
+            }
+            let v = compute_coupling_violations(&modules, &deps);
+            v.into_iter()
+                .find(|v| v.is_circular)
+                .map(|v| v.cycle_path)
+                .expect("ring detected")
+        };
+        let plain = build(None);
+        let shifted = build(Some(("z", "src/ring/aaa/z.rs", "d")));
+        assert_eq!(plain, shifted, "reported ring must not depend on SCC entry");
+        assert_eq!(plain[0], "src/ring/alpha");
+    }
+
     #[test]
     fn representative_edge_of_a_pair_is_the_smallest_regardless_of_input_order() {
         let build = |left: &str, r1: &str, r2: &str| {

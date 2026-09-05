@@ -37,6 +37,16 @@ pub enum RedFlagType {
     TrappedChild,
 }
 
+impl RedFlagType {
+    /// Stable machine id used in fingerprints and serialised cards.
+    pub fn id(&self) -> &'static str {
+        match self {
+            RedFlagType::FusedSibling => "fused_sibling",
+            RedFlagType::TrappedChild => "trapped_child",
+        }
+    }
+}
+
 /// Detect architectural red flags from violation data.
 pub fn compute_red_flags(
     violations: &[CouplingViolation],

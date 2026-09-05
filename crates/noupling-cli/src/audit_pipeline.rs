@@ -52,11 +52,37 @@ pub struct PipelineOutcome {
     pub result: AuditResult,
     /// New / baselined / resolved counts when `baseline` was requested.
     pub baseline: Option<BaselineComparison>,
-    /// True when this result describes only part of the snapshot: a diff
-    /// scan narrowed it to changed files, or a monorepo `--module` filter
-    /// applied. Partial results must not be recorded as the snapshot's
-    /// trend point.
-    pub partial: bool,
+    /// The snapshot's whole-project trend point — score and per-kind Issue
+    /// counts captured *before* any diff filter — or `None` when a
+    /// `--module` filter made the run a subset of the snapshot. This is
+    /// what `record_snapshot_trends` persists, so a CI project that only
+    /// runs `scan --diff-base` still keeps its history.
+    pub trend: Option<SnapshotTrend>,
+}
+
+/// One snapshot's trend point (#349).
+#[derive(Debug, Clone)]
+pub struct SnapshotTrend {
+    pub score: f64,
+    pub kind_counts: std::collections::BTreeMap<String, usize>,
+}
+
+impl SnapshotTrend {
+    fn of(result: &AuditResult) -> Self {
+        let issues = result.issues();
+        SnapshotTrend {
+            score: result.score,
+            kind_counts: noupling_core::analyzer::IssueKind::ALL
+                .iter()
+                .map(|k| {
+                    (
+                        k.id().to_string(),
+                        issues.iter().filter(|i| i.kind() == *k).count(),
+                    )
+                })
+                .collect(),
+        }
+    }
 }
 
 /// The seam. Owns the project path + db + settings for the duration
@@ -127,9 +153,16 @@ impl<'a> AuditPipeline<'a> {
             .collect();
         result.total_external_imports = result.external_deps.iter().map(|e| e.count).sum();
 
+        // Whole-snapshot trend point, taken before the diff filter narrows
+        // the result. A module filter means this run is not the snapshot.
+        let trend = if options.module_filter.is_none() {
+            Some(SnapshotTrend::of(&result))
+        } else {
+            None
+        };
+
         // (5) Diff filter — if the scan ran against a diff base, narrow
         // the result to the files that changed.
-        let diff_scoped = scan_meta.diff_changed_files.is_some();
         if let Some(ref changed_files) = scan_meta.diff_changed_files {
             result.filter_by_changed_files(changed_files);
         }
@@ -154,36 +187,22 @@ impl<'a> AuditPipeline<'a> {
             dependencies: filtered_deps,
             result,
             baseline,
-            partial: diff_scoped || options.module_filter.is_some(),
+            trend,
         })
     }
 }
 
 /// Record what the strategy report and the Explorer's history scrubber
-/// read later: the health score and the per-kind Issue counts of this
-/// audit (#349). Best-effort — a failed write must not fail the command.
-///
-/// Only whole-snapshot results are recorded: a diff-scoped or
-/// module-filtered outcome (`PipelineOutcome::partial`) describes a
-/// subset and would be plotted as a spurious dip.
+/// read later: the snapshot's whole-project score and per-kind Issue
+/// counts (#349). Best-effort — a failed write must not fail the command.
+/// Nothing is written for a `--module` run (`outcome.trend` is `None`).
 pub fn record_snapshot_trends(snap_repo: &SnapshotRepository<'_>, outcome: &PipelineOutcome) {
-    if outcome.partial {
+    let Some(trend) = &outcome.trend else {
         return;
-    }
+    };
     let snapshot_id = outcome.snapshot.id.as_str();
-    let result = &outcome.result;
-    let _ = snap_repo.save_health_score(snapshot_id, result.score);
-    let issues = result.issues();
-    let counts: std::collections::BTreeMap<String, usize> = noupling_core::analyzer::IssueKind::ALL
-        .iter()
-        .map(|k| {
-            (
-                k.id().to_string(),
-                issues.iter().filter(|i| i.kind() == *k).count(),
-            )
-        })
-        .collect();
-    let _ = snap_repo.save_issue_kind_counts(snapshot_id, &counts);
+    let _ = snap_repo.save_health_score(snapshot_id, trend.score);
+    let _ = snap_repo.save_issue_kind_counts(snapshot_id, &trend.kind_counts);
 }
 
 fn apply_module_filter(
@@ -349,26 +368,22 @@ mod tests {
         // panicking. Behaviour of filter_by_changed_files itself is
         // covered by noupling-core's own tests.
         assert!(outcome.result.violations.is_empty());
-        assert!(outcome.partial, "a diff-scoped result is partial");
     }
 
-    /// Partial outcomes (diff-scoped or module-filtered) never overwrite
-    /// the snapshot's recorded trend point; whole-snapshot ones do.
+    /// A diff-scoped run still records the snapshot's *whole* trend point:
+    /// the score and per-kind counts are captured before the diff filter
+    /// narrows the result, so a CI project that only ever runs
+    /// `scan --diff-base` keeps its history. Module-filtered runs record
+    /// nothing (a subset of the snapshot is not the snapshot).
     #[test]
-    fn record_snapshot_trends_skips_partial_outcomes() {
+    fn diff_scoped_runs_record_the_whole_snapshot_trend_point() {
         let f = small_project();
         let settings = empty_settings();
         let pipeline = AuditPipeline::new(Path::new("/tmp"), &f.db, &settings);
         let snap_repo = SnapshotRepository::new(&f.db.conn);
-
         let whole = pipeline.run(PipelineOptions::default()).expect("run");
-        assert!(!whole.partial);
-        record_snapshot_trends(&snap_repo, &whole);
-        let recorded = snap_repo.get_issue_kind_counts(&f.snapshot.id).unwrap();
-        assert!(recorded.is_some(), "whole-snapshot run is recorded");
 
-        // Now narrow the snapshot to a diff and run again: must not touch the record.
-        SnapshotRepository::new(&f.db.conn)
+        snap_repo
             .save_meta(
                 &f.snapshot.id,
                 &SnapshotMeta {
@@ -379,20 +394,60 @@ mod tests {
                 },
             )
             .unwrap();
-        let mut partial = pipeline.run(PipelineOptions::default()).expect("run");
-        assert!(partial.partial);
-        partial.result.score = 1.0; // would be a visible dip if recorded
-        record_snapshot_trends(&snap_repo, &partial);
-        let after = snap_repo.get_all_with_scores().unwrap();
-        assert!(
-            (after[0].health_score - whole.result.score).abs() < f64::EPSILON,
-            "partial run must not overwrite the score: {:?}",
-            after
-        );
-        assert_eq!(
-            snap_repo.get_issue_kind_counts(&f.snapshot.id).unwrap(),
-            recorded
-        );
+        let diff = pipeline.run(PipelineOptions::default()).expect("run");
+        let trend = diff
+            .trend
+            .as_ref()
+            .expect("whole-snapshot trend point captured");
+        assert!((trend.score - whole.result.score).abs() < f64::EPSILON);
+        record_snapshot_trends(&snap_repo, &diff);
+        let rows = snap_repo.get_all_with_scores().unwrap();
+        assert_eq!(rows.len(), 1, "diff snapshot has a recorded score");
+        assert!(snap_repo
+            .get_issue_kind_counts(&f.snapshot.id)
+            .unwrap()
+            .is_some());
+    }
+
+    /// A `--module` run is a subset of the snapshot: it carries no trend
+    /// point and records nothing.
+    #[test]
+    fn module_filtered_runs_carry_no_trend_point() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".noupling")).unwrap();
+        let db = Database::open(&tmp.path().join(".noupling").join("history.db")).unwrap();
+        let snap = SnapshotRepository::new(&db.conn)
+            .create(tmp.path().to_str().unwrap())
+            .unwrap();
+        ModuleRepository::new(&db.conn)
+            .bulk_insert(&[Module {
+                id: "m-orders".into(),
+                snapshot_id: snap.id.clone(),
+                parent_id: None,
+                name: "a.rs".into(),
+                path: "services/orders/a.rs".into(),
+                module_type: ModuleType::File,
+                depth: 2,
+            }])
+            .unwrap();
+        let settings: Settings =
+            serde_json::from_str(r#"{"modules":[{"name":"orders","path":"services/orders"}]}"#)
+                .unwrap();
+        let pipeline = AuditPipeline::new(Path::new("/tmp"), &db, &settings);
+
+        let outcome = pipeline
+            .run(PipelineOptions {
+                snapshot_id: None,
+                module_filter: Some("orders"),
+                baseline: false,
+            })
+            .expect("run");
+
+        assert!(outcome.trend.is_none());
+        let snap_repo = SnapshotRepository::new(&db.conn);
+        record_snapshot_trends(&snap_repo, &outcome);
+        assert!(snap_repo.get_all_with_scores().unwrap().is_empty());
+        assert!(snap_repo.get_issue_kind_counts(&snap.id).unwrap().is_none());
     }
 
     #[test]
