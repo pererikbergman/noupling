@@ -18,7 +18,7 @@
       <li><a href="howto.html">How-to</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.9.1</span></li>
+      <li><span class="badge">v0.9.2</span></li>
     </ul>
   </div>
 </nav>
@@ -32,6 +32,31 @@
     </p>
 
     <!-- ── v0.7.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.9.2 &mdash; The Explorer Earns Its Keep</h2>
+      <div class="date">September 2026</div>
+
+      <p>A visual review of the Explorer on noupling's own code produced nine tickets, all fixed here; five analyzer bugs that made scores and Issues depend on things they should not are fixed too. noupling now audits itself at <strong>100.0 with zero violations</strong>.</p>
+
+      <h3><span class="tag tag-fix">fix</span> Explorer: a canvas you can read (<a href="https://github.com/pererikbergman/noupling/issues/397">#397</a>&ndash;<a href="https://github.com/pererikbergman/noupling/issues/405">#405</a>, <a href="https://github.com/pererikbergman/noupling/issues/334">#334</a>, <a href="https://github.com/pererikbergman/noupling/issues/335">#335</a>)</h3>
+      <p><strong>The friction:</strong> on a repo whose only top-level directory is <code>crates/</code> the Explorer opened on one box; inferred one-directory layers stacked the LSM into a column with every edge drawn through the nodes in between; nothing ever fitted the canvas; Composition under issue focus showed exactly the modules that were <em>not</em> involved; critical and high badges were plain text; the header, Info tab, Levels and Matrix each counted differently; the Rules tab listed 28 pairwise rows for 8 layers with the targets cut off.</p>
+      <p><strong>The fix:</strong> the Explorer opens at the first level that branches and labels collapsed chains (<code>noupling-cli / src</code>); edges are routed in lanes beside the tiers with fan-out slots and same-tier arcs, wide tiers wrap into rows, and the canvas fits its content on every scope or view change; Composition and the LSM show the participants at full strength and dim the rest; directory metrics come from the audit and files and LOC roll up; band chips have their colours; the Rules tab shows the layer stack once. The Force view is removed (<a href="https://github.com/pererikbergman/noupling/issues/396">#396</a>; Data Contract <code>format_version</code> 3).</p>
+
+      <h3><span class="tag tag-fix">fix</span> One score formula (<a href="https://github.com/pererikbergman/noupling/issues/354">#354</a>)</h3>
+      <p>Layer filtering used to run last and re-score on the severity sum, so a layered project and an unlayered one with the same graph scored 96.7 and 66.7. Now the pipeline decides the violation set, then scores it once on TRI &mdash; for <code>--diff-base</code> runs too. Layered projects' scores change on upgrade; re-check <code>--fail-below</code>.</p>
+
+      <h3><span class="tag tag-fix">fix</span> Analyzer findings that were about the analyzer (<a href="https://github.com/pererikbergman/noupling/issues/413">#413</a>, <a href="https://github.com/pererikbergman/noupling/issues/414">#414</a>, <a href="https://github.com/pererikbergman/noupling/issues/357">#357</a>, <a href="https://github.com/pererikbergman/noupling/issues/355">#355</a>)</h3>
+      <ul>
+        <li>Abstractness counts module-level functions as concrete (TypeScript, Rust, Kotlin), so a directory of components is no longer "100% abstract".</li>
+        <li>The Stable Dependencies check skips a directory and its own ancestor; <code>lib.rs &rarr; analyzer/</code> is composition, not a violation.</li>
+        <li>Monorepo audits run the shared pipeline per module &mdash; layers, rules, risk weights &mdash; and the summary lists each module's Issue cards, so <code>audit</code>, <code>audit --module</code> and <code>report --module</code> agree.</li>
+        <li>Layer inference is sticky: the layers a snapshot infers are recorded and kept while a fresh detection finds nothing and they still cover 15% of files, so one commit near the 30% line no longer flips the audit's mode.</li>
+      </ul>
+
+      <h3><span class="tag tag-refactor">refactor</span> noupling on itself (<a href="https://github.com/pererikbergman/noupling/issues/412">#412</a>)</h3>
+      <p>The Explorer template's <code>components &harr; state</code> cycle is broken and its layers are declared in <code>.noupling/settings.json</code>, so the repo's own audit is clean and CI enforces the order. Practice what you audit.</p>
+    </article>
+
     <article class="release">
       <h2>v0.9.1 &mdash; Dogfooding Fixes</h2>
       <div class="date">September 2026</div>
