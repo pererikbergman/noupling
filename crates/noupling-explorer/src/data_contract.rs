@@ -762,7 +762,32 @@ fn parse_weakest_link(s: &str) -> Option<(String, String)> {
     Some((from, to))
 }
 
+/// One entry per violation record, carrying the band of the Issue it
+/// belongs to: a Coupling Violation's own band, or for a ring hop the band
+/// of its Cycle. The Explorer never derives a band of its own (#379); the
+/// band is assigned once by the audit and every surface shows the same one.
 fn build_violations(audit_result: &AuditResult) -> Vec<ViolationEntry> {
+    let mut band_of_pair: HashMap<(&str, &str), &'static str> = HashMap::new();
+    let issues = audit_result.issues();
+    for issue in &issues {
+        match &issue.detail {
+            IssueDetail::CouplingViolation(v) => {
+                band_of_pair.insert(
+                    (v.dir_a.as_str(), v.dir_b.as_str()),
+                    issue.severity().name(),
+                );
+            }
+            IssueDetail::Cycle(v) => {
+                let band = issue.severity().name();
+                band_of_pair.insert((v.dir_a.as_str(), v.dir_b.as_str()), band);
+                for hop in v.cycle_path.windows(2) {
+                    band_of_pair.insert((hop[0].as_str(), hop[1].as_str()), band);
+                    band_of_pair.insert((hop[1].as_str(), hop[0].as_str()), band);
+                }
+            }
+            _ => {}
+        }
+    }
     audit_result
         .violations
         .iter()
@@ -775,7 +800,10 @@ fn build_violations(audit_result: &AuditResult) -> Vec<ViolationEntry> {
                 from: v.from_module.clone(),
                 to: v.to_module.clone(),
             },
-            severity: severity_band(v.severity),
+            severity: band_of_pair
+                .get(&(v.dir_a.as_str(), v.dir_b.as_str()))
+                .copied()
+                .unwrap_or("low"),
             introduced_in: None,
         })
         .collect()
@@ -911,16 +939,6 @@ fn participants_of(issue: &Issue, audit_result: &AuditResult) -> Vec<String> {
     let mut seen = HashSet::new();
     out.retain(|p| seen.insert(p.clone()));
     out
-}
-
-fn severity_band(s: f64) -> &'static str {
-    if s >= 0.5 {
-        "high"
-    } else if s >= 0.2 {
-        "medium"
-    } else {
-        "low"
-    }
 }
 
 fn build_dependency_rules(rules: &[DependencyRule]) -> Vec<DependencyRuleEntry> {
@@ -1110,6 +1128,59 @@ mod builder_tests {
             root_path: "/tmp".into(),
         };
         (settings, snapshot)
+    }
+
+    /// The per-node violation rows carry the band of their owning Issue,
+    /// including the points floor (#379): a two-directory ring on a
+    /// five-module project is critical on the Issue card and on both hops.
+    #[test]
+    fn violation_rows_carry_the_band_of_their_issue() {
+        use noupling_core::core::{Dependency, Module, ModuleType};
+        let file = |id: &str, path: &str| Module {
+            id: id.into(),
+            snapshot_id: "snap".into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: path.matches('/').count() as i32,
+        };
+        let dep = |from: &str, to: &str| Dependency {
+            from_module_id: from.into(),
+            to_module_id: to.into(),
+            line_number: 3,
+        };
+        let modules = vec![
+            file("a", "src/main/kotlin/com/example/auth/AuthService.kt"),
+            file("b", "src/main/kotlin/com/example/auth/AuthToken.kt"),
+            file("c", "src/main/kotlin/com/example/billing/BillingAccount.kt"),
+            file(
+                "d",
+                "src/main/kotlin/com/example/billing/PaymentProcessor.kt",
+            ),
+            file("e", "src/main/kotlin/com/example/shared/Config.kt"),
+        ];
+        let deps = vec![dep("a", "c"), dep("d", "b")];
+        let (settings, _) = default_inputs();
+        let audit = noupling_core::analyzer::audit_with_settings(&modules, &deps, &[], &settings);
+        let cycle_band = audit
+            .issues()
+            .iter()
+            .find(|i| i.kind() == IssueKind::Cycle)
+            .expect("a Cycle")
+            .severity()
+            .name();
+        assert_eq!(cycle_band, "critical");
+
+        let rows = build_violations(&audit);
+        assert!(!rows.is_empty());
+        for row in &rows {
+            assert_eq!(
+                row.severity, cycle_band,
+                "{} -> {} must show its Cycle's band",
+                row.rule.from, row.rule.to
+            );
+        }
     }
 
     #[test]

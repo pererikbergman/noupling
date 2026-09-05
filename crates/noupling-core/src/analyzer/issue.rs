@@ -220,7 +220,10 @@ pub enum IssueDetail {
 // Coupling Violations and Cycles carry the audit's `severity`; the critical
 // step is the project's `thresholds.critical_severity` (default 0.5), and
 // the high / medium steps scale with it (0.4× and 0.2×, i.e. 0.2 / 0.1 at
-// the default). Gravity Wells and Red Flags carry only an RRI (direction
+// the default). Their band is additionally floored by the points they cost
+// (10 / 5 / 1), because `severity` is mostly a depth measure and a shallow
+// ring on a small project can be "low" by severity while taking 40 points
+// off the score (#379). Gravity Wells and Red Flags carry only an RRI (direction
 // weight × import density, default weights 2–10), so they map through a
 // fixed RRI ladder.
 
@@ -243,6 +246,26 @@ fn band_for_severity(severity: f64, critical: f64) -> SeverityBand {
     } else if severity >= critical * 0.4 {
         SeverityBand::High
     } else if severity >= critical * 0.2 {
+        SeverityBand::Medium
+    } else {
+        SeverityBand::Low
+    }
+}
+
+/// Points-lost floors: an Issue that alone costs a tenth of the score is
+/// critical whatever its raw severity says (#379). The steps mirror the
+/// score colours — 10 points is the whole green band (90–100).
+const POINTS_CRITICAL: f64 = 10.0;
+const POINTS_HIGH: f64 = 5.0;
+const POINTS_MEDIUM: f64 = 1.0;
+
+/// The lowest band an Issue costing `points` may carry.
+fn band_for_points(points: f64) -> SeverityBand {
+    if points >= POINTS_CRITICAL {
+        SeverityBand::Critical
+    } else if points >= POINTS_HIGH {
+        SeverityBand::High
+    } else if points >= POINTS_MEDIUM {
         SeverityBand::Medium
     } else {
         SeverityBand::Low
@@ -290,14 +313,17 @@ impl Issue {
     }
 
     /// Assign the band. Coupling Violations and Cycles map their severity
-    /// through the project's `critical_severity`; Rule and Layer Violations
-    /// break an explicit policy and are high; Gravity Wells and Red Flags map
-    /// their RRI through a fixed ladder; Stability Violations and Zone Flags
-    /// are medium; Low Cohesion is low.
+    /// through the project's `critical_severity`, floored by the points
+    /// they cost (#379) so the band never contradicts the score impact on
+    /// the same card; Rule and Layer Violations break an explicit policy
+    /// and are high; Gravity Wells and Red Flags map their RRI through a
+    /// fixed ladder; Stability Violations and Zone Flags are medium; Low
+    /// Cohesion is low.
     fn band_for(detail: &IssueDetail, critical_severity: f64) -> SeverityBand {
         match detail {
             IssueDetail::CouplingViolation(v) | IssueDetail::Cycle(v) => {
                 band_for_severity(v.severity, critical_severity)
+                    .max(band_for_points(v.score_impact))
             }
             IssueDetail::RuleViolation(_) | IssueDetail::LayerViolation(_) => SeverityBand::High,
             IssueDetail::GravityWell(g) => band_for_rri(g.total_rri),
@@ -922,6 +948,7 @@ fn hop_of_cycle(v: &CouplingViolation, cycles: &[CouplingViolation]) -> Option<u
 
 #[cfg(test)]
 mod tests {
+    use super::band_for_points;
     use crate::analyzer::audit_with_settings;
     use crate::analyzer::{Issue, IssueKind, SeverityBand};
     use crate::core::{Dependency, Module, ModuleType};
@@ -1233,10 +1260,15 @@ mod tests {
 
     #[test]
     fn band_ladder_follows_the_configured_critical_severity() {
-        let modules = vec![
+        let mut modules = vec![
             file("a", "src/slices/scanner/mod.rs"),
             file("b", "src/slices/storage/mod.rs"),
         ];
+        // Enough unrelated modules that the one violation costs well under a
+        // point, so the points floor (#379) stays out of this ladder test.
+        for i in 0..60 {
+            modules.push(file(&format!("f{i}"), &format!("src/filler/f{i}.rs")));
+        }
         let deps = vec![dep("a", "b", 10)];
 
         let default: Settings = serde_json::from_str("{}").unwrap();
@@ -1246,13 +1278,66 @@ mod tests {
             serde_json::from_str(r#"{"thresholds":{"critical_severity":2.0}}"#).unwrap();
 
         let band = |settings: &Settings| {
-            audit_with_settings(&modules, &deps, &[], settings).issues()[0].severity()
+            let result = audit_with_settings(&modules, &deps, &[], settings);
+            let issues = result.issues();
+            let v = issues
+                .iter()
+                .find(|i| i.kind() == IssueKind::CouplingViolation)
+                .expect("one Coupling Violation");
+            assert!(v.score_impact() < 1.0, "{}", v.score_impact());
+            v.severity()
         };
         // One import at depth 3 → severity 0.25.
         assert_eq!(band(&default), SeverityBand::High, "0.25 in [0.2, 0.5)");
         assert_eq!(band(&strict), SeverityBand::Critical, "0.25 >= 0.2");
         // Ladder scales with the threshold: high = 0.4×, medium = 0.2×.
         assert_eq!(band(&lenient), SeverityBand::Low, "0.25 < 0.4 (2.0 × 0.2)");
+    }
+
+    // ── the band can never contradict the score impact (#379) ──
+
+    /// examples/kotlin-coupled before #385: five modules, a two-directory
+    /// ring with two imports. Raw severity 0.07 says "low"; the ring costs
+    /// 40 of 100 points. The band must follow the points.
+    #[test]
+    fn an_issue_that_costs_a_large_share_of_the_score_is_never_banded_low() {
+        let modules = vec![
+            file("a", "src/main/kotlin/com/example/auth/AuthService.kt"),
+            file("b", "src/main/kotlin/com/example/auth/AuthToken.kt"),
+            file("c", "src/main/kotlin/com/example/billing/BillingAccount.kt"),
+            file(
+                "d",
+                "src/main/kotlin/com/example/billing/PaymentProcessor.kt",
+            ),
+            file("e", "src/main/kotlin/com/example/shared/Config.kt"),
+        ];
+        let deps = vec![dep("a", "c", 3), dep("d", "b", 3)];
+        let settings: Settings = serde_json::from_str("{}").unwrap();
+        let result = audit_with_settings(&modules, &deps, &[], &settings);
+        let issues = result.issues();
+        let cycle = issues
+            .iter()
+            .find(|i| i.kind() == IssueKind::Cycle)
+            .expect("the mutual imports form a Cycle");
+        assert!(cycle.score_impact() >= 10.0, "{}", cycle.score_impact());
+        assert_eq!(
+            cycle.severity(),
+            SeverityBand::Critical,
+            "an Issue costing {:.1} points is critical whatever its raw severity",
+            cycle.score_impact()
+        );
+    }
+
+    /// The floor is a floor: a violation whose raw severity already earns a
+    /// higher band keeps it, and one that costs (almost) nothing keeps the
+    /// band its raw severity says.
+    #[test]
+    fn points_floor_only_ever_raises_the_band() {
+        assert_eq!(band_for_points(0.0), SeverityBand::Low);
+        assert_eq!(band_for_points(0.99), SeverityBand::Low);
+        assert_eq!(band_for_points(1.0), SeverityBand::Medium);
+        assert_eq!(band_for_points(5.0), SeverityBand::High);
+        assert_eq!(band_for_points(10.0), SeverityBand::Critical);
     }
 
     // ── violation_count folds ring hops like issues() (#358) ──

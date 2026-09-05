@@ -18,7 +18,7 @@ A Finding that describes a module or directory without asking for a change (fan-
 _Avoid_: stat, score (score is the single project-level number, not a per-module Metric)
 
 **Severity band**:
-The importance of an Issue on a four-step scale: critical, high, medium, low. Assigned once by the audit; every report shows the same band for the same Issue.
+The importance of an Issue on a four-step scale: critical, high, medium, low. Assigned once by the audit; every report shows the same band for the same Issue. A band never contradicts the score impact on the same card: an Issue costing 10 or more points is critical, 5 or more at least high, 1 or more at least medium.
 _Avoid_: level, priority, RRI (RRI is the underlying number for the kinds that have one)
 
 **Baseline**:

@@ -155,7 +155,7 @@ noupling audit . --fail-below 80</code></pre>
       </table>
 
       <h3 id="issue-card-fields">The Issue card</h3>
-      <p>Every Issue is presented the same way in every format: <strong>kind</strong>, <strong>severity band</strong> (critical / high / medium / low, assigned once by the audit &mdash; Coupling Violations and Cycles step to <em>critical</em> at <code>critical_severity</code>; Rule and Layer Violations are high; Gravity Wells and Red Flags map their RRI; Stability Violations and Zone Flags are medium; Low Cohesion is low), <strong>subject</strong> (one module, one <code>from &rarr; to</code> edge, or a ring), a one-sentence <strong>reason</strong> with this instance's numbers, a one-sentence <strong>recommendation</strong>, and its <strong>score impact</strong>. When you audit with <code>--baseline</code>, accepted Issues are additionally marked <strong>baselined</strong>: still listed, not counted by the CI gate.</p>
+      <p>Every Issue is presented the same way in every format: <strong>kind</strong>, <strong>severity band</strong> (critical / high / medium / low, assigned once by the audit &mdash; Coupling Violations and Cycles step to <em>critical</em> at <code>critical_severity</code>, and are never banded below what they cost the score &mdash; 10 points is critical, 5 at least high, 1 at least medium; Rule and Layer Violations are high; Gravity Wells and Red Flags map their RRI; Stability Violations and Zone Flags are medium; Low Cohesion is low), <strong>subject</strong> (one module, one <code>from &rarr; to</code> edge, or a ring), a one-sentence <strong>reason</strong> with this instance's numbers, a one-sentence <strong>recommendation</strong>, and its <strong>score impact</strong>. When you audit with <code>--baseline</code>, accepted Issues are additionally marked <strong>baselined</strong>: still listed, not counted by the CI gate.</p>
 
 <h2 id="cmd-scan">scan</h2>
       <p>Discover source files, parse imports, resolve dependencies, store in SQLite.</p>
@@ -222,7 +222,7 @@ noupling hook uninstall [PATH]</code></pre>
     "min_cohesion": 0.1
   }
 }</code></pre>
-      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> is the step to the <em>critical</em> severity band for Coupling Violations and Cycles (the <em>high</em> and <em>medium</em> steps scale with it at 0.4× and 0.2×), and the cutoff for the <code>critical_violations</code> header count.</p>
+      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> is the step to the <em>critical</em> severity band for Coupling Violations and Cycles (the <em>high</em> and <em>medium</em> steps scale with it at 0.4× and 0.2×), and the <code>critical_violations</code> header counts the Coupling Violations and Cycles whose band is critical. Severity is mostly a depth measure, so the band is also floored by the Issue's score impact: an Issue costing 10 or more points is critical, 5 or more at least high, 1 or more at least medium, whatever its severity. On a small project a single shallow Cycle can take 40 points; it reads as critical, not low.</p>
 
 
       <h2 id="risk-weights">Risk Weights</h2>

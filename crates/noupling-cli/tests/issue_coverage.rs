@@ -208,6 +208,34 @@ fn every_format_obeys_its_format_class_rule() {
         "critical_violations header must equal the critical Coupling Violation + Cycle cards"
     );
 
+    // A band never contradicts the score impact (#379): an Issue costing
+    // ≥ 10 points is critical, ≥ 5 at least high, ≥ 1 at least medium.
+    let rank = |b: &str| {
+        ["low", "medium", "high", "critical"]
+            .iter()
+            .position(|x| *x == b)
+            .unwrap()
+    };
+    for issue in json["issues"].as_array().unwrap() {
+        let points = issue["score_impact"].as_f64().unwrap();
+        let band = issue["severity"].as_str().unwrap();
+        let floor = if points >= 10.0 {
+            "critical"
+        } else if points >= 5.0 {
+            "high"
+        } else if points >= 1.0 {
+            "medium"
+        } else {
+            "low"
+        };
+        assert!(
+            rank(band) >= rank(floor),
+            "{} {} costs {points:.1} points but is banded {band} (floor {floor})",
+            issue["kind"],
+            issue["subject"]
+        );
+    }
+
     let xml = file("report.xml");
     assert_each_kind("xml", all, |k| {
         xml.contains(&format!("<issue kind=\"{}\"", k.id()))
