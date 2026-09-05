@@ -479,8 +479,9 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
 
     // Count violations per directory
     for v in &result.violations {
-        // Same anchor rule as Issue::anchor_dir, so per-directory counts
-        // match the Issue cards the html / md pages list there.
+        // Same anchor rule as Issue::anchor_dir, so a violation is counted
+        // under the directory whose page lists its Issue. Counts are raw
+        // violations (ring hops count separately; see #358).
         let parent = if v.is_circular && !v.cycle_path.is_empty() {
             let members: Vec<&str> = v.cycle_path.iter().map(String::as_str).collect();
             common_parent_dir(&members)

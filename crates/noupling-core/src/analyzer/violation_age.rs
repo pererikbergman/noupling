@@ -16,16 +16,27 @@ pub struct ViolationAgeSummary {
 
 /// Compute violation ages by comparing current violations against historical snapshots.
 /// Returns an updated ViolationAgeSummary.
+/// The identity a violation keeps across snapshots: the directory pair
+/// (the same identity the baseline uses), not whichever import happens
+/// to represent it this scan. Cycles key on their ring.
+pub fn age_key(v: &CouplingViolation) -> (String, String) {
+    if v.is_circular {
+        (v.cycle_path.join(" -> "), String::new())
+    } else {
+        (v.dir_a.clone(), v.dir_b.clone())
+    }
+}
+
 pub fn compute_violation_age(
     current_violations: &[CouplingViolation],
-    historical_violation_sets: &[Vec<(String, String)>], // Vec of (from_module, to_module) per snapshot
+    historical_violation_sets: &[Vec<(String, String)>], // Vec of `age_key`s per snapshot
 ) -> ViolationAgeSummary {
     let mut new_count = 0;
     let mut recent_count = 0;
     let mut chronic_count = 0;
 
     for v in current_violations {
-        let fingerprint = (v.from_module.clone(), v.to_module.clone());
+        let fingerprint = age_key(v);
         let age = historical_violation_sets
             .iter()
             .filter(|snap_violations| snap_violations.contains(&fingerprint))
@@ -103,8 +114,13 @@ mod tests {
             break_cost: 0,
             score_impact: 0.0,
         }];
-        // Same violation in 6 historical snapshots -> chronic
-        let fp = vec![("src/a/main.rs".to_string(), "src/b/lib.rs".to_string())];
+        // Same directory pair in 6 historical snapshots -> chronic, even
+        // though the representative import differed back then (the pair is
+        // the violation's identity, like the baseline's).
+        let mut earlier = violations[0].clone();
+        earlier.from_module = "src/a/other.rs".to_string();
+        let fp = vec![age_key(&earlier)];
+        assert_eq!(fp[0], ("src/a".to_string(), "src/b".to_string()));
         let historical: Vec<Vec<(String, String)>> = vec![
             fp.clone(),
             fp.clone(),

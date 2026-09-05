@@ -126,7 +126,7 @@ pub fn run(
         let fingerprints: Vec<(String, String)> = s_result
             .violations
             .iter()
-            .map(|v| (v.from_module.clone(), v.to_module.clone()))
+            .map(noupling_core::analyzer::age_key)
             .collect();
         historical.push(fingerprints);
     }

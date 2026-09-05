@@ -6,9 +6,11 @@
 //! `--baseline` loads that set and marks matching Issues `baselined`:
 //! they are still reported, never dropped, and never counted as new.
 //!
-//! Version 1 files (pre-0.9.0) fingerprinted only coupling violations.
-//! They are not migrated: loading one yields an empty set flagged
+//! Older files are not migrated: loading one yields an empty set flagged
 //! `legacy_format`, so callers can say "re-run `noupling baseline save`".
+//! Version 1 (pre-0.9.0) fingerprinted only coupling violations; version
+//! 2 (unreleased) keyed Coupling Violations and Red Flags on a
+//! representative import rather than the directory pair.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,7 +20,7 @@ use std::path::Path;
 use crate::analyzer::AuditResult;
 
 /// Current on-disk format. Bumped when the fingerprint scheme changes.
-pub const BASELINE_VERSION: u32 = 2;
+pub const BASELINE_VERSION: u32 = 3;
 
 #[derive(Serialize, Deserialize)]
 struct BaselineFile {

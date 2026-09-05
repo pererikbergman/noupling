@@ -54,7 +54,7 @@ pub use monorepo::CrossModuleViolation;
 pub use monorepo::{audit_modules, MonorepoResult};
 pub use red_flags::{compute_red_flags, RedFlag, RedFlagType};
 pub use rules::{check_dependency_rules, RuleViolation};
-pub use violation_age::{compute_violation_age, ViolationAgeSummary};
+pub use violation_age::{age_key, compute_violation_age, ViolationAgeSummary};
 
 /// The result of running an architectural audit on a project snapshot.
 #[derive(Debug)]

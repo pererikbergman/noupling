@@ -562,18 +562,22 @@ impl Issue {
     /// not make the Issue look new.
     pub fn fingerprint(&self) -> String {
         match &self.detail {
-            IssueDetail::CouplingViolation(v) => {
-                format!("{}:{} -> {}", self.kind().id(), v.dir_a, v.dir_b)
-            }
-            IssueDetail::RedFlag(f) => format!(
-                "{}:{}:{} -> {}",
+            IssueDetail::CouplingViolation(v) => format!(
+                "{}:{}",
                 self.kind().id(),
-                match f.flag_type {
-                    RedFlagType::FusedSibling => "fused_sibling",
-                    RedFlagType::TrappedChild => "trapped_child",
-                },
-                f.dir_a,
-                f.dir_b
+                Subject::Edge {
+                    from: v.dir_a.clone(),
+                    to: v.dir_b.clone()
+                }
+            ),
+            IssueDetail::RedFlag(f) => format!(
+                "{}:{}:{}",
+                self.kind().id(),
+                f.flag_type.id(),
+                Subject::Edge {
+                    from: f.dir_a.clone(),
+                    to: f.dir_b.clone()
+                }
             ),
             IssueDetail::Cycle(_)
             | IssueDetail::RuleViolation(_)
@@ -618,7 +622,9 @@ pub struct IssueCard {
     /// Points this Issue takes off the score; 0 for non-scoring kinds.
     pub score_impact: f64,
     pub baselined: bool,
-    /// `<kind>:<subject>`, the baseline identity.
+    /// The baseline identity: `<kind>:<subject>`, except Coupling Violation
+    /// and Red Flag which key on their directory pair (see
+    /// [`Issue::fingerprint`]).
     pub fingerprint: String,
     /// Per-kind numbers, keyed by snake_case field names (see docs).
     pub detail: serde_json::Value,
@@ -708,10 +714,7 @@ impl Issue {
                 "circular_rri": g.circular_rri,
             }),
             IssueDetail::RedFlag(f) => json!({
-                "flag_type": match f.flag_type {
-                    RedFlagType::FusedSibling => "fused_sibling",
-                    RedFlagType::TrappedChild => "trapped_child",
-                },
+                "flag_type": f.flag_type.id(),
                 "modules": f.modules,
                 "dir_a": f.dir_a,
                 "dir_b": f.dir_b,
