@@ -31,6 +31,7 @@
       <a href="#installation">Installation</a>
       <a href="#quick-start">Quick Start</a>
       <a href="#health-score">Health Score</a>
+      <a href="#findings">Findings: Issues &amp; Metrics</a>
 
       <h4>CLI Reference</h4>
       <a href="#cmd-scan">scan</a>
@@ -55,6 +56,7 @@
       <a href="#diff-mode">Diff Mode</a>
       <a href="#ci-integration">CI Integration</a>
       <a href="#report-formats">Report Formats</a>
+      <a href="#issue-card">Issue Cards (JSON)</a>
 
       <h4>Risk Framework</h4>
       <a href="#rri">RRI (Risk Index)</a>
@@ -130,7 +132,31 @@ noupling audit . --fail-below 80</code></pre>
 
 
       <!-- CLI Reference -->
-      <h2 id="cmd-scan">scan</h2>
+            <p>Every Issue that scores carries its <strong>score impact</strong> &mdash; the points it takes off. Summed over all Issues the impacts equal the points lost, so the breakdown every format prints (<code>Points lost: 4.7 (Coupling Violation 0.9, Cycle 3.8)</code>) adds up.</p>
+
+      <h2 id="findings">Findings: Issues &amp; Metrics</h2>
+      <p>Everything the audit says about a codebase is a <strong>Finding</strong>, and every Finding is either an <strong>Issue</strong> or a <strong>Metric</strong>. An Issue names specific modules or edges and asks for a change; a Metric (fan-in, instability, blast radius, critical path, &hellip;) describes without asking. Reports may include or omit Metrics freely, but every Issue-listing report carries every Issue &mdash; the same Issues, with the same wording, whichever format you open. The full vocabulary lives in <a href="https://github.com/pererikbergman/noupling/blob/main/CONTEXT.md">CONTEXT.md</a>.</p>
+
+      <h3 id="issue-kinds">The nine Issue kinds</h3>
+      <table>
+        <thead><tr><th>Kind</th><th>Shape</th><th>Meaning</th><th>Scores?</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Coupling Violation</strong></td><td>edge</td><td>An import between sibling directories (or from a child to its parent) that the audit disallows. A mutually-dependent pair is never a Coupling Violation; it is part of a Cycle.</td><td>yes</td></tr>
+          <tr><td><strong>Cycle</strong></td><td>ring</td><td>An ordered ring of directories that depend on each other back to the start. Surfaces exactly once; its reason names the cheapest break edge and its recommendation is to cut it.</td><td>yes</td></tr>
+          <tr><td><strong>Rule Violation</strong></td><td>edge</td><td>An import forbidden by an explicit <code>dependency_rules</code> entry.</td><td>no</td></tr>
+          <tr><td><strong>Layer Violation</strong></td><td>edge</td><td>An import from a layered module into a higher layer (or, with hand-written layers, into no layer at all).</td><td>no</td></tr>
+          <tr><td><strong>Gravity Well</strong></td><td>module</td><td>A module whose aggregate RRI is disproportionate to its neighbours; everything nearby bends toward it.</td><td>no</td></tr>
+          <tr><td><strong>Red Flag</strong></td><td>edge</td><td>A named structural anti-pattern: <em>fused sibling</em> (a pair far tighter than its peers) or <em>trapped child</em> (a child importing its parent).</td><td>no</td></tr>
+          <tr><td><strong>Stability Violation</strong></td><td>edge (directories)</td><td>A more-stable directory depending on a less-stable one (Stable Dependencies Principle).</td><td>no</td></tr>
+          <tr><td><strong>Zone Flag</strong></td><td>directory</td><td>A directory far enough off the main sequence to land in the Zone of Pain (concrete yet stable) or the Zone of Uselessness (abstract yet unstable).</td><td>no</td></tr>
+          <tr><td><strong>Low Cohesion</strong></td><td>directory</td><td>A Package whose direct children barely depend on each other.</td><td>no</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="issue-card-fields">The Issue card</h3>
+      <p>Every Issue is presented the same way in every format: <strong>kind</strong>, <strong>severity band</strong> (critical / high / medium / low, assigned once by the audit &mdash; Coupling Violations and Cycles step to <em>critical</em> at <code>critical_severity</code>; Rule and Layer Violations are high; Gravity Wells and Red Flags map their RRI; Stability Violations and Zone Flags are medium; Low Cohesion is low), <strong>subject</strong> (one module, one <code>from &rarr; to</code> edge, or a ring), a one-sentence <strong>reason</strong> with this instance's numbers, a one-sentence <strong>recommendation</strong>, and its <strong>score impact</strong>. When you audit with <code>--baseline</code>, accepted Issues are additionally marked <strong>baselined</strong>: still listed, never counted as new.</p>
+
+<h2 id="cmd-scan">scan</h2>
       <p>Discover source files, parse imports, resolve dependencies, store in SQLite.</p>
 <pre><code class="language-bash">noupling scan &lt;PATH&gt; [--diff-base &lt;BRANCH&gt;]</code></pre>
       <table>
@@ -142,13 +168,13 @@ noupling audit . --fail-below 80</code></pre>
 
 
       <h2 id="cmd-audit">audit</h2>
-      <p>Analyze the latest snapshot and display violations.</p>
+      <p>Analyze the latest snapshot and print the health score, Top Actions, and every Issue as an Issue card (all nine kinds), followed by the Metric sections.</p>
 <pre><code class="language-bash">noupling audit [PATH] [--fail-below N] [--baseline] [--snapshot ID] [--module NAME]</code></pre>
       <table>
         <thead><tr><th>Flag</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><code>--fail-below</code></td><td>Exit code 1 if score is below this. Use in CI.</td></tr>
-          <tr><td><code>--baseline</code></td><td>Only report violations not in the saved baseline.</td></tr>
+          <tr><td><code>--baseline</code></td><td>Mark Issues accepted by <code>.noupling/baseline.json</code> as <em>baselined</em> (still listed) and exit 1 only when there are new Issues.</td></tr>
           <tr><td><code>--snapshot</code></td><td>Audit a specific snapshot instead of the latest.</td></tr>
           <tr><td><code>--module</code></td><td>Show results for one module only (monorepo).</td></tr>
         </tbody>
@@ -157,8 +183,8 @@ noupling audit . --fail-below 80</code></pre>
 
       <h2 id="cmd-report">report</h2>
       <p>Generate a report file from the latest snapshot.</p>
-<pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME]</code></pre>
-      <p>Formats: <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>, <code>dashboard</code>, <code>pr</code>, <code>briefing</code>, <code>strategy</code>, <code>explorer</code>, <code>all</code>. See <a href="#report-formats">Report Formats</a>.</p>
+<pre><code class="language-bash">noupling report [PATH] --format &lt;FORMAT&gt; [--module NAME] [--baseline]</code></pre>
+      <p>Formats: <code>text</code>, <code>json</code>, <code>xml</code>, <code>md</code>, <code>html</code>, <code>sonar</code>, <code>mermaid</code>, <code>dot</code>, <code>bundle</code>, <code>dashboard</code>, <code>pr</code>, <code>briefing</code>, <code>strategy</code>, <code>explorer</code>, <code>all</code>. Add <code>--baseline</code> to mark accepted Issues. See <a href="#report-formats">Report Formats</a>.</p>
 
 
       <h2 id="cmd-trend">trend</h2>
@@ -167,11 +193,12 @@ noupling audit . --fail-below 80</code></pre>
 
 
       <h2 id="cmd-baseline">baseline</h2>
-      <p>Save current violations as accepted. Future <code>--baseline</code> audits only flag new ones.</p>
+      <p>Record every current Issue &mdash; all nine kinds &mdash; as accepted. <code>audit --baseline</code> and <code>report --baseline</code> then show those Issues marked <em>baselined</em> (dimmed in html and the Explorer, <code>(baselined)</code> in text) and count them separately; <code>audit</code> exits 1 only when an Issue is new.</p>
 <pre><code class="language-bash">noupling baseline save [PATH]</code></pre>
+      <p>Each Issue is identified by its kind and identity (its subject, or the directory pair for Coupling Violations and Red Flags), so adding or removing an import between the same two directories does not make an accepted Issue look new. Baseline files written before 0.9.0 covered only coupling violations; they load as &ldquo;nothing baselined&rdquo; with a one-line warning until you re-run <code>baseline save</code>.</p>
 
       <div class="callout">
-        <strong>Pro-Tip:</strong> Commit <code>.noupling/baseline.json</code> to your repo. New team members inherit the accepted baseline and only see violations they introduce.
+        <strong>Pro-Tip:</strong> Commit <code>.noupling/baseline.json</code> to your repo. New team members inherit the accepted Issues and only see the ones they introduce.
       </div>
 
 
@@ -390,24 +417,33 @@ noupling audit .</code></pre>
 
       <h2 id="report-formats">Report Formats</h2>
       <table>
-        <thead><tr><th>Format</th><th>File</th><th>Best for</th></tr></thead>
+        <thead><tr><th>Format</th><th>Class</th><th>File</th><th>Best for</th></tr></thead>
         <tbody>
-          <tr><td><code>html</code></td><td><code>.noupling/report/</code></td><td>Interactive drill-down, sharing with team</td></tr>
-          <tr><td><code>json</code></td><td><code>.noupling/report.json</code></td><td>Programmatic consumption, custom dashboards</td></tr>
-          <tr><td><code>xml</code></td><td><code>.noupling/report.xml</code></td><td>Enterprise CI, XSLT pipelines</td></tr>
-          <tr><td><code>md</code></td><td><code>.noupling/report-md/</code></td><td>GitHub wiki, documentation sites</td></tr>
-          <tr><td><code>sonar</code></td><td><code>.noupling/noupling-sonar.json</code></td><td>SonarCloud/SonarQube integration</td></tr>
-          <tr><td><code>mermaid</code></td><td><code>.noupling/report.mermaid</code></td><td>Embed in Markdown, quick overview</td></tr>
-          <tr><td><code>dot</code></td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
-          <tr><td><code>bundle</code></td><td><code>.noupling/bundle.html</code></td><td>Zoomable sunburst with dependency edges</td></tr>
-          <tr><td><code>dashboard</code></td><td><code>.noupling/dashboard.html</code></td><td>Executive dashboard with all metrics, scorecard, risk matrix</td></tr>
-          <tr><td><code>pr</code></td><td><code>.noupling/pr.md</code></td><td>Tight Markdown summary to post as a PR comment</td></tr>
-          <tr><td><code>briefing</code></td><td><code>.noupling/briefing.md</code></td><td>Sprint planning: top 10 ROI-ranked refactorings</td></tr>
-          <tr><td><code>strategy</code></td><td><code>.noupling/strategy.html</code></td><td>Multi-snapshot trend report for executive review (<code>--last N</code>)</td></tr>
-          <tr><td><code>explorer</code></td><td><code>.noupling/explorer.html</code></td><td>Interactive single-file Explorer: layered structure map, drill-down, issues, matrix/force views, click-to-source (<code>--editor</code>, <code>--title</code>, <code>--no-history</code>, <code>--output</code>)</td></tr>
-          <tr><td><code>all</code></td><td><em>all of the above</em></td><td>One command to generate every report format</td></tr>
+          <tr><td><code>text</code></td><td>Issue-listing</td><td><code>.noupling/report.txt</code></td><td>What <code>audit</code> prints, saved to a file</td></tr>
+          <tr><td><code>html</code></td><td>Issue-listing</td><td><code>.noupling/report/</code></td><td>Interactive drill-down, sharing with team</td></tr>
+          <tr><td><code>json</code></td><td>Issue-listing</td><td><code>.noupling/report.json</code></td><td>Programmatic consumption, custom dashboards</td></tr>
+          <tr><td><code>xml</code></td><td>Issue-listing</td><td><code>.noupling/report.xml</code></td><td>Enterprise CI, XSLT pipelines</td></tr>
+          <tr><td><code>md</code></td><td>Issue-listing</td><td><code>.noupling/report-md/</code></td><td>GitHub wiki, documentation sites</td></tr>
+          <tr><td><code>sonar</code></td><td>Issue-listing</td><td><code>.noupling/noupling-sonar.json</code></td><td>SonarCloud/SonarQube integration</td></tr>
+          <tr><td><code>mermaid</code></td><td>Graph</td><td><code>.noupling/report.mermaid</code></td><td>Embed in Markdown, quick overview</td></tr>
+          <tr><td><code>dot</code></td><td>Graph</td><td><code>.noupling/report.dot</code></td><td>GraphViz rendering, custom pipelines</td></tr>
+          <tr><td><code>bundle</code></td><td>Graph</td><td><code>.noupling/bundle.html</code></td><td>Zoomable sunburst with dependency edges</td></tr>
+          <tr><td><code>dashboard</code></td><td>Issue-listing</td><td><code>.noupling/dashboard.html</code></td><td>Executive dashboard with all metrics, scorecard, risk matrix</td></tr>
+          <tr><td><code>pr</code></td><td>Issue-listing</td><td><code>.noupling/pr.md</code></td><td>Tight Markdown summary to post as a PR comment</td></tr>
+          <tr><td><code>briefing</code></td><td>Issue-listing</td><td><code>.noupling/briefing.md</code></td><td>Sprint planning: top 10 ROI-ranked refactorings</td></tr>
+          <tr><td><code>strategy</code></td><td>Trend</td><td><code>.noupling/strategy.html</code></td><td>Multi-snapshot trend report for executive review (<code>--last N</code>)</td></tr>
+          <tr><td><code>explorer</code></td><td>Issue-listing</td><td><code>.noupling/explorer.html</code></td><td>Interactive single-file Explorer: layered structure map, drill-down, issues, matrix/force views, click-to-source (<code>--editor</code>, <code>--title</code>, <code>--no-history</code>, <code>--output</code>)</td></tr>
+          <tr><td><code>all</code></td><td>&mdash;</td><td><em>all of the above</em></td><td>One command to generate every report format</td></tr>
         </tbody>
       </table>
+
+      <h3 id="format-classes">Format classes</h3>
+      <p>Two rules, asserted by the test suite on a fixture that produces every kind:</p>
+      <ul>
+        <li><strong>Issue-listing formats</strong> (<code>text</code>, <code>json</code>, <code>xml</code>, <code>sonar</code>, <code>md</code>, <code>html</code>, <code>dashboard</code>, <code>pr</code>, <code>briefing</code>, <code>explorer</code>) carry every Issue kind that has members. They may summarise (<code>pr</code> names each kind with a count and lists the top five) but never silently omit a kind.</li>
+        <li><strong>Graph formats</strong> (<code>mermaid</code>, <code>dot</code>, <code>bundle</code>) accent every edge-shaped Issue &mdash; Coupling, Rule, Layer and Stability Violations and every hop of a Cycle &mdash; with a distinct style per kind and a legend, and may omit the node-shaped kinds. Baselined edges are muted.</li>
+      </ul>
+      <p>The <strong>trend format</strong> (<code>strategy</code>) shows how the score and the Issue count per kind move across snapshots, not individual Issues.</p>
 
       <h3 id="issue-card">The <code>issues</code> array (Issue cards)</h3>
       <p>Every format that carries data — <code>json</code>, <code>xml</code>, <code>sonar</code>, and the Explorer's embedded Data Contract (each card extended with <code>participants</code>, the node ids it is about) — lists the same Issues, serialised once as <strong>Issue cards</strong>. In <code>report.json</code> they are the top-level <code>issues</code> array, in canonical order: severity band descending, then kind, then subject path. Filter by <code>kind</code>; every kind is present when the audit found one. Since 0.9.0 this is the <em>only</em> Issue array: the former <code>coupling_violations</code>, <code>circular_dependencies</code>, <code>gravity_wells</code>, <code>red_flags</code>, <code>stability_violations</code>, <code>distance</code> and <code>cohesion</code> arrays are gone (the changelog has the field mapping). The Metric arrays <code>hotspots</code>, <code>abstractness</code>, <code>instability</code> and <code>directory_tree</code> are unchanged.</p>

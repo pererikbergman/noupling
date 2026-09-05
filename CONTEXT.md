@@ -93,8 +93,8 @@ A report format that shows how Issue counts and the score move across snapshots 
 
 ## Flagged ambiguities
 
-- **"Violation"** is used in the code both for the Coupling Violation kind and as a loose umbrella (the text report's `Violations:` count). In this glossary it always means one of the four `… Violation` kinds (Coupling, Rule, Layer, Stability); the umbrella is **Issue**.
-- **"Cycle" vs "circular violation"**: the code emits circular pairs as Coupling Violations and the Explorer rebuilds rings from them. Resolved: a ring is one Cycle and never also a Coupling Violation.
+- **"Violation"** is used in the code both for the Coupling Violation kind and as a loose umbrella (the text report's `Violations:` headline). In this glossary it always means one of the four `… Violation` kinds (Coupling, Rule, Layer, Stability); the umbrella is **Issue**. Since 0.9.0 the headline counts Coupling Violations plus Cycles as `issues()` does (`AuditResult::violation_count()`).
+- **"Cycle" vs "circular violation"**: resolved in 0.9.0 — the detector still emits ring hops as coupling records (they feed the score), but `issues()` folds them into one Cycle and no format lists them as Coupling Violations.
 
 ## Example dialogue
 

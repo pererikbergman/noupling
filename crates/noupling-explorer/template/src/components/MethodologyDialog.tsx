@@ -164,8 +164,9 @@ function Overview() {
       </P>
       <P>
         <Strong>2. What is going wrong?</Strong> Use the Issues tab to walk
-        the violations / cycles / gravity wells / red flags. Click any issue
-        to focus the canvas on the participants and highlight the offending
+        every Issue the audit found — all nine kinds, each as an Issue card
+        with its severity band, reason and recommendation. Click any Issue
+        to focus the canvas on its participants and highlight the offending
         edges at file level.
       </P>
 
@@ -252,47 +253,55 @@ function Views() {
 function Concepts() {
   return (
     <>
-      <H3>Violation</H3>
+      <H3>Findings: Issues and Metrics</H3>
       <P>
-        A dependency-rule violation means the import goes somewhere the
-        module's layer or rule policy forbids. Layered architectures break
-        down when lower-level modules reach upward — what looks like a quick
-        coupling tends to compound into bidirectional dependencies and
-        cycles.
+        Everything the audit says is a <Strong>Finding</Strong>. An{" "}
+        <Strong>Issue</Strong> names specific modules or edges and asks for a
+        change; a <Strong>Metric</Strong> (fan-in, instability, blast radius,
+        …) describes without asking. There are nine Issue kinds, and every
+        noupling report shows the same Issues with the same wording — the
+        Explorer included.
       </P>
 
-      <H3>Cycle</H3>
+      <H3>Issue card</H3>
       <P>
-        A directed cycle: <code>A</code> depends on <code>B</code>,{" "}
-        <code>B</code> depends back on <code>A</code> (directly or
-        transitively). Cycles make refactoring hard — you can't change one
-        without affecting the other — and they prevent any layered
-        understanding of the codebase.
-      </P>
-      <P>
-        noupling recommends breaking the cycle at the <Strong>minimum cut</Strong>{" "}
-        — the hop with the fewest imports, since that's the cheapest place to
-        introduce an abstraction or invert the dependency. The Issues tab
-        shows this as <code>break: A → B (N vs M)</code>.
+        Each Issue is shown as a card: kind, <Strong>severity band</Strong>{" "}
+        (critical / high / medium / low, assigned once by the audit),{" "}
+        <Strong>subject</Strong> (a module, an edge, or a ring),{" "}
+        <Strong>reason</Strong> (one sentence with this instance's numbers),{" "}
+        <Strong>recommendation</Strong>, and <Strong>score impact</Strong>.
+        Cards marked <em>accepted</em> are <Strong>baselined</Strong>: the
+        team has recorded them with <code>noupling baseline save</code>, so
+        they are still reported but never counted as new.
       </P>
 
-      <H3>Gravity well</H3>
+      <H3>The nine kinds</H3>
       <P>
-        A module that pulls disproportionate aggregate{" "}
-        <Strong>Relationship Risk Index (RRI)</Strong>. Think of it as the
-        architectural equivalent of a heavy planet: every nearby module bends
-        toward it. Wells are not bugs by themselves — they are
-        <em> concentration risk</em>. Refactors that touch the well ripple
-        widely.
+        <Strong>Coupling Violation</Strong> — a sibling or upward import the
+        audit disallows. <Strong>Cycle</Strong> — an ordered ring of
+        directories depending on each other back to the start; it surfaces
+        once, never also as its edges, and its recommendation is to cut the
+        cheapest hop (the <Strong>minimum cut</Strong>, shown as{" "}
+        <code>break: A → B (N vs M)</code>). <Strong>Rule Violation</Strong>{" "}
+        — an import forbidden by an explicit <code>dependency_rules</code>{" "}
+        entry. <Strong>Layer Violation</Strong> — an import into a higher
+        layer. <Strong>Gravity Well</Strong> — a module whose aggregate RRI
+        is disproportionate; everything nearby bends toward it.{" "}
+        <Strong>Red Flag</Strong> — a named anti-pattern (fused siblings,
+        trapped children). <Strong>Stability Violation</Strong> — a
+        more-stable directory depending on a less-stable one.{" "}
+        <Strong>Zone Flag</Strong> — a directory in the Zone of Pain or the
+        Zone of Uselessness. <Strong>Low Cohesion</Strong> — a Package whose
+        children barely depend on each other.
       </P>
 
-      <H3>Red flag</H3>
+      <H3>Edge-shaped and node-shaped</H3>
       <P>
-        Pattern matches the analyzer recognises as architectural anti-
-        patterns — fused siblings, trapped children, and similar. They are
-        flagged because the structural cost of unwinding them grows non-
-        linearly with codebase age. Each flag carries a recommendation
-        specific to the pattern.
+        Coupling, Rule, Layer and Stability Violations and Cycles are about
+        edges; the canvas accents them. Gravity Wells, Red Flags, Zone Flags
+        and Low Cohesion are about a module or directory; they appear in the
+        Issues tab and details panel, and focusing one shows the modules it
+        involves.
       </P>
     </>
   );
@@ -303,11 +312,12 @@ function Metrics() {
     <>
       <H3>Health score</H3>
       <P>
-        <code>100 × (1 − Σ severity / total_modules)</code>. Each violation
-        contributes a severity weight (depth-discounted: deeper folders
-        matter less). The score is opaque on its own, so the breakdown dialog
-        spells out the math, the cycles-vs-coupling split, and the top
-        contributors — click the score block to see it.
+        A single 0–100 number for the project. Every Issue that scores
+        (Coupling Violations and Cycles) carries its{" "}
+        <Strong>score impact</Strong> — the points it takes off — and those
+        impacts sum exactly to the points lost, so the breakdown dialog
+        adds up: points lost per kind and the top contributors. Click the
+        score block to see it.
       </P>
 
       <H3>RRI — Relationship Risk Index</H3>
@@ -374,9 +384,11 @@ function Workflow() {
 
       <H3>Investigating a problem</H3>
       <P>
-        1. Open the Issues tab. Issues are sorted by severity: high
-        violations, cycles, gravity wells, red flags, then medium / low
-        violations.
+        1. Open the Issues tab. Issues are in canonical order: severity band
+        (critical, high, medium, low), then kind, then subject. Baselined
+        Issues — ones the team has accepted with{" "}
+        <code>noupling baseline save</code> — are dimmed and marked{" "}
+        <em>accepted</em>; they never count as new.
       </P>
       <P>
         2. Click an issue. The canvas drills to the lowest common ancestor of
@@ -444,9 +456,30 @@ function Glossary() {
         </dd>
         <dt className="text-text">Minimum cut</dt>
         <dd className="m-0 text-muted">
-          The cheapest edge to break to resolve a cycle, in imports
-          required. Shown as <code>break: A → B (N vs M)</code> on the cycle
-          issue.
+          The cheapest edge to break to resolve a Cycle, in imports
+          required. Shown as <code>break: A → B (N vs M)</code> on the Cycle
+          card.
+        </dd>
+        <dt className="text-text">Issue</dt>
+        <dd className="m-0 text-muted">
+          A Finding that names modules or edges and asks for a change. Nine
+          kinds; every report shows the same Issues with the same wording.
+        </dd>
+        <dt className="text-text">Severity band</dt>
+        <dd className="m-0 text-muted">
+          critical / high / medium / low, assigned once by the audit. The
+          same Issue has the same band in every report.
+        </dd>
+        <dt className="text-text">Score impact</dt>
+        <dd className="m-0 text-muted">
+          The points an Issue takes off the health score. Zero for kinds
+          that do not score; the impacts sum to the points lost.
+        </dd>
+        <dt className="text-text">Baselined</dt>
+        <dd className="m-0 text-muted">
+          An Issue the team has accepted with{" "}
+          <code>noupling baseline save</code>. Still shown, marked{" "}
+          <em>accepted</em>, never counted as new.
         </dd>
       </dl>
     </>

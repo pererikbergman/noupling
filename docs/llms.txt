@@ -1,6 +1,6 @@
 # noupling
 
-> noupling is an architecture auditing CLI that scans source code, builds a dependency graph from actual import statements, and quantifies coupling using risk-weighted scoring (RRI/TRI). It detects coupling violations between sibling modules and circular dependencies, then produces a single health score (0-100) you can track over time and enforce in CI. Supports 16 languages via Tree-sitter AST parsing.
+> noupling is an architecture auditing CLI that scans source code, builds a dependency graph from actual import statements, and quantifies coupling using risk-weighted scoring (RRI/TRI). It reports nine kinds of Issue (Coupling Violation, Cycle, Rule Violation, Layer Violation, Gravity Well, Red Flag, Stability Violation, Zone Flag, Low Cohesion) as Issue cards with a severity band, reason, recommendation and score impact — the same Issues in every report format — and produces a single health score (0-100) you can track over time and enforce in CI. Supports 16 languages via Tree-sitter AST parsing.
 
 ## Documentation
 
@@ -8,15 +8,22 @@
 - [Architecture](https://github.com/pererikbergman/noupling/blob/main/docs/architecture.md): Internal data flow (scan → store → analyze → report), module responsibilities, and key design decisions.
 - [Changelog](https://github.com/pererikbergman/noupling/blob/main/CHANGELOG.md): Released versions, migration notes, and recent architectural changes.
 - [Contributing](https://github.com/pererikbergman/noupling/blob/main/CONTRIBUTING.md): Build instructions, coding standards, branching strategy, and how to add a new language parser.
+- [Glossary (CONTEXT.md)](https://github.com/pererikbergman/noupling/blob/main/CONTEXT.md): The words every report shares — Finding, Issue, Metric, the nine Issue kinds, severity band, baseline, Issue card, format classes.
+- [Docs site](https://pererikbergman.github.io/noupling/docs.html): CLI reference, configuration, Findings and Issue kinds, report formats and the `issues` JSON card shape.
 
 ## Concepts
 
 - [Risk Framework](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): RRI (Relationship Risk Index = direction_weight × density) and TRI (Total Risk Index = sum of RRIs) replace depth-based severity. Higher weights for more harmful directions.
-- [Health Score](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): `100 × (1 - TRI / (total_modules × max_weight))`. A single 0-100 metric for CI gating (`--fail-below`).
+- [Health Score](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): `100 × (1 - TRI / (total_modules × max_weight))`. A single 0-100 metric for CI gating (`--fail-below`). Every scoring Issue carries its score impact; the impacts sum to the points lost.
+- [Issues and Metrics](https://github.com/pererikbergman/noupling/blob/main/CONTEXT.md): A Finding is an Issue (names modules/edges, asks for a change; nine closed kinds) or a Metric (describes; may be omitted by a format). Every Issue-listing format carries every kind; graph formats accent the edge-shaped kinds; a Cycle is one Issue, never also its edges.
+- [Issue card](https://pererikbergman.github.io/noupling/docs.html#issue-card): kind, severity band (critical/high/medium/low, assigned once in core), subject (module, edge or ring), reason, recommendation, score impact, baselined. Serialised once as the `issues` array in `report.json`, `report.xml`, Sonar and the Explorer contract; filter by `kind`.
+- [Baseline](https://pererikbergman.github.io/noupling/docs.html#cmd-baseline): `baseline save` records every current Issue (all kinds) as accepted; `audit --baseline` / `report --baseline` keep them visible, marked baselined, and fail only on new Issues.
+- [Layer inference](https://pererikbergman.github.io/noupling/docs.html#layer-inference): with no `layers` configured, layers are inferred from path names and the audit switches to actionable coupling mode; `infer_layers: false` turns it off.
 - [Dependency Directions](https://github.com/pererikbergman/noupling/blob/main/README.md#how-it-works): Downward (weight 2), Sibling (4), Upward (6), External (8), Transitive (9), Circular (10). Configurable via `risk_weights` in settings.json.
 - [Architectural Layers](https://github.com/pererikbergman/noupling/blob/main/README.md#architectural-layers): Define allowed dependency flow (e.g. presentation → domain → data). Downward dependencies are suppressed; upward dependencies are flagged as layer violations.
 - [Gravity Wells](https://github.com/pererikbergman/noupling/blob/main/README.md#key-features): Modules whose aggregate RRI exceeds 2× the project median — the "God Object" coupling hotspots.
 - [Red Flags](https://github.com/pererikbergman/noupling/blob/main/README.md#key-features): Architectural anti-patterns: *Fused Sibling* (high-density co-dependent peers) and *Trapped Child* (upward dependencies on parent/ancestors).
+- [Martin metrics](https://pererikbergman.github.io/noupling/docs.html#findings): per-directory instability (I), abstractness (A) and distance from the main sequence (D); Stability Violations, Zone Flags (Zone of Pain / Uselessness) and Low Cohesion are the Issue kinds derived from them.
 - [Monorepo Support](https://github.com/pererikbergman/noupling/blob/main/README.md#monorepo-modules): Independent analysis per module; cross-module imports not listed in `depends_on` are flagged as violations.
 
 ## Supported Languages
@@ -29,10 +36,10 @@ C#, Dart, Elixir, Go, Haskell, Java, JavaScript (+ JSX), Kotlin (+ KTS), PHP, Py
 
 - `init` — Create `.noupling/settings.json` with defaults.
 - `scan` — Discover source files, parse imports, persist dependency graph to SQLite.
-- `audit` — Compute health score (0-100), list coupling violations and circular dependencies. Use `--fail-below N` for CI gating.
-- `report` — Generate output in one of 13 formats: `json`, `xml`, `md`, `html`, `sonar`, `mermaid`, `dot`, `bundle`, `dashboard`, `pr`, `briefing`, `strategy`, `explorer` (or `all`).
+- `audit` — Compute health score (0-100) and print every Issue as an Issue card (nine kinds, canonical order) plus Metrics. Use `--fail-below N` for CI gating and `--baseline` to fail only on new Issues.
+- `report` — Generate output in one of 14 formats: `text`, `json`, `xml`, `md`, `html`, `sonar`, `mermaid`, `dot`, `bundle`, `dashboard`, `pr`, `briefing`, `strategy`, `explorer` (or `all`). `--baseline` marks accepted Issues.
 - `trend` — Show health score history across snapshots with delta.
-- `baseline` — Save a violation baseline; `audit --baseline` only fails on new violations.
+- `baseline` — Save every current Issue as accepted; `audit --baseline` fails only on new Issues, and every report marks the accepted ones.
 - `hook` — Install/uninstall a pre-commit hook that blocks commits introducing violations.
 
 ## Optional

@@ -50,7 +50,9 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 ### `src/analyzer/`
 **Stage 3: Analyze.** The core algorithm, split into focused concern files.
 
-- `mod.rs` - Orchestrator. Declares `AuditResult` and re-exports the public API. The canonical entry point for command handlers is `audit_with_settings(modules, deps, type_counts, &settings)`, which runs the full 5-step pipeline in fixed order: severity filtering → coupling-mode adjustment → risk-weight RRI computation → layer-weight reductions → layer filtering. Also populates `AuditResult.abstractness` from the supplied `type_counts`. Command handlers call this function once; the old manual 5-step sequence is no longer repeated by callers.
+- `mod.rs` - Orchestrator. Declares `AuditResult` and re-exports the public API. The canonical entry point for command handlers is `audit_with_settings(modules, deps, type_counts, &settings)`, which runs the full pipeline in fixed order: layer resolution (configured, or inferred from path names via `auto_layers.rs` when `layers` is empty and `infer_layers` is on — ADR 0001) → severity filtering → coupling-mode adjustment (actionable when layers were inferred and no explicit `coupling_mode`) → risk-weight RRI computation → layer-weight reductions → layer filtering → rule and layer violation checks. Also populates `AuditResult.abstractness` from the supplied `type_counts`, and records the effective `layers`, `layers_auto_detected` and `critical_severity`. Every command and every report format reads one `AuditResult` per snapshot; no format re-audits.
+- `issue.rs` - The `Issue` view over an `AuditResult` (`CONTEXT.md` § Findings, ADR 0002). `AuditResult::issues()` yields every Issue of the nine kinds in canonical order (band desc, kind, subject); each carries its severity band, subject, reason, recommendation, score impact and `baselined` flag, written once here. `Issue::to_card()` is the single serialised shape (`IssueCard`) embedded by `report.json`, `report.xml`, Sonar and the Explorer contract. Also `issue_violations()` / `violation_count()` (ring hops folded into their Cycle) and `anchor_dir()` for directory-tree reports.
+- `auto_layers.rs` - Heuristic layer inference from well-known path segments (`ui`, `domain`, `data`, `infra`, …), used by `audit_with_settings` when no layers are configured.
 - `coupling.rs` - D_acc aggregation and BFS sibling coupling detection.
 - `cycles.rs` - Circular dependency detection at sibling level via Tarjan's SCC algorithm.
 - `direction.rs` - `DependencyDirection` enum (`Downward`, `Sibling`, `Upward`, `External`, `Transitive`, `Circular`) and its risk-weight semantics. Re-exported as `analyzer::DependencyDirection`.
@@ -64,7 +66,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 - `red_flags.rs` - Architectural anti-pattern detection: *Fused Sibling* and *Trapped Child*.
 - `layers.rs` - Layer ordering rules and `LayerViolation`.
 - `rules.rs` - Custom dependency rules from `settings.json` and `RuleViolation`.
-- `violation_age.rs` - New/recent/chronic violation classification across snapshot history.
+- `violation_age.rs` - New/recent/chronic violation classification across snapshot history, keyed on the directory pair (`age_key`) like the baseline.
 - `critical_path.rs` - Maximum dependency chain depth and the critical path.
 - `actions.rs` - `TopAction` recommendations derived from the audit result.
 - `monorepo.rs` - Monorepo: per-module auditing and cross-module violation detection.
@@ -93,9 +95,9 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 - `mod.rs` - Shared helper (`find_db`).
 
 ### `src/reporter/`
-**Stage 4: Report.** Generates output in multiple formats. All formats include risk-weighted metrics: RRI per violation, TRI for the project, direction badges (Downward/Sibling/Upward/Circular), Gravity Wells, and Red Flags.
+**Stage 4: Report.** Generates output in multiple formats. Every format is a view over the same `AuditResult`: Issue-listing formats (text, json, xml, sonar, md, html, dashboard, pr, briefing, explorer) render every Issue from `issues()` as Issue cards; graph formats (mermaid, dot, bundle) accent every edge-shaped Issue; the trend format (strategy) plots the score and per-kind Issue counts across snapshots. The format-class rule is asserted by `tests/issue_coverage.rs` on a fixture that produces every kind.
 
-- `mod.rs` - JSON report (comprehensive with directory tree), XML, SonarCloud, and text format.
+- `mod.rs` - Re-exports; `text.rs` the plain-text format `audit` prints; `data.rs` the `report.json` shape (header counts, Metric arrays, `directory_tree`, and the shared `issues` array of `IssueCard`s); `xml.rs` and `sonar.rs` derive from the same cards.
 - `html.rs` - Multi-file static HTML with Kover-style drill-down navigation.
 - `md.rs` - Multi-file Markdown with navigable README.md per directory.
 - `bundle.rs` - Zoomable D3.js sunburst visualization.
@@ -126,6 +128,8 @@ Git integration for PR/CI mode. Shells out to `git diff --name-only <base>...HEA
 
 6. **One adapter file per language.** The `LanguageParser` trait decouples parse and resolve logic from the scanner orchestrator. Each language lives entirely in `src/scanner/parsers/<lang>.rs`; the `registry()` function in `parsers/mod.rs` is the only place that maps file extensions to adapters.
 
-7. **`audit_with_settings` as the canonical seam.** The 5-step pipeline (severity filter → coupling mode → risk weights → layer weights → layer filter) runs in a fixed order inside `audit_with_settings`. Command handlers do not repeat this sequence; they call the function once and layer on command-specific steps afterward.
+7. **`audit_with_settings` as the canonical seam.** The pipeline (layer resolution → severity filter → coupling mode → risk weights → layer weights → layer filter → rule/layer checks) runs in a fixed order inside `audit_with_settings`. Command handlers do not repeat this sequence; they call the function once and layer on command-specific steps afterward. One audit per snapshot; formats never re-audit (ADR 0001).
+
+9. **One `Issue` type, one serialisation.** Every report renders Issues from `AuditResult::issues()` and every JSON-bearing format embeds `Issue::to_card()`, so the same Red Flag has the same band, reason and recommendation in the text report, the JSON, Sonar and the Explorer (ADR 0002). Per-kind Issue arrays were removed from `report.json` in 0.9.0.
 
 8. **All scan metadata in SQLite.** `suppressed_count`, `diff_base`, `diff_changed_files`, and per-module external dependency counts are stored as columns on `snapshots` and rows in `snapshot_external_deps`. No JSON sidecar files.
