@@ -6,11 +6,21 @@ name: Update Homebrew
 #                          GITHUB_TOKEN-created release events don't chain by
 #                          design; repository_dispatch is the documented escape
 #                          hatch and needs no extra secret.
+#   workflow_dispatch     — run by hand to exercise HOMEBREW_TAP_TOKEN without
+#                          cutting a release (#422). Defaults to the latest tag;
+#                          on an already-current formula it ends green with
+#                          "nothing to commit".
 on:
   release:
     types: [published]
   repository_dispatch:
     types: [release-published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to point the formula at (default: latest)"
+        required: false
+        default: ""
 
 jobs:
   update-formula:
@@ -19,9 +29,16 @@ jobs:
     steps:
       - name: Resolve tag
         id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             TAG="${{ github.event.client_payload.tag }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
+            fi
           else
             TAG="${{ github.ref_name }}"
           fi
@@ -58,5 +75,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/noupling.rb
-          git commit -m "Update noupling to ${VERSION}"
-          git push
+          # Idempotent: a re-run against a formula that already carries this
+          # version has nothing to commit and must not fail the job (#422).
+          if git diff --cached --quiet; then
+            echo "Formula already at ${VERSION}; nothing to push."
+          else
+            git commit -m "Update noupling to ${VERSION}"
+            git push
+          fi
