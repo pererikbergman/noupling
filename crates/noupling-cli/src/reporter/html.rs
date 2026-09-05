@@ -63,6 +63,7 @@ pub fn generate_html_report(
 ) -> Result<()> {
     let data = build_report_data(modules, result, snapshot_id, settings);
 
+    super::clear_generated_pages(output_dir, "index.html")?;
     std::fs::create_dir_all(output_dir)?;
 
     // Generate root index.html
@@ -992,6 +993,44 @@ mod tests {
         let bag = std::fs::read_to_string(dir.path().join("bag/index.html")).unwrap();
         assert!(bag.contains("band-low\">LOW</span> Low Cohesion"), "{bag}");
         assert!(!bag.contains("Coupling Violation"), "{bag}");
+    }
+
+    /// Regenerating into the same directory removes pages for directories
+    /// that no longer exist, and leaves files noupling did not write (#383).
+    #[test]
+    fn html_regeneration_removes_stale_pages() {
+        let out = tempfile::tempdir().unwrap();
+        let settings = Settings::default();
+        let before = vec![
+            make_module("a", "src/old/a.rs"),
+            make_module("b", "src/keep/b.rs"),
+        ];
+        let result = AuditResultBuilder::new().with_total_modules(2).build();
+        generate_html_report(&before, &result, "s1", out.path(), &settings).unwrap();
+        assert!(out.path().join("old/index.html").exists());
+        std::fs::write(out.path().join("notes.txt"), "mine").unwrap();
+        std::fs::create_dir_all(out.path().join("assets")).unwrap();
+        std::fs::write(out.path().join("assets/logo.svg"), "<svg/>").unwrap();
+
+        let after = vec![
+            make_module("a", "src/new/a.rs"),
+            make_module("b", "src/keep/b.rs"),
+        ];
+        generate_html_report(&after, &result, "s2", out.path(), &settings).unwrap();
+        assert!(
+            out.path().join("assets/logo.svg").exists(),
+            "a directory without a generated page is not noupling's to delete"
+        );
+        assert!(
+            !out.path().join("old").exists(),
+            "stale page must be removed"
+        );
+        assert!(out.path().join("new/index.html").exists());
+        assert!(out.path().join("keep/index.html").exists());
+        assert!(
+            out.path().join("notes.txt").exists(),
+            "files noupling did not write are left alone"
+        );
     }
 
     #[test]
