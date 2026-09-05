@@ -148,7 +148,7 @@ noupling audit . --fail-below 80</code></pre>
           <tr><td><strong>Layer Violation</strong></td><td>edge</td><td>An import from a layered module into a higher layer (or, with hand-written layers, into no layer at all).</td><td>no</td></tr>
           <tr><td><strong>Gravity Well</strong></td><td>module</td><td>A module whose aggregate RRI is disproportionate to its neighbours; everything nearby bends toward it.</td><td>no</td></tr>
           <tr><td><strong>Red Flag</strong></td><td>edge</td><td>A named structural anti-pattern: <em>fused sibling</em> (a pair far tighter than its peers) or <em>trapped child</em> (a child importing its parent).</td><td>no</td></tr>
-          <tr><td><strong>Stability Violation</strong></td><td>edge (directories)</td><td>A more-stable directory depending on a less-stable one (Stable Dependencies Principle).</td><td>no</td></tr>
+          <tr><td><strong>Stability Violation</strong></td><td>edge (directories)</td><td>A more-stable directory depending on a less-stable sibling or cousin (Stable Dependencies Principle). A directory and its own ancestor are never compared: an entry point reaching into its packages is composition.</td><td>no</td></tr>
           <tr><td><strong>Zone Flag</strong></td><td>directory</td><td>A directory far enough off the main sequence to land in the Zone of Pain (concrete yet stable) or the Zone of Uselessness (abstract yet unstable).</td><td>no</td></tr>
           <tr><td><strong>Low Cohesion</strong></td><td>directory</td><td>A Package whose direct children barely depend on each other.</td><td>no</td></tr>
         </tbody>
