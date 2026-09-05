@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-05
+
+**Dogfooding fixes.** Eight things found by running the released 0.9.0 on noupling itself and on `examples/`: one band that contradicted its own score impact, three counts that disagreed between the header and the cards or between a parent page and its child, and small cosmetics.
+
+### Upgrade notes
+
+- **Bands on small projects change.** A Coupling Violation or Cycle is now never banded below what it costs the score (10 points → critical, 5 → at least high, 1 → at least medium). Large projects are unaffected; a five-module project whose only Cycle costs 40 points sees it move from low to critical, and `pr` / Sonar severities follow. Re-check a CI rule that keys on band names.
+- **`report --format all` now also writes `explorer.html`** (14 reports). If you ran the explorer separately with `--output`, the same flag is honoured by `all`.
+- **Baseline wording.** `audit --baseline` prints `Not in baseline: N` (was `New issues: N`) and the CI-gate error reads `N issue(s) not in the baseline`. JSON field names are unchanged.
+
+### Fixed
+
+- **Band vs score impact** (#379): `Issue::band_for` floors Coupling Violation and Cycle bands by their score impact, so a card can no longer read `[LOW] … Score impact: 40.0`.
+- **`critical_violations` header** (#380): JSON/XML counted ring hops above the critical threshold as extra violations; now counts over the same Issue violations as `total_circular` / `total_coupling`.
+- **Directory violation counts** (#381): `directory_tree` (JSON), md and html pages roll violation counts up to every ancestor, so a row marked `!` never shows 0.
+- **Stale drill-down pages** (#383): the html and md writers clear their own output directory before regenerating; pages for renamed or removed source directories no longer linger.
+- **`report --format all`** (#382): includes the Explorer, as the help promised; `--format` help keeps its per-format lines and gains an `explorer` description.
+- **`trend` cosmetics** (#384): float-noise deltas print `0.0`, not `+0.0`; the timestamp column is labelled UTC.
+- **Two meanings of "new"** (#386): baseline summaries say `not in baseline`; Violation Age keeps `new / recent / chronic`.
+
+### Docs
+
+- `examples/README.md` explains the three Kotlin examples with expected output, linked from the How-to page and README; `kotlin-coupled` now demonstrates a Coupling Violation instead of a second Cycle, and a CLI test keeps all three honest (#385).
+
 ## [0.9.0] - 2026-09-05
 
 **Same Issues in every report.** Every report format and the `audit` command now show the same nine kinds of Issue — Coupling Violation, Cycle, Rule Violation, Layer Violation, Gravity Well, Red Flag, Stability Violation, Zone Flag, Low Cohesion — as Issue cards with one severity band, one reason, one recommendation and a score impact, all written once in `noupling-core`. One audit per snapshot feeds every format (ADR 0001); one `issues` array is serialised for JSON, XML, Sonar and the Explorer (ADR 0002). The baseline covers every kind, layer inference applies everywhere, and the coverage test asserts the format-class rule from `CONTEXT.md`.
