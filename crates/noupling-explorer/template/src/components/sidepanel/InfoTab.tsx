@@ -9,9 +9,12 @@ import {
 
 export function InfoTab({
   data,
+  scope = "",
   onScoreClick,
 }: {
   data: DataContract;
+  /** Current drill scope; the welcome card describes it (#405). */
+  scope?: string;
   onScoreClick?: () => void;
 }) {
   // Score block sits at the very top so the headline number is never
@@ -19,7 +22,7 @@ export function InfoTab({
   return (
     <>
       <ScoreBlock data={data} onScoreClick={onScoreClick} />
-      <WelcomeCard data={data} onScoreClick={onScoreClick} />
+      <WelcomeCard data={data} scope={scope} onScoreClick={onScoreClick} />
       <SectionHeading>Stats</SectionHeading>
       <Stats data={data} onScoreClick={onScoreClick} />
       {data.history.length >= 2 && (
@@ -246,22 +249,37 @@ function AutoLayersBanner({ data }: { data: DataContract }) {
 
 function WelcomeCard({
   data,
+  scope,
   onScoreClick,
 }: {
   data: DataContract;
+  scope: string;
   onScoreClick?: () => void;
 }) {
   const codebaseTitle = data.codebase.path.split("/").filter(Boolean).pop() ?? data.codebase.path;
+  // Describe what is on the canvas: the whole project at home, the
+  // drilled directory otherwise (#405).
+  const inScopeNodes = scope === ""
+    ? data.nodes
+    : data.nodes.filter((n) => n.id === scope || n.id.startsWith(scope + "/"));
+  const files = scope === "" ? data.codebase.file_count : inScopeNodes.filter((n) => n.kind === "file").length;
+  const dirs = inScopeNodes.filter((n) => n.kind !== "file" && n.id !== scope).length;
+  const layersHere = new Set(inScopeNodes.map((n) => n.layer).filter(Boolean)).size;
+  const heading = scope === "" ? `Welcome to ${codebaseTitle}` : scope.split("/").pop() ?? scope;
   return (
     <div className="rounded-md border border-border bg-canvas p-3.5">
       <h4 id="codebase-header" className="m-0 mb-1.5 text-[14px] font-semibold">
-        Welcome to {codebaseTitle}
+        {heading}
       </h4>
+      {scope !== "" && (
+        <p className="m-0 mb-1 truncate font-mono text-[10px] text-muted" title={scope}>
+          {scope}
+        </p>
+      )}
       <p className="m-0 text-[12px] leading-relaxed text-muted">
-        {data.codebase.file_count} files in{" "}
-        {data.nodes.filter((n) => n.kind !== "file").length} directories across{" "}
-        {data.layers.length} layers.
-        Health{" "}
+        {files} files in {dirs} directories across{" "}
+        {scope === "" ? data.layers.length : layersHere} layers.
+        {scope === "" ? " Health " : " Project health "}
         <ScoreButton score={data.health_score} onClick={onScoreClick} />
         .{" "}
         <span className="text-muted/80">

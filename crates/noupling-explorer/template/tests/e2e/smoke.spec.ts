@@ -131,6 +131,27 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(rule.locator("[data-role='rule-to']")).toHaveText("**/infra/**");
   });
 
+  test("Info tab describes the drilled directory, not the whole project (#405)", async ({
+    page,
+  }) => {
+    // At home the welcome card is about the project.
+    await expect(page.locator("#codebase-header")).toContainText("Welcome to acme-payments");
+    // Drill into src/ui via the Levels tab; the card now describes src/ui.
+    await page.locator("button:has-text('Levels')").click();
+    const ui = page.locator("#side-panel button[title*='double-click to drill']").filter({ hasText: "ui" }).first();
+    await ui.dblclick();
+    await page.locator("button:has-text('Info')").click();
+    await expect(page.locator("#codebase-header")).toHaveText("ui");
+    await expect(page.locator("#codebase-header ~ p").first()).toContainText("src/ui");
+  });
+
+  test("the Composition banner names no ticket or skill (#405)", async ({ page }) => {
+    await page.locator("button:has-text('Composition')").click();
+    const banner = page.locator("[role='note']").first();
+    await expect(banner).not.toContainText("#280");
+    await expect(banner).not.toContainText("skill");
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {

@@ -185,6 +185,7 @@ export function App({ data }: AppProps) {
       <SidePanel
         data={data}
         scope={state.scope}
+        homeScope={home}
         onScope={(scope) => state.setState({ scope })}
         onSelect={(selected) => state.setState({ selected })}
         onSpotFilter={(spotFilter) => {

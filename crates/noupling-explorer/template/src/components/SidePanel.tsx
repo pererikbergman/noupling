@@ -14,6 +14,8 @@ type Tab = "Info" | "Files" | "Levels" | "Issues" | "Rules";
 export interface SidePanelProps {
   data: DataContract;
   scope: string;
+  /** The scope the Explorer opens at; the Info tab treats it as "whole project". */
+  homeScope?: string;
   onScope?: (scope: string) => void;
   onSelect?: (id: string) => void;
   onSpotFilter?: (
@@ -41,6 +43,7 @@ export function SidePanel({
   onFoldersOnly,
   activeIssueKey,
   onIssueFocus,
+  homeScope,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>("Info");
   const issuesCount = totalIssueCount(data);
@@ -51,7 +54,13 @@ export function SidePanel({
     >
       <Tabs current={tab} onChange={setTab} issuesCount={issuesCount} />
       <div className="flex-1 overflow-y-auto px-4 py-3.5">
-        {tab === "Info" && <InfoTab data={data} onScoreClick={onScoreClick} />}
+        {tab === "Info" && (
+          <InfoTab
+            data={data}
+            scope={scope === (homeScope ?? "") ? "" : scope}
+            onScoreClick={onScoreClick}
+          />
+        )}
         {tab === "Files" && (
           <FilesTab
             data={data}

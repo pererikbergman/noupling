@@ -118,7 +118,9 @@ function ContributorRow({
         title="Open details for the offender"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-mono text-[11px]">{c.subject}</span>
+          <span className="truncate font-mono text-[11px]" title={c.subject}>
+            {shortSubject(c.subject)}
+          </span>
           <div className="flex shrink-0 items-center gap-1.5">
             <span
               className={
@@ -141,4 +143,12 @@ function ContributorRow({
 function format(n: number): string {
   const r = Math.round(n * 10) / 10;
   return r.toString();
+}
+
+/** `a/b/c.rs -> d/e/f.rs` → `c.rs -> f.rs`; rings likewise, one name per member. */
+function shortSubject(subject: string): string {
+  return subject
+    .split(" -> ")
+    .map((p) => p.split("/").filter(Boolean).pop() ?? p)
+    .join(" → ");
 }

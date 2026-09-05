@@ -83,7 +83,7 @@ export function IssuesTab({
                 data-baselined={it.baselined ? "true" : "false"}
                 title={`${it.reason} ${it.recommendation}`}
               >
-                <div className="mb-0.5 flex items-center justify-between gap-2">
+                <div className="mb-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                   <span className="flex items-center gap-1.5">
                     <span
                       className={
@@ -105,14 +105,17 @@ export function IssuesTab({
                       </span>
                     )}
                   </span>
-                  <span className="font-mono text-[10px] text-muted">
+                  <span className="whitespace-nowrap font-mono text-[10px] text-muted">
                     {metricFor(it)}
                   </span>
                 </div>
                 <div className="truncate font-mono text-[11px] text-text">
                   {subjectShort(it.subject)}
                 </div>
-                <div className="truncate font-mono text-[10px] text-muted">
+                <div
+                  className="truncate font-mono text-[10px] text-muted"
+                  title={subjectFull(it.subject)}
+                >
                   {subjectFull(it.subject)}
                 </div>
               </button>
