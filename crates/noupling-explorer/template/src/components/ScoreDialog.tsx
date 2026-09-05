@@ -46,16 +46,16 @@ export function ScoreDialog({ data, open, onClose, onSelect }: ScoreDialogProps)
 
         <section className="mb-4 rounded-sm border border-border bg-canvas p-3">
           <p className="m-0 mb-1 text-[11px] uppercase tracking-wider text-muted">
-            Formula
+            Points lost
           </p>
           <p className="m-0 font-mono text-[13px]">
-            100 × (1 − {format(b.total_severity)} / {b.total_modules}) ={" "}
-            <strong className="text-accent-domain">{format(data.health_score)}</strong>
+            100 − <strong className="text-accent-domain">{format(data.health_score)}</strong> ={" "}
+            <strong data-testid="points-lost">{format(b.points_lost)}</strong> across{" "}
+            {b.total_modules} modules
           </p>
           <p className="m-0 mt-1 text-[11px] text-muted">
-            Each violation contributes a severity weight (depth-discounted).
-            Sum the severities, divide by module count, that's the fraction of
-            the codebase considered unhealthy. Score is 100 × the rest.
+            Every Issue that scores carries its score impact — the points it takes off.
+            Summed over all Issues that equals the points lost, so the rows below add up.
           </p>
         </section>
 
@@ -64,15 +64,13 @@ export function ScoreDialog({ data, open, onClose, onSelect }: ScoreDialogProps)
             <h3 className="mt-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
               Where the {format(b.points_lost)} lost points come from
             </h3>
-            <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
-              <dt className="text-muted">Cycles</dt>
-              <dd className="m-0 font-mono">
-                {format(b.cycles_severity)} severity
-              </dd>
-              <dt className="text-muted">Coupling violations</dt>
-              <dd className="m-0 font-mono">
-                {format(b.coupling_severity)} severity
-              </dd>
+            <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]" data-testid="points-by-kind">
+              {b.by_kind.map((k) => (
+                <div key={k.kind} className="contents">
+                  <dt className="text-muted">{k.kind_name}</dt>
+                  <dd className="m-0 font-mono">−{format(k.points)}</dd>
+                </div>
+              ))}
             </dl>
 
             {b.top_contributors.length > 0 && (
@@ -81,12 +79,12 @@ export function ScoreDialog({ data, open, onClose, onSelect }: ScoreDialogProps)
                   Top contributors
                 </h3>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                  {b.top_contributors.map((c, i) => (
+                  {b.top_contributors.map((c) => (
                     <ContributorRow
-                      key={i}
+                      key={c.fingerprint}
                       c={c}
                       onClick={() => {
-                        onSelect?.(c.from);
+                        onSelect?.(c.focus_id);
                         onClose();
                       }}
                     />
@@ -97,8 +95,7 @@ export function ScoreDialog({ data, open, onClose, onSelect }: ScoreDialogProps)
           </>
         ) : (
           <p className="m-0 text-[13px] text-muted">
-            No deductions — the audit found no coupling violations or cycles.
-            Healthy codebase.
+            No deductions — no Issue takes points off this score. Healthy codebase.
           </p>
         )}
       </div>
@@ -121,23 +118,19 @@ function ContributorRow({
         title="Open details for the offender"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-mono text-[11px]">
-            {c.from} → {c.to}
-          </span>
+          <span className="truncate font-mono text-[11px]">{c.subject}</span>
           <div className="flex shrink-0 items-center gap-1.5">
             <span
               className={
                 "rounded-full px-1.5 py-0.5 text-[10px] " +
                 (c.kind === "cycle"
-                  ? "bg-edge-violation/20 text-edge-violation"
-                  : "bg-accent-ui/20 text-accent-ui")
+                  ? "bg-edge-cycle/20 text-edge-cycle"
+                  : "bg-edge-violation/20 text-edge-violation")
               }
             >
-              {c.kind}
+              {c.kind_name}
             </span>
-            <span className="font-mono text-[10px] text-muted">
-              {format(c.severity)}
-            </span>
+            <span className="font-mono text-[10px] text-muted">−{format(c.points)}</span>
           </div>
         </div>
       </button>

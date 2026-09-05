@@ -204,16 +204,67 @@ test.describe("Explorer — acme-payments sample", () => {
     expect(after).not.toBe(before);
   });
 
-  test("Issues tab lists every violation + cycle + gravity well + red flag", async ({
+  test("Issues tab lists every Issue kind from the shared issues array (#345)", async ({
     page,
   }) => {
     await page.locator("button:has-text('Issues')").click();
-    // Sample carries 1 violation + 1 cycle + 1 gravity well + 1 red flag.
-    const items = page.locator("#side-panel ul li button");
-    expect(await items.count()).toBeGreaterThanOrEqual(4);
+    // Sample carries one Issue of each of the nine kinds.
+    const items = page.locator("#side-panel ul li button[data-issue-key]");
+    expect(await items.count()).toBe(9);
+    for (const kind of [
+      "coupling_violation",
+      "cycle",
+      "rule_violation",
+      "layer_violation",
+      "gravity_well",
+      "red_flag",
+      "stability_violation",
+      "zone_flag",
+      "low_cohesion",
+    ]) {
+      expect(await page.locator(`[data-issue-kind='${kind}']`).count()).toBe(1);
+    }
     // Tab carries an alert badge with the total count.
     await expect(page.locator("button:has-text('Issues')").first()).toContainText(
-      "4",
+      "9",
+    );
+    // Cards are in canonical order: the critical ones first.
+    await expect(items.first()).toContainText("critical");
+  });
+
+  test("Cycle card and baselined card render from the issues array (#345)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    const cycle = page.locator("[data-issue-kind='cycle']");
+    await expect(cycle).toBeVisible();
+    await expect(cycle).toContainText("Cycle");
+    await expect(cycle).toContainText("domain → infra → domain");
+    // The card's tooltip carries the core reason + recommendation verbatim.
+    await expect(cycle).toHaveAttribute("title", /cheapest break is src\/infra -> src\/domain/);
+    await expect(cycle).toHaveAttribute("title", /Cut the cycle at/);
+
+    const baselined = page.locator("[data-baselined='true']");
+    expect(await baselined.count()).toBe(1);
+    await expect(baselined.first()).toContainText("accepted");
+    await expect(baselined.first()).toHaveClass(/opacity-60/);
+    // New / baselined split excludes the accepted one from "new".
+    await expect(page.locator("[data-testid='issues-summary']")).toContainText("8 new");
+    await expect(page.locator("[data-testid='issues-summary']")).toContainText("1 baselined");
+  });
+
+  test("Details panel verdict text is the Issue's reason and recommendation (#345)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("[data-issue-kind='gravity_well']").click();
+    const verdict = page.locator("[data-verdict-kind='gravity_well']");
+    await expect(verdict).toBeVisible();
+    await expect(verdict.locator("[data-role='reason']")).toContainText(
+      "carries a total RRI of 38 across 6 relationships",
+    );
+    await expect(verdict.locator("[data-role='recommendation']")).toContainText(
+      "Split src/infra/db.rs by responsibility",
     );
   });
 
@@ -248,8 +299,12 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(
       page.locator("text=Health score: 82/100").first(),
     ).toBeVisible();
-    // Formula line spells out the math; sample uses 18 modules.
-    await expect(page.locator("text=/100 × \\(1 −/").first()).toBeVisible();
+    // Points lost = 100 − score, and the per-kind rows sum to it (#345).
+    await expect(page.locator("[data-testid='points-lost']")).toHaveText("18");
+    const rows = page.locator("[data-testid='points-by-kind'] dd");
+    const points = await rows.allTextContents();
+    const sum = points.reduce((acc, t) => acc + parseFloat(t.replace("−", "")), 0);
+    expect(sum).toBeCloseTo(18, 5);
     await expect(page.locator("text=Top contributors").first()).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("[role='dialog']")).not.toBeVisible();
@@ -345,12 +400,12 @@ test.describe("Explorer — acme-payments sample", () => {
       page.locator("text=About this verdict").first(),
     ).toBeVisible();
     await expect(
-      page.locator("text=Why this is a violation").first(),
+      page.locator("text=Why this is a coupling violation").first(),
     ).toBeVisible();
-    // Per-instance trigger numbers — severity for violations
+    // Per-Issue wording comes from core: the reason carries the numbers.
     await expect(
-      page.locator("text=/high severity/").first(),
-    ).toBeVisible();
+      page.locator("[data-role='reason']").first(),
+    ).toContainText("3 imports, severity 1.50, RRI 12");
   });
 
   test("cycle issue row shows 'break: A → B (N vs M)', not full path (#277)", async ({

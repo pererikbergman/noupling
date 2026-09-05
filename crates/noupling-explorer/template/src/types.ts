@@ -4,7 +4,7 @@
 // to be human-readable and the Rust + TS sides are version-locked.
 
 export interface DataContract {
-  format_version: 1;
+  format_version: 2;
   noupling_version: string;
   generated_at: string;
   report_options: ReportOptions;
@@ -18,10 +18,13 @@ export interface DataContract {
   effective_rules: EffectiveRule[];
   nodes: NodeEntry[];
   edges: EdgeEntry[];
+  /** Ring geometry for the canvas; the Cycle *Issue* lives in `issues`. */
   cycles: CycleEntry[];
+  /** Edge geometry for the canvas; the violation *Issues* live in `issues`. */
   violations: ViolationEntry[];
-  gravity_wells: GravityWellEntry[];
-  red_flags: RedFlagEntry[];
+  /** Every Issue, as the same Issue cards the JSON report emits
+   *  (ADR 0002, #345), plus the participant node ids focus mode uses. */
+  issues: IssueEntry[];
   history: HistoryEntry[];
   /** Pre-computed Force-view module clusters (#278 follow-up).
    *  Tightly coupled groups detected in Rust via label propagation. */
@@ -35,31 +38,67 @@ export interface ClusterEntry {
 
 export interface ScoreBreakdown {
   total_modules: number;
-  total_severity: number;
   points_lost: number;
-  cycles_severity: number;
-  coupling_severity: number;
+  /** One row per kind that scores; sums to `points_lost`. */
+  by_kind: KindPoints[];
+  /** Top Issues by score impact, at most 5. */
   top_contributors: ScoreContributor[];
 }
 
+export interface KindPoints {
+  kind: IssueKindId;
+  kind_name: string;
+  points: number;
+}
+
 export interface ScoreContributor {
-  from: string;
-  to: string;
-  severity: number;
-  kind: "cycle" | "coupling";
+  kind: IssueKindId;
+  kind_name: string;
+  subject: string;
+  focus_id: string;
+  points: number;
+  fingerprint: string;
 }
 
-export interface GravityWellEntry {
-  module_path: string;
-  total_rri: number;
-  relationship_count: number;
-}
+/** Machine ids of the nine Issue kinds (`IssueKind::id` in core). */
+export type IssueKindId =
+  | "coupling_violation"
+  | "cycle"
+  | "rule_violation"
+  | "layer_violation"
+  | "gravity_well"
+  | "red_flag"
+  | "stability_violation"
+  | "zone_flag"
+  | "low_cohesion";
 
-export interface RedFlagEntry {
-  flag_type: string;
-  modules: string[];
-  rri: number;
+export type SeverityBand = "critical" | "high" | "medium" | "low";
+
+export type IssueSubject =
+  | { type: "module"; path: string }
+  | { type: "edge"; from: string; to: string }
+  | { type: "ring"; members: string[] };
+
+/**
+ * One Issue card — the shape `noupling_core::analyzer::IssueCard`
+ * serialises, identical to an entry of `report.json`'s `issues` array
+ * (documented in the docs site under Report Formats) — plus the node
+ * ids that participate in it.
+ */
+export interface IssueEntry {
+  kind: IssueKindId;
+  kind_name: string;
+  severity: SeverityBand;
+  subject: IssueSubject;
+  reason: string;
   recommendation: string;
+  score_impact: number;
+  baselined: boolean;
+  fingerprint: string;
+  /** Per-kind numbers; keys documented per kind in the docs site. */
+  detail: Record<string, unknown>;
+  /** Node ids focus mode expands, highlights and scopes to. */
+  participants: string[];
 }
 
 export interface ReportOptions {
@@ -80,6 +119,17 @@ export interface SummaryCounts {
   cycles: number;
   gravity_wells: number;
   red_flags: number;
+  issues: number;
+  new_issues: number;
+  baselined_issues: number;
+  /** All nine kinds, zero included, canonical order. */
+  by_kind: KindCount[];
+}
+
+export interface KindCount {
+  kind: IssueKindId;
+  kind_name: string;
+  count: number;
 }
 
 export interface LayerEntry {

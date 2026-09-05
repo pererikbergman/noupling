@@ -270,16 +270,28 @@ function narrowData(
   const visibleViolations = data.violations.filter(
     (v) => allScopeIds.has(v.edge.from) && allScopeIds.has(v.edge.to),
   );
+  // An Issue is in scope when at least one participant is: a directory-
+  // shaped Issue about `src/bag` stays visible while drilled into it.
+  const inScopeId = (id: string) => allScopeIds.has(id) || inScope(id, scope);
+  const visibleIssues = data.issues.filter((i) => i.participants.some(inScopeId));
   return {
     ...data,
     nodes: visibleNodes,
     edges: visibleEdges,
     cycles: visibleCycles,
     violations: visibleViolations,
+    issues: visibleIssues,
     summary_counts: {
       ...data.summary_counts,
       violations: visibleViolations.length,
       cycles: visibleCycles.length,
+      issues: visibleIssues.length,
+      new_issues: visibleIssues.filter((i) => !i.baselined).length,
+      baselined_issues: visibleIssues.filter((i) => i.baselined).length,
+      by_kind: data.summary_counts.by_kind.map((k) => ({
+        ...k,
+        count: visibleIssues.filter((i) => i.kind === k.kind).length,
+      })),
     },
     codebase: {
       ...data.codebase,

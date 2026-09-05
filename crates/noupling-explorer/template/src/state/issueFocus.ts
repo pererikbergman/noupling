@@ -58,27 +58,13 @@ export function computeIssueFocus(
 }
 
 /**
- * Extract the participant file ids from an issue. Cycles enumerate
- * their full member list; red flags carry an explicit `modules` array.
- * Violations carry both endpoints of the offending edge. Gravity wells
- * carry a single subject — the focused module.
+ * The participant node ids of an Issue come with the Issue itself
+ * (`participants` on the Data Contract, computed in core): both ends of
+ * an edge, every member of a ring, the well plus the modules pulling on
+ * it, the directory of a directory-shaped Issue.
  */
-function participantsOf(it: Issue, data: DataContract): string[] {
-  if (it.kind === "cycle") {
-    const c = data.cycles.find((c) => c.members[0] === it.subject);
-    return c?.members ?? [it.subject];
-  }
-  if (it.kind === "red-flag") {
-    const f = data.red_flags.find((f) => f.modules[0] === it.subject);
-    return f?.modules ?? [it.subject];
-  }
-  if (it.kind === "violation") {
-    const v = data.violations.find(
-      (v) => v.edge.from === it.subject || v.edge.to === it.subject,
-    );
-    return v ? [v.edge.from, v.edge.to] : [it.subject];
-  }
-  return [it.subject];
+function participantsOf(it: Issue, _data: DataContract): string[] {
+  return it.participants.length > 0 ? it.participants : [];
 }
 
 /**

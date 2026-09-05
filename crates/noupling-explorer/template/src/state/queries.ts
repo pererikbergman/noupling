@@ -2,9 +2,9 @@ import type {
   CycleEntry,
   DataContract,
   EdgeEntry,
-  GravityWellEntry,
+  IssueEntry,
+  IssueKindId,
   NodeEntry,
-  RedFlagEntry,
   ViolationEntry,
 } from "../types";
 
@@ -28,25 +28,27 @@ export function allCycles(data: DataContract): CycleEntry[] {
   return data.cycles;
 }
 
-export function allGravityWells(data: DataContract): GravityWellEntry[] {
-  return data.gravity_wells;
+/** Every Issue, in canonical order (band desc, kind, subject). */
+export function allIssues(data: DataContract): IssueEntry[] {
+  return data.issues;
 }
 
-export function allRedFlags(data: DataContract): RedFlagEntry[] {
-  return data.red_flags;
+/** Issues whose participants include the supplied node id. */
+export function issuesForNode(data: DataContract, id: string): IssueEntry[] {
+  return data.issues.filter((i) => i.participants.includes(id));
+}
+
+/** Issues of one kind, in canonical order. */
+export function issuesOfKind(data: DataContract, kind: IssueKindId): IssueEntry[] {
+  return data.issues.filter((i) => i.kind === kind);
 }
 
 /**
- * Total issue count surfaced in the side panel tab badges.
- * Sum of every category the IssuesTab lists.
+ * Total issue count surfaced in the side panel tab badges — every kind,
+ * baselined included (they are still Issues, just accepted).
  */
 export function totalIssueCount(data: DataContract): number {
-  return (
-    data.violations.length +
-    data.cycles.length +
-    data.gravity_wells.length +
-    data.red_flags.length
-  );
+  return data.issues.length;
 }
 
 // ── Node lookups ────────────────────────────────────────────────────
@@ -180,22 +182,6 @@ export function violationForEdge(
   );
 }
 
-/** The gravity well centred on the supplied module path, if any. */
-export function gravityWellFor(
-  data: DataContract,
-  modulePath: string,
-): GravityWellEntry | undefined {
-  return data.gravity_wells.find((g) => g.module_path === modulePath);
-}
-
-/** Red flags whose `modules` list includes the supplied module path. */
-export function redFlagsForModule(
-  data: DataContract,
-  modulePath: string,
-): RedFlagEntry[] {
-  return data.red_flags.filter((f) => f.modules.includes(modulePath));
-}
-
 /**
  * Per-node cycle membership counts — how many cycles each node id
  * appears in. Used by the LSM to render the cycle-count badge on
@@ -212,8 +198,10 @@ export function cycleMembershipCounts(data: DataContract): Map<string, number> {
 }
 
 /**
- * First violation matching a `from`/`to` rule pair — used by the
- * Rules tab to surface "this rule is currently violated by edge X."
+ * First Rule or Layer Violation Issue whose edge matches a rule's
+ * `from`/`to` globs — used by the Rules tab to jump to a concrete
+ * offender. Falls back to the canvas violation geometry when the
+ * Issue carries no matching edge.
  */
 export function firstViolationForRule(
   data: DataContract,
@@ -222,5 +210,12 @@ export function firstViolationForRule(
 ): ViolationEntry | undefined {
   return data.violations.find(
     (v) => v.rule.from === ruleFrom && v.rule.to === ruleTo,
+  );
+}
+
+/** Rule and Layer Violation Issues — the Rules tab's offender list. */
+export function ruleOffenders(data: DataContract): IssueEntry[] {
+  return data.issues.filter(
+    (i) => i.kind === "rule_violation" || i.kind === "layer_violation",
   );
 }

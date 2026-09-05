@@ -183,8 +183,8 @@ Vertex/edge semantics, node kinds (`file` / `package` / `container`), and the me
 
 ```json
 {
-  "format_version": 1,
-  "noupling_version": "0.7.0",
+  "format_version": 2,
+  "noupling_version": "0.9.0",
   "generated_at": "2026-06-03T14:00:00Z",
   "codebase": {
     "path": "/Users/me/code/foo",
@@ -201,8 +201,22 @@ Vertex/edge semantics, node kinds (`file` / `package` / `container`), and the me
     "violations": 7,
     "cycles": 2,
     "gravity_wells": 1,
-    "red_flags": 3
+    "red_flags": 3,
+    "issues": 13,
+    "new_issues": 12,
+    "baselined_issues": 1,
+    "by_kind": [{ "kind": "coupling_violation", "kind_name": "Coupling Violation", "count": 5 }, "…one row per kind, zero included"]
   },
+  "score_breakdown": {
+    "total_modules": 23,
+    "points_lost": 18.0,
+    "by_kind": [{ "kind": "cycle", "kind_name": "Cycle", "points": 12.0 }, "…sums to points_lost"],
+    "top_contributors": [{ "kind": "cycle", "kind_name": "Cycle", "subject": "src/domain -> src/infra -> src/domain", "focus_id": "src/domain/user.rs", "points": 12.0, "fingerprint": "cycle:src/domain -> src/infra -> src/domain" }]
+  },
+  "issues": [
+    "…every Issue as the Issue card documented in docs.html § Report Formats (kind, kind_name, severity, subject, reason, recommendation, score_impact, baselined, fingerprint, detail), plus:",
+    { "participants": ["src/infra/db.rs", "src/ui/CheckoutForm.tsx"] }
+  ],
   "layers": [
     {
       "name": "reporter",

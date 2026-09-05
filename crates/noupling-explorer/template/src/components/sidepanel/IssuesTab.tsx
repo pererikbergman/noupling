@@ -1,29 +1,16 @@
-import { useMemo } from "react";
-import type { DataContract } from "../../types";
-import {
-  allCycles,
-  allGravityWells,
-  allRedFlags,
-  allViolations,
-} from "../../state/queries";
+import type { DataContract, IssueEntry, IssueSubject, SeverityBand } from "../../types";
+import { allIssues } from "../../state/queries";
 import { basename } from "./shared";
 
-export type IssueKind = "violation" | "cycle" | "red-flag" | "gravity-well";
-
-export interface Issue {
-  kind: IssueKind;
-  title: string;
-  subtitle?: string;
-  description: string;
-  /** Primary node id to focus / select. */
-  subject: string;
-  /** Optional scope to drill the canvas to. */
-  scope?: string;
-  /** "low" / "medium" / "high" — drives the colour chip. */
-  severity?: "low" | "medium" | "high";
-  /** Right-aligned numeric tag (RRI, cycle size, …). */
-  metric?: string;
-}
+/**
+ * The Issues tab renders the Data Contract's `issues` array — the same
+ * Issue cards every other format shows (ADR 0002, #345) — in canonical
+ * order: severity band, then kind, then subject. Each card carries the
+ * kind, band, subject, reason and recommendation written once in core;
+ * nothing here re-derives wording. Baselined Issues render dimmed with
+ * an "accepted" marker and are excluded from the "new" count.
+ */
+export type Issue = IssueEntry;
 
 interface IssuesTabProps {
   data: DataContract;
@@ -38,13 +25,11 @@ interface IssuesTabProps {
 
 export function IssuesTab({
   data,
-  onScope,
   onSelect,
-  onSpotFilter,
   onIssueFocus,
   activeIssueKey,
 }: IssuesTabProps) {
-  const items = useMemo(() => buildIssues(data), [data]);
+  const items = allIssues(data);
 
   if (items.length === 0) {
     return (
@@ -54,200 +39,159 @@ export function IssuesTab({
     );
   }
 
+  const baselined = items.filter((i) => i.baselined).length;
+
   return (
-    <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {items.map((it, i) => {
-        const key = `${it.kind}-${i}`;
-        const selected = activeIssueKey === key;
-        return (
-          <li key={key}>
-            <button
-              aria-pressed={selected}
-              onClick={() => {
-                onIssueFocus?.(it, key);
-                // When focus mode is wired, skip the legacy spot-filter
-                // call — the focus mode replaces it (and the spot
-                // filter would narrow visible nodes to the issue's
-                // file ids, hiding the participant containers needed
-                // for inline file-level expansion).
-                if (onIssueFocus) {
-                  if (it.subject) onSelect?.(it.subject);
-                  if (it.kind === "red-flag" && it.scope) onScope?.(it.scope);
-                  return;
-                }
-                switch (it.kind) {
-                  case "violation":
-                    onSpotFilter?.("with-violations");
-                    onSelect?.(it.subject);
-                    break;
-                  case "cycle":
-                    onSpotFilter?.("in-cycles");
-                    if (it.subject) onSelect?.(it.subject);
-                    break;
-                  case "red-flag":
-                    if (it.scope) onScope?.(it.scope);
-                    if (it.subject) onSelect?.(it.subject);
-                    break;
-                  case "gravity-well":
-                    onSpotFilter?.("gravity-wells");
-                    onSelect?.(it.subject);
-                    break;
-                }
-              }}
-              className={
-                "block w-full rounded-md border bg-canvas px-3 py-2 text-left hover:bg-canvas/60 hover:border-text/30 transition-colors " +
-                (selected
-                  ? "border-l-4 border-l-accent-domain border-border bg-canvas/80"
-                  : "border-border")
-              }
-              data-issue-key={key}
-              title={it.description}
-            >
-            <div className="mb-0.5 flex items-center justify-between">
-              <span
+    <div>
+      <p
+        className="m-0 mb-2 text-[11px] text-muted"
+        data-testid="issues-summary"
+      >
+        <strong className="text-text">{items.length}</strong> issue
+        {items.length === 1 ? "" : "s"}
+        {baselined > 0 && (
+          <>
+            {" · "}
+            <strong className="text-text">{items.length - baselined}</strong> new
+            {" · "}
+            <strong className="text-text">{baselined}</strong> baselined
+          </>
+        )}
+      </p>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {items.map((it) => {
+          const key = it.fingerprint;
+          const selected = activeIssueKey === key;
+          return (
+            <li key={key}>
+              <button
+                aria-pressed={selected}
+                onClick={() => {
+                  onIssueFocus?.(it, key);
+                  const focus = it.participants[0];
+                  if (focus) onSelect?.(focus);
+                }}
                 className={
-                  "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider " +
-                  kindClass(it.kind, it.severity)
+                  "block w-full rounded-md border bg-canvas px-3 py-2 text-left transition-colors hover:border-text/30 hover:bg-canvas/60 " +
+                  (selected
+                    ? "border-l-4 border-l-accent-domain border-border bg-canvas/80"
+                    : "border-border") +
+                  (it.baselined ? " opacity-60" : "")
                 }
+                data-issue-key={key}
+                data-issue-kind={it.kind}
+                data-baselined={it.baselined ? "true" : "false"}
+                title={`${it.reason} ${it.recommendation}`}
               >
-                {labelFor(it)}
-              </span>
-              <span className="font-mono text-[10px] text-muted">
-                {it.metric ?? ""}
-              </span>
-            </div>
-            <div className="truncate font-mono text-[11px] text-text">
-              {it.title}
-            </div>
-            {it.subtitle && (
-              <div className="truncate font-mono text-[10px] text-muted">
-                {it.subtitle}
-              </div>
-            )}
-          </button>
-        </li>
-        );
-      })}
-    </ul>
+                <div className="mb-0.5 flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={
+                        "rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider " +
+                        bandClass(it.severity)
+                      }
+                    >
+                      {it.severity}
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                      {it.kind_name}
+                    </span>
+                    {it.baselined && (
+                      <span
+                        className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted"
+                        data-testid="baselined-marker"
+                      >
+                        accepted
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted">
+                    {metricFor(it)}
+                  </span>
+                </div>
+                <div className="truncate font-mono text-[11px] text-text">
+                  {subjectShort(it.subject)}
+                </div>
+                <div className="truncate font-mono text-[10px] text-muted">
+                  {subjectFull(it.subject)}
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
-/**
- * Flatten the four issue families into one priority-sorted list.
- *
- * Priority: high-severity violations → cycles → gravity wells → red flags
- * → medium / low violations. Inside each bucket, sort by intensity
- * descending (severity tier for violations, size for cycles, RRI for
- * gravity wells + red flags).
- */
-function buildIssues(data: DataContract): Issue[] {
-  const sevWeight = (s: "low" | "medium" | "high") =>
-    s === "high" ? 3 : s === "medium" ? 2 : 1;
-  const violations: Issue[] = allViolations(data).map((v) => ({
-    kind: "violation",
-    title: `${basename(v.edge.from)} → ${basename(v.edge.to)}`,
-    subtitle: `${v.edge.from} → ${v.edge.to}`,
-    description: `Rule violation (severity ${v.severity}): ${v.rule.from} → ${v.rule.to}`,
-    subject: v.edge.from,
-    severity: v.severity,
-    metric: v.severity,
-  }));
-  violations.sort((a, b) => sevWeight(b.severity!) - sevWeight(a.severity!));
-
-  const cycles: Issue[] = allCycles(data).map((c) => ({
-    kind: "cycle",
-    title: c.members.map(basename).join(" → "),
-    // Subtitle surfaces the *break* edge from the minimum cut, not the
-    // full traversal path — the full path used to imply that every
-    // hop was equally guilty (bug #277). The 2-vs-14 contrast tells
-    // you *why* the recommendation favours this side.
-    subtitle: cycleSubtitle(c),
-    // Tooltip carries the full traversal path so it isn't lost; the
-    // DetailsPanel cycle section is the proper home for it.
-    description: c.members.join(" → "),
-    subject: c.members[0],
-    metric: `size ${c.size}`,
-  }));
-  cycles.sort((a, b) => (b.metric === a.metric ? 0 : b.metric! > a.metric! ? 1 : -1));
-
-  const wells: Issue[] = allGravityWells(data).map((g) => ({
-    kind: "gravity-well",
-    title: basename(g.module_path),
-    subtitle: g.module_path,
-    description: `Gravity well: ${g.relationship_count} inbound relationships, total RRI ${g.total_rri.toFixed(1)}`,
-    subject: g.module_path,
-    metric: `RRI ${g.total_rri.toFixed(1)}`,
-  }));
-  wells.sort((a, b) => parseFloat((b.metric ?? "0").replace(/[^\d.]/g, "")) - parseFloat((a.metric ?? "0").replace(/[^\d.]/g, "")));
-
-  const flags: Issue[] = allRedFlags(data).map((f) => ({
-    kind: "red-flag",
-    title: `${humaniseFlag(f.flag_type)}: ${f.modules.map(basename).join(" + ")}`,
-    subtitle: f.modules.join(" / "),
-    description: f.recommendation,
-    subject: f.modules[0],
-    metric: `RRI ${f.rri.toFixed(1)}`,
-  }));
-  flags.sort((a, b) => parseFloat((b.metric ?? "0").replace(/[^\d.]/g, "")) - parseFloat((a.metric ?? "0").replace(/[^\d.]/g, "")));
-
-  // Interleave: high-sev violations first, then cycles, then gravity wells,
-  // then red flags, then medium/low violations.
-  const highVios = violations.filter((v) => v.severity === "high");
-  const otherVios = violations.filter((v) => v.severity !== "high");
-  return [...highVios, ...cycles, ...wells, ...flags, ...otherVios];
-}
-
-function labelFor(it: Issue): string {
-  switch (it.kind) {
-    case "violation":
-      return `${it.severity?.toUpperCase()} VIOLATION`;
-    case "cycle":
-      return "CYCLE";
-    case "gravity-well":
-      return "GRAVITY WELL";
-    case "red-flag":
-      return "RED FLAG";
+/** Colour chip per severity band — one band vocabulary everywhere. */
+export function bandClass(band: SeverityBand): string {
+  switch (band) {
+    case "critical":
+      return "bg-edge-cycle/20 text-edge-cycle";
+    case "high":
+      return "bg-edge-violation/20 text-edge-violation";
+    case "medium":
+      return "bg-accent-infra/20 text-accent-infra";
+    case "low":
+      return "bg-muted/20 text-muted";
   }
-}
-
-function kindClass(kind: IssueKind, severity?: "low" | "medium" | "high"): string {
-  if (kind === "violation") {
-    if (severity === "high") return "bg-edge-violation/20 text-edge-violation";
-    if (severity === "medium") return "bg-accent-infra/20 text-accent-infra";
-    return "bg-muted/20 text-muted";
-  }
-  if (kind === "cycle") return "bg-edge-cycle/20 text-edge-cycle";
-  if (kind === "gravity-well") return "bg-accent-infra/20 text-accent-infra";
-  return "bg-accent-ui/20 text-accent-ui";
 }
 
 /**
- * Cycle-row subtitle. Renders the break edge with weight contrast
- * (`break: A → B (2 vs 14)`) so the recommendation is justified.
- * 2-node cycles where both directions are equally weighted render as
- * `A ⇄ B (equal weight)` — the data doesn't support picking a side.
+ * Right-aligned figure. A Cycle shows its break edge with weight contrast
+ * (`break: A → B (2 vs 14)`, #277) so the recommendation is justified;
+ * scoring kinds show their score impact; the rest their key number.
  */
-function cycleSubtitle(c: {
-  members: string[];
-  minimum_cut: { from: string; to: string; weight: number; vs_weight: number }[];
-  size: number;
-}): string {
-  const cut = c.minimum_cut[0];
-  if (!cut) {
-    // No min-cut emitted (analyzer fallback path). Show the first hop.
-    return `break: ${basename(c.members[0])} → ${basename(c.members[1] ?? "")}`;
-  }
-  const from = basename(cut.from);
-  const to = basename(cut.to);
-  // 2-node cycle with equal weights either direction → don't fake a
-  // preference. cycle_order is the dir count; size==2 catches mutual.
-  if (c.size === 2 && cut.weight === cut.vs_weight) {
-    return `${from} ⇄ ${to} (equal weight)`;
-  }
-  return `break: ${from} → ${to} (${cut.weight} vs ${cut.vs_weight})`;
+function metricFor(it: IssueEntry): string {
+  if (it.kind === "cycle") return cycleBreak(it) ?? `−${it.score_impact.toFixed(1)} pts`;
+  if (it.score_impact > 0) return `−${it.score_impact.toFixed(1)} pts`;
+  const d = it.detail;
+  if (typeof d.total_rri === "number") return `RRI ${d.total_rri.toFixed(0)}`;
+  if (typeof d.rri === "number" && it.kind === "red_flag") return `RRI ${d.rri.toFixed(0)}`;
+  if (typeof d.distance === "number") return `D ${d.distance.toFixed(2)}`;
+  if (typeof d.cohesion === "number") return `cohesion ${d.cohesion.toFixed(2)}`;
+  if (typeof d.to_instability === "number" && typeof d.from_instability === "number")
+    return `I ${d.from_instability.toFixed(2)} → ${d.to_instability.toFixed(2)}`;
+  if (typeof d.line_number === "number") return `line ${d.line_number}`;
+  return "";
 }
 
-function humaniseFlag(flag: string): string {
-  // Rust's Debug format for the enum gives `FusedSibling` / `TrappedChild`.
-  return flag.replace(/([a-z])([A-Z])/g, "$1 $2");
+/** `break: A → B (cost vs heaviest other hop)` from the Cycle's detail. */
+function cycleBreak(it: IssueEntry): string | null {
+  const d = it.detail;
+  const link = typeof d.weakest_link === "string" ? d.weakest_link : null;
+  const cost = typeof d.break_cost === "number" ? d.break_cost : null;
+  const counts = Array.isArray(d.hop_import_counts) ? (d.hop_import_counts as number[]) : [];
+  if (!link || cost === null) return null;
+  const edge = link.split(" (")[0];
+  const [from, to] = edge.split(" -> ");
+  if (!from || !to) return null;
+  const vs = Math.max(...counts.filter((c) => c !== cost), cost);
+  if (counts.length === 2 && counts[0] === counts[1]) {
+    return `${basename(from)} ⇄ ${basename(to)} (equal weight)`;
+  }
+  return `break: ${basename(from)} → ${basename(to)} (${cost} vs ${vs})`;
+}
+
+export function subjectShort(s: IssueSubject): string {
+  switch (s.type) {
+    case "module":
+      return basename(s.path);
+    case "edge":
+      return `${basename(s.from)} → ${basename(s.to)}`;
+    case "ring":
+      return s.members.map(basename).join(" → ");
+  }
+}
+
+export function subjectFull(s: IssueSubject): string {
+  switch (s.type) {
+    case "module":
+      return s.path;
+    case "edge":
+      return `${s.from} → ${s.to}`;
+    case "ring":
+      return s.members.join(" → ");
+  }
 }

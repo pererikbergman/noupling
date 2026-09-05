@@ -282,18 +282,21 @@ function Stats({
           <ScoreButton score={data.health_score} onClick={onScoreClick} />
         </span>
       </StatRow>
-      <StatRow label="Violations">
-        <strong data-bind="summary_counts.violations">{data.summary_counts.violations}</strong>
+      <StatRow label="Issues">
+        <strong data-bind="summary_counts.issues">{data.summary_counts.issues}</strong>
+        {data.summary_counts.baselined_issues > 0 && (
+          <span className="ml-1 text-[10px] text-muted">
+            ({data.summary_counts.new_issues} new · {data.summary_counts.baselined_issues} baselined)
+          </span>
+        )}
       </StatRow>
-      <StatRow label="Cycles">
-        <strong data-bind="summary_counts.cycles">{data.summary_counts.cycles}</strong>
-      </StatRow>
-      <StatRow label="Gravity wells">
-        <strong data-bind="summary_counts.gravity_wells">{data.summary_counts.gravity_wells}</strong>
-      </StatRow>
-      <StatRow label="Red flags">
-        <strong>{data.summary_counts.red_flags}</strong>
-      </StatRow>
+      {data.summary_counts.by_kind
+        .filter((k) => k.count > 0)
+        .map((k) => (
+          <StatRow key={k.kind} label={k.kind_name}>
+            <strong data-bind={`summary_counts.by_kind.${k.kind}`}>{k.count}</strong>
+          </StatRow>
+        ))}
       <StatRow label="Modules">
         <strong data-bind="codebase.module_count">{data.codebase.module_count}</strong>
       </StatRow>

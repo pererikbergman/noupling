@@ -113,10 +113,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("mermaid", EDGE_SHAPED_KINDS),
     ("dot", EDGE_SHAPED_KINDS),
     ("strategy", ALL_KINDS),
-    (
-        "explorer",
-        &["coupling_violation", "cycle", "gravity_well", "red_flag"],
-    ),
+    ("explorer", ALL_KINDS),
 ];
 
 // ── Harness ──────────────────────────────────────────────────────────────
@@ -335,5 +332,54 @@ fn every_format_matches_the_expected_issue_kind_coverage() {
         "Issue-kind coverage drifted from EXPECTED:\n{}\n\nactual matrix:\n{}",
         mismatches.join("\n"),
         format_matrix(&actual)
+    );
+}
+
+/// The Explorer's Issues are the same cards as every other format: the
+/// Red Flag's band, reason and recommendation in the embedded contract
+/// appear verbatim in the text report (#345).
+#[test]
+fn explorer_and_text_report_share_issue_wording() {
+    let tmp = prepare_fixture();
+    let root = tmp.path().to_str().unwrap();
+    run_noupling(&["scan", root]);
+    let text = run_noupling(&["audit", root]);
+    run_noupling(&["report", "--format", "explorer", root]);
+    let html = read_artifact(&tmp.path().join(".noupling").join("explorer.html"));
+    let contract: serde_json::Value = serde_json::from_str(&explorer_contract(&html)).unwrap();
+
+    let issues = contract["issues"].as_array().expect("issues array");
+    assert_eq!(contract["format_version"], 2);
+    let red_flag = issues
+        .iter()
+        .find(|i| i["kind"] == "red_flag")
+        .expect("fixture has a Red Flag");
+    let band = red_flag["severity"].as_str().unwrap().to_uppercase();
+    let reason = red_flag["reason"].as_str().unwrap();
+    let recommendation = red_flag["recommendation"].as_str().unwrap();
+    assert!(
+        text.contains(&format!("[{band}] Red Flag:")),
+        "band differs:\n{text}"
+    );
+    assert!(
+        text.contains(reason),
+        "reason differs:\n{reason}\n---\n{text}"
+    );
+    assert!(
+        text.contains(recommendation),
+        "recommendation differs:\n{text}"
+    );
+
+    // Score-breakdown rows sum to the points lost, using score impact.
+    let b = &contract["score_breakdown"];
+    let sum: f64 = b["by_kind"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["points"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (sum - b["points_lost"].as_f64().unwrap()).abs() < 1e-6,
+        "{b}"
     );
 }
