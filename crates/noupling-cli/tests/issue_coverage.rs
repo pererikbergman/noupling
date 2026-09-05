@@ -188,6 +188,25 @@ fn every_format_obeys_its_format_class_rule() {
     for kept in ["hotspots", "abstractness", "instability", "directory_tree"] {
         assert!(json.get(kept).is_some(), "Metric array `{kept}` stays");
     }
+    // Header counts agree with the cards (#358, #380): a ring hop is part
+    // of its Cycle, never a second critical violation, and "critical" means
+    // the card's band. (The fixture's critical cards are critical by raw
+    // severity too, so this guards the definition, not the hop folding —
+    // the unit test in reporter/mod.rs does that.)
+    let critical_cards = json["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| {
+            matches!(i["kind"].as_str(), Some("coupling_violation" | "cycle"))
+                && i["severity"] == "critical"
+        })
+        .count();
+    assert_eq!(
+        json["critical_violations"].as_u64().unwrap() as usize,
+        critical_cards,
+        "critical_violations header must equal the critical Coupling Violation + Cycle cards"
+    );
 
     let xml = file("report.xml");
     assert_each_kind("xml", all, |k| {
