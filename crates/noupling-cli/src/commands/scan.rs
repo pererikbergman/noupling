@@ -108,7 +108,7 @@ pub fn run(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
             },
         )
     {
-        crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &outcome.result);
+        crate::audit_pipeline::record_snapshot_trends(&snap_repo, &outcome);
     }
 
     println!("Scan complete. Database: {}", db_path.display());

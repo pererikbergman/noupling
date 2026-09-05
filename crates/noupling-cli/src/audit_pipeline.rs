@@ -52,6 +52,11 @@ pub struct PipelineOutcome {
     pub result: AuditResult,
     /// New / baselined / resolved counts when `baseline` was requested.
     pub baseline: Option<BaselineComparison>,
+    /// True when this result describes only part of the snapshot: a diff
+    /// scan narrowed it to changed files, or a monorepo `--module` filter
+    /// applied. Partial results must not be recorded as the snapshot's
+    /// trend point.
+    pub partial: bool,
 }
 
 /// The seam. Owns the project path + db + settings for the duration
@@ -124,6 +129,7 @@ impl<'a> AuditPipeline<'a> {
 
         // (5) Diff filter — if the scan ran against a diff base, narrow
         // the result to the files that changed.
+        let diff_scoped = scan_meta.diff_changed_files.is_some();
         if let Some(ref changed_files) = scan_meta.diff_changed_files {
             result.filter_by_changed_files(changed_files);
         }
@@ -148,6 +154,7 @@ impl<'a> AuditPipeline<'a> {
             dependencies: filtered_deps,
             result,
             baseline,
+            partial: diff_scoped || options.module_filter.is_some(),
         })
     }
 }
@@ -155,11 +162,16 @@ impl<'a> AuditPipeline<'a> {
 /// Record what the strategy report and the Explorer's history scrubber
 /// read later: the health score and the per-kind Issue counts of this
 /// audit (#349). Best-effort — a failed write must not fail the command.
-pub fn record_snapshot_trends(
-    snap_repo: &SnapshotRepository<'_>,
-    snapshot_id: &str,
-    result: &AuditResult,
-) {
+///
+/// Only whole-snapshot results are recorded: a diff-scoped or
+/// module-filtered outcome (`PipelineOutcome::partial`) describes a
+/// subset and would be plotted as a spurious dip.
+pub fn record_snapshot_trends(snap_repo: &SnapshotRepository<'_>, outcome: &PipelineOutcome) {
+    if outcome.partial {
+        return;
+    }
+    let snapshot_id = outcome.snapshot.id.as_str();
+    let result = &outcome.result;
     let _ = snap_repo.save_health_score(snapshot_id, result.score);
     let issues = result.issues();
     let counts: std::collections::BTreeMap<String, usize> = noupling_core::analyzer::IssueKind::ALL
@@ -337,6 +349,50 @@ mod tests {
         // panicking. Behaviour of filter_by_changed_files itself is
         // covered by noupling-core's own tests.
         assert!(outcome.result.violations.is_empty());
+        assert!(outcome.partial, "a diff-scoped result is partial");
+    }
+
+    /// Partial outcomes (diff-scoped or module-filtered) never overwrite
+    /// the snapshot's recorded trend point; whole-snapshot ones do.
+    #[test]
+    fn record_snapshot_trends_skips_partial_outcomes() {
+        let f = small_project();
+        let settings = empty_settings();
+        let pipeline = AuditPipeline::new(Path::new("/tmp"), &f.db, &settings);
+        let snap_repo = SnapshotRepository::new(&f.db.conn);
+
+        let whole = pipeline.run(PipelineOptions::default()).expect("run");
+        assert!(!whole.partial);
+        record_snapshot_trends(&snap_repo, &whole);
+        let recorded = snap_repo.get_issue_kind_counts(&f.snapshot.id).unwrap();
+        assert!(recorded.is_some(), "whole-snapshot run is recorded");
+
+        // Now narrow the snapshot to a diff and run again: must not touch the record.
+        SnapshotRepository::new(&f.db.conn)
+            .save_meta(
+                &f.snapshot.id,
+                &SnapshotMeta {
+                    suppressed_count: 0,
+                    diff_base: Some("HEAD~1".into()),
+                    diff_changed_files: Some(vec!["src/nothing.rs".into()]),
+                    external_deps: vec![],
+                },
+            )
+            .unwrap();
+        let mut partial = pipeline.run(PipelineOptions::default()).expect("run");
+        assert!(partial.partial);
+        partial.result.score = 1.0; // would be a visible dip if recorded
+        record_snapshot_trends(&snap_repo, &partial);
+        let after = snap_repo.get_all_with_scores().unwrap();
+        assert!(
+            (after[0].health_score - whole.result.score).abs() < f64::EPSILON,
+            "partial run must not overwrite the score: {:?}",
+            after
+        );
+        assert_eq!(
+            snap_repo.get_issue_kind_counts(&f.snapshot.id).unwrap(),
+            recorded
+        );
     }
 
     #[test]

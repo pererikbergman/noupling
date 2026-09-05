@@ -61,6 +61,23 @@ impl IssueKind {
         }
     }
 
+    /// The accent colour every visual format uses for this kind, so the
+    /// dashboard tiles, strategy series, graph edges and bundle legend
+    /// agree. Exhaustive so a new kind must pick one.
+    pub fn accent_color(self) -> &'static str {
+        match self {
+            IssueKind::CouplingViolation => "#eab308",
+            IssueKind::Cycle => "#ef4444",
+            IssueKind::RuleViolation => "#dc2626",
+            IssueKind::LayerViolation => "#b91c1c",
+            IssueKind::GravityWell => "#8b5cf6",
+            IssueKind::RedFlag => "#db2777",
+            IssueKind::StabilityViolation => "#0ea5e9",
+            IssueKind::ZoneFlag => "#14b8a6",
+            IssueKind::LowCohesion => "#64748b",
+        }
+    }
+
     /// Stable machine identifier, e.g. `"coupling_violation"`.
     pub fn id(self) -> &'static str {
         match self {
@@ -536,10 +553,36 @@ impl Issue {
         }
     }
 
-    /// Stable identity for the baseline: `<kind id>:<subject>`. Two Issues
-    /// with the same fingerprint are the same Issue across audits.
+    /// Stable identity for the baseline: `<kind id>:<identity>`. Two Issues
+    /// with the same fingerprint are the same Issue across audits. The
+    /// identity is the subject, except for a Coupling Violation and a Red
+    /// Flag, whose subjects are one representative import of an aggregated
+    /// directory pair: there the identity is the pair (`dir_a -> dir_b`),
+    /// so adding or removing an import between the same directories does
+    /// not make the Issue look new.
     pub fn fingerprint(&self) -> String {
-        format!("{}:{}", self.kind().id(), self.subject())
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => {
+                format!("{}:{} -> {}", self.kind().id(), v.dir_a, v.dir_b)
+            }
+            IssueDetail::RedFlag(f) => format!(
+                "{}:{}:{} -> {}",
+                self.kind().id(),
+                match f.flag_type {
+                    RedFlagType::FusedSibling => "fused_sibling",
+                    RedFlagType::TrappedChild => "trapped_child",
+                },
+                f.dir_a,
+                f.dir_b
+            ),
+            IssueDetail::Cycle(_)
+            | IssueDetail::RuleViolation(_)
+            | IssueDetail::LayerViolation(_)
+            | IssueDetail::GravityWell(_)
+            | IssueDetail::StabilityViolation(_)
+            | IssueDetail::ZoneFlag(_)
+            | IssueDetail::LowCohesion(_) => format!("{}:{}", self.kind().id(), self.subject()),
+        }
     }
 
     /// Canonical order: band descending, then kind, then subject path.
@@ -670,6 +713,8 @@ impl Issue {
                     RedFlagType::TrappedChild => "trapped_child",
                 },
                 "modules": f.modules,
+                "dir_a": f.dir_a,
+                "dir_b": f.dir_b,
                 "rri": f.rri,
                 "imports": f.imports,
                 "median_density": f.median_density,
@@ -784,16 +829,18 @@ impl AuditResult {
 }
 
 /// The directory a file path lives in (`""` for a bare file name).
-fn parent_dir(path: &str) -> &str {
+pub fn parent_dir(path: &str) -> &str {
     match path.rfind('/') {
         Some(idx) => &path[..idx],
         None => "",
     }
 }
 
-/// The deepest directory that is each of `dirs` or an ancestor of it.
-/// `""` when they share no prefix.
-fn common_parent_dir(dirs: &[&str]) -> String {
+/// The deepest directory that is each of `dirs` or an ancestor of it,
+/// respecting path-segment boundaries (`src/ab` is not an ancestor of
+/// `src/abc`). `""` when they share no prefix. Directory-tree reports use
+/// it to file violations and Issues under the same directory.
+pub fn common_parent_dir(dirs: &[&str]) -> String {
     let Some(first) = dirs.first() else {
         return String::new();
     };

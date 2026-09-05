@@ -40,21 +40,6 @@ pub struct IssueKindSeries {
     pub counts: Vec<Option<usize>>,
 }
 
-/// Series colour per kind. Exhaustive so a new kind must pick one.
-fn kind_color(kind: IssueKind) -> &'static str {
-    match kind {
-        IssueKind::CouplingViolation => "#eab308",
-        IssueKind::Cycle => "#ef4444",
-        IssueKind::RuleViolation => "#dc2626",
-        IssueKind::LayerViolation => "#b91c1c",
-        IssueKind::GravityWell => "#8b5cf6",
-        IssueKind::RedFlag => "#db2777",
-        IssueKind::StabilityViolation => "#0ea5e9",
-        IssueKind::ZoneFlag => "#14b8a6",
-        IssueKind::LowCohesion => "#64748b",
-    }
-}
-
 #[derive(Serialize)]
 pub struct SnapshotPoint {
     pub id: String,
@@ -192,7 +177,7 @@ pub fn generate_strategy_report(
         .map(|k| IssueKindMeta {
             kind: k.id(),
             kind_name: k.name(),
-            color: kind_color(*k),
+            color: k.accent_color(),
         })
         .collect();
     let issue_kind_series: Vec<IssueKindSeries> = IssueKind::ALL
@@ -202,7 +187,9 @@ pub fn generate_strategy_report(
             kind_name: k.name(),
             counts: recorded
                 .iter()
-                .map(|r| r.as_ref().map(|m| m.get(k.id()).copied().unwrap_or(0)))
+                // A recorded snapshot that lacks this kind (a kind added
+                // after it was audited) is a gap for that kind, not a zero.
+                .map(|r| r.as_ref().and_then(|m| m.get(k.id()).copied()))
                 .collect(),
         })
         .collect();

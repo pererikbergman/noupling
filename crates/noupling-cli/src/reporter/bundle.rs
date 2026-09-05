@@ -66,8 +66,34 @@ pub fn generate_bundle_report(
     let data = build_data(modules, dependencies, result);
     let json = serde_json::to_string(&data)?;
 
+    // One palette for every visual format: IssueKind::accent_color.
+    let palette_css: String = super::graph::EDGE_KINDS
+        .iter()
+        .map(|k| format!(".edge-kind-{} {{ stroke: {}; }}", k.id(), k.accent_color()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let kind_legend: String = super::graph::EDGE_KINDS
+        .iter()
+        .map(|k| {
+            let note = match k {
+                noupling_core::analyzer::IssueKind::LayerViolation => " (dashed)",
+                noupling_core::analyzer::IssueKind::StabilityViolation => " (dotted)",
+                noupling_core::analyzer::IssueKind::Cycle => " (weakest hop bright: break this)",
+                _ => "",
+            };
+            format!(
+                "<span><span class=\"legend-dot\" style=\"background:{}\"></span> {}{}</span>",
+                k.accent_color(),
+                k.name(),
+                note
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n    ");
     let html = format!(
         include_str!("bundle_template.html"),
+        palette_css = palette_css,
+        kind_legend = kind_legend,
         json = json,
         version = super::VERSION,
         module_count = modules.len(),

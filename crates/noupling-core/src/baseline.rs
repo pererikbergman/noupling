@@ -216,7 +216,62 @@ mod tests {
             new.iter().map(|i| i.fingerprint()).collect::<Vec<_>>()
         );
         assert_eq!(new[0].kind(), IssueKind::CouplingViolation);
-        assert!(new[0].fingerprint().contains("src/plugins/exporter.rs"));
+        assert_eq!(
+            new[0].fingerprint(),
+            "coupling_violation:src/plugins -> src/bag"
+        );
+    }
+
+    /// A Coupling Violation is the directory pair, not whichever import
+    /// happens to represent it: dropping the representative import must not
+    /// make the pair look new (and its old fingerprint resolved).
+    #[test]
+    fn removing_the_representative_import_keeps_the_coupling_violation_baselined() {
+        let dir = project_dir();
+        // fused/left → fused/right has several imports; the representative
+        // is the lexicographically smallest (l1.rs → r1.rs).
+        save_baseline(dir.path(), &fixture_audit(|_| vec![])).unwrap();
+
+        let mut current = {
+            let root = fixture_root();
+            let settings = Settings::load(&root).unwrap();
+            let scan =
+                crate::scanner::scan_project(&root, "snap", settings.allow_inline_suppression)
+                    .unwrap();
+            let id = |path: &str| {
+                scan.modules
+                    .iter()
+                    .find(|m| m.path == path)
+                    .unwrap()
+                    .id
+                    .clone()
+            };
+            let (l1, r1) = (id("src/fused/left/l1.rs"), id("src/fused/right/r1.rs"));
+            let deps: Vec<Dependency> = scan
+                .dependencies
+                .iter()
+                .filter(|d| !(d.from_module_id == l1 && d.to_module_id == r1))
+                .cloned()
+                .collect();
+            let type_counts = crate::scanner::recompute_type_counts(&root, &scan.modules);
+            audit_with_settings(&scan.modules, &deps, &type_counts, &settings)
+        };
+        let cmp = current.apply_baseline(&load_baseline(dir.path()).unwrap());
+
+        let coupling_new: Vec<String> = current
+            .issues()
+            .iter()
+            .filter(|i| i.kind() == IssueKind::CouplingViolation && !i.baselined)
+            .map(|i| i.fingerprint())
+            .collect();
+        assert!(
+            coupling_new.is_empty(),
+            "pair must stay baselined: {coupling_new:?}"
+        );
+        assert_eq!(
+            cmp.new_count, 0,
+            "the Red Flag on the same pair stays too: {cmp:?}"
+        );
     }
 
     #[test]
