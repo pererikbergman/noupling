@@ -636,6 +636,51 @@ mod tests {
         );
     }
 
+    /// Nested detail payloads (a Cycle's hops) survive into XML as child
+    /// elements, so the removed `<circular-dependencies>` loses nothing.
+    #[test]
+    fn xml_detail_carries_nested_payloads_as_child_elements() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
+        let cycle = CouplingViolation {
+            dir_a: "src/p".into(),
+            dir_b: "src/q".into(),
+            from_module: "src/p".into(),
+            to_module: "src/q".into(),
+            line_number: 0,
+            depth: 1,
+            weight: 0,
+            severity: 0.6,
+            direction: DependencyDirection::Circular,
+            rri: 20.0,
+            is_circular: true,
+            cycle_path: vec!["src/p".into(), "src/q".into(), "src/p".into()],
+            cycle_hop_files: vec![
+                ("src/p/a.rs".into(), "src/q/b.rs".into(), 3),
+                ("src/q/b.rs".into(), "src/p/a.rs".into(), 9),
+            ],
+            cycle_order: 2,
+            cycle_hop_counts: vec![1, 3],
+            weakest_link: Some("src/p -> src/q (1 import)".into()),
+            break_cost: 1,
+            score_impact: 0.0,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_violations(vec![cycle])
+            .build();
+        let xml = format_xml(&[], &result, "snap-x");
+        assert!(xml.contains("<detail break_cost=\"1\""), "{xml}");
+        assert!(
+            xml.contains(
+                "<item from_file=\"src/p/a.rs\" line_number=\"3\" to_file=\"src/q/b.rs\"/>"
+            ),
+            "hop files as child items: {xml}"
+        );
+        assert!(xml.contains("<hop_import_counts>"), "{xml}");
+        assert!(xml.contains("<item>3</item>"), "{xml}");
+        assert!(xml.contains("</detail>"), "{xml}");
+    }
+
     /// Sonar emits one generic issue per Issue, for every kind, with the
     /// band mapped to a Sonar severity.
     #[test]

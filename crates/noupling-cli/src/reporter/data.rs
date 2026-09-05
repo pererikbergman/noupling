@@ -75,6 +75,10 @@ pub struct JsonInstability {
 pub struct JsonDirectory {
     pub path: String,
     pub name: String,
+    /// `"Container"` (only subdirectories) or `"Package"` (has direct files),
+    /// per `docs/dependency-graph.md`. Carried here since 0.9.0, when the
+    /// `cohesion` array that used to expose it was replaced by `issues`.
+    pub kind: &'static str,
     pub module_count: usize,
     pub score: f64,
     pub has_violations: bool,
@@ -177,6 +181,7 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
                 JsonDirectory {
                     path: dir_str.clone(),
                     name,
+                    kind: "Container",
                     module_count: 0,
                     score: 100.0,
                     has_violations: false,
@@ -199,6 +204,8 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
         if let Some(dir) = dirs.get_mut(&parent) {
             dir.files.push(module.name.clone());
             dir.module_count += 1;
+            // A directory with at least one direct file is a Package.
+            dir.kind = "Package";
         }
     }
 

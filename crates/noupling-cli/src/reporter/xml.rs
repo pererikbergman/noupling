@@ -57,23 +57,10 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
             xml_escape(&card.reason),
             xml_escape(&card.recommendation),
         ));
-        // Scalar detail fields become attributes; nested ones (cycle hops)
-        // are the JSON report's job.
-        let mut attrs = String::new();
-        if let Some(obj) = card.detail.as_object() {
-            for (k, v) in obj {
-                let text = match v {
-                    serde_json::Value::String(t) => t.clone(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::Bool(b) => b.to_string(),
-                    serde_json::Value::Null
-                    | serde_json::Value::Array(_)
-                    | serde_json::Value::Object(_) => continue,
-                };
-                attrs.push_str(&format!(" {}=\"{}\"", xml_escape(k), xml_escape(&text)));
-            }
-        }
-        xml.push_str(&format!("      <detail{}/>\n", attrs));
+        // Scalar detail fields become attributes of <detail/>; nested ones
+        // (a Cycle's hops and hop counts, a Red Flag's modules) become child
+        // elements so XML consumers lose nothing the JSON card carries.
+        xml.push_str(&detail_element(&card.detail, "      "));
         xml.push_str("    </issue>\n");
     }
     xml.push_str("  </issues>\n");
@@ -98,6 +85,63 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
 
     xml.push_str("</noupling-report>\n");
     xml
+}
+
+/// `<detail a="1" b="x">` with one child element per nested value:
+/// arrays of objects → `<name><item k="v" …/></name>`, arrays of scalars →
+/// `<name><item>v</item></name>`, objects → `<name k="v" …/>`.
+fn detail_element(detail: &serde_json::Value, indent: &str) -> String {
+    use serde_json::Value;
+    let scalar = |v: &Value| -> Option<String> {
+        match v {
+            Value::String(t) => Some(t.clone()),
+            Value::Number(n) => Some(n.to_string()),
+            Value::Bool(b) => Some(b.to_string()),
+            Value::Null | Value::Array(_) | Value::Object(_) => None,
+        }
+    };
+    let attrs_of = |obj: &serde_json::Map<String, Value>| -> String {
+        obj.iter()
+            .filter_map(|(k, v)| {
+                scalar(v).map(|t| format!(" {}=\"{}\"", xml_escape(k), xml_escape(&t)))
+            })
+            .collect()
+    };
+    let Some(obj) = detail.as_object() else {
+        return format!("{indent}<detail/>\n");
+    };
+    let nested: Vec<(&String, &Value)> = obj
+        .iter()
+        .filter(|(_, v)| matches!(v, Value::Array(_) | Value::Object(_)))
+        .collect();
+    if nested.is_empty() {
+        return format!("{indent}<detail{}/>\n", attrs_of(obj));
+    }
+    let mut out = format!("{indent}<detail{}>\n", attrs_of(obj));
+    for (name, value) in nested {
+        let name = xml_escape(name);
+        match value {
+            Value::Object(o) => out.push_str(&format!("{indent}  <{name}{}/>\n", attrs_of(o))),
+            Value::Array(items) => {
+                out.push_str(&format!("{indent}  <{name}>\n"));
+                for item in items {
+                    match item {
+                        Value::Object(o) => {
+                            out.push_str(&format!("{indent}    <item{}/>\n", attrs_of(o)))
+                        }
+                        other => out.push_str(&format!(
+                            "{indent}    <item>{}</item>\n",
+                            xml_escape(&scalar(other).unwrap_or_default())
+                        )),
+                    }
+                }
+                out.push_str(&format!("{indent}  </{name}>\n"));
+            }
+            _ => {}
+        }
+    }
+    out.push_str(&format!("{indent}</detail>\n"));
+    out
 }
 
 fn xml_escape(s: &str) -> String {
