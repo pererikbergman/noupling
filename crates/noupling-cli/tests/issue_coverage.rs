@@ -189,7 +189,10 @@ fn every_format_obeys_its_format_class_rule() {
         assert!(json.get(kept).is_some(), "Metric array `{kept}` stays");
     }
     // Header counts agree with the cards (#358, #380): a ring hop is part
-    // of its Cycle, never a second critical violation.
+    // of its Cycle, never a second critical violation, and "critical" means
+    // the card's band. (The fixture's critical cards are critical by raw
+    // severity too, so this guards the definition, not the hop folding —
+    // the unit test in reporter/mod.rs does that.)
     let critical_cards = json["issues"]
         .as_array()
         .unwrap()

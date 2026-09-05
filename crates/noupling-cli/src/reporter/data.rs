@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use noupling_core::analyzer::{common_parent_dir, AuditResult, IssueCard};
+use noupling_core::analyzer::{common_parent_dir, AuditResult, IssueCard, IssueKind, SeverityBand};
 use noupling_core::core::Module;
 use serde::Serialize;
 
@@ -96,12 +96,17 @@ pub struct JsonDirectory {
 impl JsonReport {
     pub fn from_audit(modules: &[Module], result: &AuditResult, snapshot_id: &str) -> Self {
         // Header counts agree with `issues`: ring hops belong to their Cycle
-        // (#358), so they are not counted as violations of their own — critical
-        // or otherwise (#380).
+        // (#358), so they are not counted as violations of their own, and
+        // "critical" is the card's band — assigned once by the audit — not a
+        // second reading of the raw severity (#380, #379).
         let issue_violations = result.issue_violations();
-        let critical_violations = issue_violations
+        let critical_violations = result
+            .issues()
             .iter()
-            .filter(|v| v.severity >= result.critical_severity)
+            .filter(|i| {
+                matches!(i.kind(), IssueKind::CouplingViolation | IssueKind::Cycle)
+                    && i.severity() == SeverityBand::Critical
+            })
             .count();
         let total_circular = issue_violations.iter().filter(|v| v.is_circular).count();
         let total_coupling = issue_violations.len() - total_circular;
