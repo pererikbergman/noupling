@@ -1009,12 +1009,18 @@ mod tests {
         generate_html_report(&before, &result, "s1", out.path(), &settings).unwrap();
         assert!(out.path().join("old/index.html").exists());
         std::fs::write(out.path().join("notes.txt"), "mine").unwrap();
+        std::fs::create_dir_all(out.path().join("assets")).unwrap();
+        std::fs::write(out.path().join("assets/logo.svg"), "<svg/>").unwrap();
 
         let after = vec![
             make_module("a", "src/new/a.rs"),
             make_module("b", "src/keep/b.rs"),
         ];
         generate_html_report(&after, &result, "s2", out.path(), &settings).unwrap();
+        assert!(
+            out.path().join("assets/logo.svg").exists(),
+            "a directory without a generated page is not noupling's to delete"
+        );
         assert!(
             !out.path().join("old").exists(),
             "stale page must be removed"

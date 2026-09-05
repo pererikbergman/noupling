@@ -36,12 +36,18 @@ pub use data::{JsonDirectory, JsonReport};
 pub use graph::{format_dot, format_mermaid};
 pub use html::generate_html_report;
 pub use md::generate_markdown_report;
+pub use pr::format_pr;
+pub use sonar::format_sonar;
+pub use strategy::generate_strategy_report;
+pub use text::{format_monorepo_text, format_text};
+pub use xml::format_xml;
 
 /// Remove the pages a previous multi-file report left in `output_dir`:
-/// every subdirectory (the per-directory pages mirror the source tree, so
-/// a renamed or deleted source directory would otherwise keep serving its
-/// old page) plus the root page file. Anything else at the top level was
-/// not written by noupling and is left alone (#383).
+/// every subdirectory that holds a generated `root_page` (the per-directory
+/// pages mirror the source tree, so a renamed or deleted source directory
+/// would otherwise keep serving its old page) plus the root page itself.
+/// Anything else — a file, or a directory without a generated page in it —
+/// was not written by noupling and is left alone (#383).
 pub(crate) fn clear_generated_pages(
     output_dir: &std::path::Path,
     root_page: &str,
@@ -53,18 +59,15 @@ pub(crate) fn clear_generated_pages(
         let entry = entry?;
         let path = entry.path();
         if entry.file_type()?.is_dir() {
-            std::fs::remove_dir_all(&path)?;
+            if path.join(root_page).is_file() {
+                std::fs::remove_dir_all(&path)?;
+            }
         } else if entry.file_name() == root_page {
             std::fs::remove_file(&path)?;
         }
     }
     Ok(())
 }
-pub use pr::format_pr;
-pub use sonar::format_sonar;
-pub use strategy::generate_strategy_report;
-pub use text::{format_monorepo_text, format_text};
-pub use xml::format_xml;
 
 #[cfg(test)]
 mod tests {
