@@ -70,7 +70,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           Coming later
         </h3>
         <p className="m-0 text-[12px] leading-relaxed text-muted">
-          The Matrix / Force / Composition views, path finder (↣), min-cut (⌀),
+          The Matrix / Composition views, path finder (↣), min-cut (⌀),
           Inside / + External scope toggle, hide-by-kind chips, and the
           refactor PLAN sandbox are placeholders for the v2 / v3 milestones in
           PRD §9 + §10. They render with a dashed border and dimmed styling so

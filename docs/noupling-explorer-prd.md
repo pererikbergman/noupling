@@ -183,7 +183,7 @@ Vertex/edge semantics, node kinds (`file` / `package` / `container`), and the me
 
 ```json
 {
-  "format_version": 2,
+  "format_version": 3,
   "noupling_version": "0.9.0",
   "generated_at": "2026-06-03T14:00:00Z",
   "codebase": {
@@ -361,7 +361,7 @@ The Explorer is delivered in three milestones. Each is shippable independently �
 |---|---|---|---|
 | **v1** | **The Interactive Readme** | Open the Explorer, understand the codebase at a glance, drill down, jump to source. | View-only. ~2–3 weeks. |
 | **v2** | **The Sandbox** | Drag a module elsewhere, see metrics recompute live, export an action plan. | Adds WASM + interaction. ~2–4 weeks on top of v1. |
-| **v3** | **Advanced Views** | Dependency Matrix, force-directed graph, cycle composition browser, history scrubber. | Adds views. ~2–3 weeks on top of v2. |
+| **v3** | **Advanced Views** | Dependency Matrix, cycle composition browser, history scrubber (the force-directed graph was built and then dropped, see §10.3). | Adds views. ~2–3 weeks on top of v2. |
 
 Each section below details the features within a milestone with acceptance criteria.
 
@@ -395,7 +395,7 @@ The top of the page shows a concise summary of the scanned codebase.
 The headline view. Modules arranged vertically by topological dependency depth: leaves at the bottom, entry points at the top. Read-only in v1.
 
 - **F2.1** Topological sort: modules with no incoming dependencies sit at level 0 (top); modules they depend on flow down through levels.
-- **F2.2** Node sizing. Container and aggregate nodes (Layers, Packages, Containers) are sized by **file count** — size encodes "this contains stuff." Leaf nodes (files, `kind: "file"`) are **uniform size** across all views; once the viewer is at the bottom of the tree, size carries no meaning. Rule applies to every view (LSM in v1; matrix and force-directed in v3). See §13.2 for the decision history.
+- **F2.2** Node sizing. Container and aggregate nodes (Layers, Packages, Containers) are sized by **file count** — size encodes "this contains stuff." Leaf nodes (files, `kind: "file"`) are **uniform size** across all views; once the viewer is at the bottom of the tree, size carries no meaning. Rule applies to every view (LSM in v1; Matrix and Composition in v3). See §13.2 for the decision history.
 - **F2.3** Edges drawn between nodes; weight visualized by line thickness.
 - **F2.4** Cyclic edges (those creating cycles) are colored distinctly (red) and use a different arrowhead.
 - **F2.5** Rule violations are highlighted (e.g., red dashed edges).
@@ -415,7 +415,7 @@ The headline view. Modules arranged vertically by topological dependency depth: 
 The LSM is recursive. A node representing `src/services/` can be expanded to show its sub-modules; those can be expanded further down to individual files. Breadcrumbs at the top show the current scope.
 
 - **F3.1** Double-click drills down; a "back" button or breadcrumb segment returns up.
-- **F3.2** Drill state survives view switches (matrix, force-directed in v3) within the same session.
+- **F3.2** Drill state survives view switches (Matrix, Composition in v3) within the same session.
 - **F3.3** When drilled into a sub-tree, all metrics in the side panel scope to that sub-tree (count only files inside, edges only within).
 - **F3.4** Breadcrumb supports clicking any segment to jump back to that level.
 
@@ -528,7 +528,7 @@ Open/closed nodes, drill state, focus state, filter settings, and panel layout p
 ### 8.12 v1 — Out of scope explicitly
 
 - Dependency Matrix view (deferred to v3)
-- Force-directed cluster view (deferred to v3)
+- Force-directed cluster view (deferred to v3; later dropped, see §10.3)
 - In-memory refactoring with metric recompute (v2)
 - Action plan export (v2)
 - Snapshot diff / history scrubber (v3)
@@ -658,19 +658,15 @@ A view-switch button at the top toggles between LSM and Matrix.
 - Renders at 200+ nodes (matrix becomes information-dense but still readable).
 - Performance is acceptable at this scale (initial render < 500ms; cell hover < 16ms).
 
-### 10.3 Feature: Force-Directed Cluster View
+### 10.3 Feature: Force-Directed Cluster View — DROPPED
 
-Another view-switch option, complementing LSM and Matrix.
+**Dropped in #396** (shipped in 0.8.x, removed for 0.9.2): it showed nothing the LSM, Matrix, or Composition views do not already show, its layout changed on every render, and it carried no Issue or Metric a user could act on. The label-propagation clustering that fed it (`clusters` in the Data Contract) went with it; the contract is `format_version` 3.
 
-- **F18.1** Nodes arranged organically by force simulation; tightly coupled nodes cluster together
-- **F18.2** Cluster boundaries auto-detected (Louvain or similar clustering on top of the force layout)
-- **F18.3** Layer color overlay applies the same way as on the LSM
-- **F18.4** Zoom and pan
-- **F18.5** Click and drag behave the same as the LSM
-
-**Acceptance criteria:**
-- Renders smoothly at 300+ nodes.
-- Visualization makes coupling clusters visually obvious.
+- ~~**F18.1** Nodes arranged organically by force simulation; tightly coupled nodes cluster together~~
+- ~~**F18.2** Cluster boundaries auto-detected (Louvain or similar clustering on top of the force layout)~~
+- ~~**F18.3** Layer color overlay applies the same way as on the LSM~~
+- ~~**F18.4** Zoom and pan~~
+- ~~**F18.5** Click and drag behave the same as the LSM~~
 
 ### 10.4 Feature: Cycle Browser
 
@@ -725,7 +721,7 @@ Noupling already detects Gravity Wells (high inbound coupling) and Red Flags (Fu
 
 ### 10.8 Feature: Composition view
 
-A top-level canvas view (alongside LSM, Matrix, Force) that answers "**what *kind* of thing is each module?**" — distinct from LSM (architecture/layering) and Force (coupling/clustering) by focusing on *identity*, not relationships.
+A top-level canvas view (alongside LSM and Matrix) that answers "**what *kind* of thing is each module?**" — distinct from LSM (architecture/layering) by focusing on *identity*, not relationships.
 
 - **F23.1** Renders containers at the current scope as nested grouped rectangles (treemap-style), reusing the LSM card visual vocabulary.
 - **F23.2** Each card carries a layer tag, file count, and dominant language.

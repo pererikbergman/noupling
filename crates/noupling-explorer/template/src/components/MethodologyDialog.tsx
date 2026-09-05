@@ -150,9 +150,9 @@ function Overview() {
         mental model of the project's architecture before you touch a file.
       </P>
       <P>
-        Healthy modules are as visible as broken ones. Clean Layers, zero-
-        violation packages, and tight clusters get the same canvas real estate
-        as cycles and red flags. This is on purpose: the Explorer is meant to
+        Healthy modules are as visible as broken ones. Clean Layers and zero-
+        violation packages get the same canvas real estate as cycles and red
+        flags. This is on purpose: the Explorer is meant to
         teach the codebase, not just triage it.
       </P>
 
@@ -220,20 +220,6 @@ function Views() {
         depends on this module" → likely a god-object or genuine platform
         package), populated cells <em>below</em> the diagonal in a layered
         repo (cross-layer leaks), red blocks.
-      </P>
-
-      <H3>Force</H3>
-      <P>
-        Force-directed layout where tightly coupled nodes pull together. The
-        cluster boundaries are pre-computed in Rust via label propagation —
-        they show which modules tend to co-import even if your folder
-        structure doesn't group them.
-      </P>
-      <P>
-        <Strong>What to look for:</Strong> Clusters that span layer
-        boundaries (your folder structure is hiding the real architecture),
-        single nodes pulled toward many clusters (genuine cross-cutters), and
-        clusters that match a single Layer (healthy locality).
       </P>
 
       <H3>Composition</H3>

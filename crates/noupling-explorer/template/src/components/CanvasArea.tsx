@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
 import { Matrix } from "../lsm/Matrix";
-import { ForceView } from "../lsm/ForceView";
 import { CompositionView } from "../lsm/CompositionView";
 import { Breadcrumb } from "./Breadcrumb";
 import {
@@ -273,16 +272,6 @@ export function CanvasArea({
             onNodeDoubleClick={onNodeDoubleClick}
             highlight={highlight}
             onEdgeClick={onEdgeClick}
-          />
-        </div>
-      )}
-      {viewMode === "force" && (
-        <div className={`h-full w-full px-4 pb-16 ${canvasTop}`}>
-          <ForceView
-            nodes={lsmData.nodes}
-            edges={lsmData.edges}
-            clusters={data.clusters}
-            onNodeClick={onNodeClick}
           />
         </div>
       )}

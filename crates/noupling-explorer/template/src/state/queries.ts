@@ -11,9 +11,8 @@ import type {
 /**
  * The only module that touches raw `data.*` arrays. Tabs and details
  * panels call named queries here instead of re-deriving the same
- * predicates inline; when the Data Contract shape changes (#319 added
- * `clusters`, future v3 will widen `history`), only this module
- * follows.
+ * predicates inline; when the Data Contract shape changes (v3 dropped
+ * `clusters` in #396), only this module follows.
  *
  * Issue #320.
  */

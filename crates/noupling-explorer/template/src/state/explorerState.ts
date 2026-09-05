@@ -13,7 +13,7 @@ import type { DataContract, NodeEntry } from "../types";
 
 export type SearchMode = "substring" | "regex";
 
-export type ViewMode = "lsm" | "matrix" | "force" | "composition";
+export type ViewMode = "lsm" | "matrix" | "composition";
 
 export interface EdgeSelection {
   from: string;
@@ -134,7 +134,7 @@ const FIELDS: { [K in keyof ExplorerStateValues]: FieldSpec<K> } = {
     persist: {
       kind: "enum",
       suffix: "::viewMode",
-      allowed: ["lsm", "matrix", "force", "composition"],
+      allowed: ["lsm", "matrix", "composition"],
     },
   },
   pathFinder: { default: { mode: "idle" }, persist: { kind: "transient" } },
