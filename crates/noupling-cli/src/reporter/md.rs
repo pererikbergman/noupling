@@ -117,7 +117,14 @@ fn render_dir_page(
     }
 
     // Summary
-    let violations = dir.violations_count;
+    // The root page lists every Issue, including the ones whose anchor has
+    // no directory in the tree (two top-level directories with no common
+    // parent), so it prints the project total rather than the root node's.
+    let violations = if is_root {
+        report.total_coupling + report.total_circular
+    } else {
+        dir.violations_count
+    };
     md.push_str("## Summary\n\n");
     md.push_str("| Metric | Value |\n");
     md.push_str("| :--- | :--- |\n");

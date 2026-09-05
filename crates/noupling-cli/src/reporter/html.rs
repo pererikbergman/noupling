@@ -202,8 +202,7 @@ fn build_report_data(
         // For coupling violations, find the parent where dir_a and dir_b are siblings
         // Same anchor rule as the Issue cards on the page (Issue::anchor_dir),
         // so a violation is filed under the directory whose page lists its
-        // Issue. Counts still come from raw violations (a ring's hop edges
-        // count separately; issues() folds them into one Cycle, see #358).
+        // Issue, and one ring is one violation here as it is one Cycle there.
         let parent = if violation.is_circular && !violation.cycle_path.is_empty() {
             let members: Vec<&str> = violation.cycle_path.iter().map(String::as_str).collect();
             common_parent_dir(&members)

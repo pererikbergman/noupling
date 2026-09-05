@@ -81,10 +81,15 @@ pub struct JsonDirectory {
     pub kind: &'static str,
     pub module_count: usize,
     pub score: f64,
+    /// A violation is anchored here or anywhere below (rolled up).
     pub has_violations: bool,
     pub children: Vec<String>,
     pub files: Vec<String>,
+    /// Coupling Violations and Cycles anchored at this directory **or any
+    /// descendant** (since 0.9.1, #381; before that, this directory only).
+    /// `score` stays local to the directory's own violations.
     pub violations_count: usize,
+    /// The Cycles among `violations_count`, rolled up the same way.
     pub circular_count: usize,
 }
 
