@@ -187,7 +187,8 @@ export interface CutEdge {
 export interface ViolationEntry {
   rule: { from: string; to: string };
   edge: { from: string; to: string };
-  severity: "low" | "medium" | "high";
+  /** The band of the Issue this record belongs to (its Cycle's, for a ring hop). */
+  severity: SeverityBand;
   introduced_in: string | null;
 }
 

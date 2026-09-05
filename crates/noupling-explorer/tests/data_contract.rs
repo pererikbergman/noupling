@@ -293,7 +293,9 @@ fn violations_emit_from_audit_with_severity_and_edge_info() {
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0]["edge"]["from"], "src/ui/x");
     assert_eq!(violations[0]["edge"]["to"], "src/infra/y");
-    assert_eq!(violations[0]["severity"], "high"); // > 0.5 → high per PRD example
+    // The row carries the band of its Issue card: 0.75 ≥ critical_severity
+    // (0.5) is critical, the same word the Issues tab shows (#379).
+    assert_eq!(violations[0]["severity"], "critical");
 }
 
 #[test]

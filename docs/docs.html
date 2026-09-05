@@ -222,7 +222,7 @@ noupling hook uninstall [PATH]</code></pre>
     "min_cohesion": 0.1
   }
 }</code></pre>
-      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> is the step to the <em>critical</em> severity band for Coupling Violations and Cycles (the <em>high</em> and <em>medium</em> steps scale with it at 0.4× and 0.2×), and the cutoff for the <code>critical_violations</code> header count. Severity is mostly a depth measure, so the band is also floored by the Issue's score impact: an Issue costing 10 or more points is critical, 5 or more at least high, 1 or more at least medium, whatever its severity. On a small project a single shallow Cycle can take 40 points; it reads as critical, not low.</p>
+      <p><code>minimum_severity</code> hides low-severity violations to reduce noise. <code>critical_severity</code> is the step to the <em>critical</em> severity band for Coupling Violations and Cycles (the <em>high</em> and <em>medium</em> steps scale with it at 0.4× and 0.2×), and the <code>critical_violations</code> header counts the Coupling Violations and Cycles whose band is critical. Severity is mostly a depth measure, so the band is also floored by the Issue's score impact: an Issue costing 10 or more points is critical, 5 or more at least high, 1 or more at least medium, whatever its severity. On a small project a single shallow Cycle can take 40 points; it reads as critical, not low.</p>
 
 
       <h2 id="risk-weights">Risk Weights</h2>
