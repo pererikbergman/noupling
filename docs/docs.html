@@ -226,6 +226,13 @@ noupling hook uninstall [PATH]</code></pre>
       </div>
 
 
+      <h2 id="layer-inference">Layer Inference</h2>
+      <p>When <code>layers</code> is empty, the audit infers a layer set from well-known path segments (<code>ui</code>, <code>domain</code>, <code>data</code>, <code>infra</code>, …) and switches to <code>actionable</code> coupling mode so coarse sibling coupling inside an inferred layer doesn't dominate the score. Every command and every report format sees the same inferred layers (ADR 0001); the text report notes it with a <code>Layers: inferred…</code> line and the Explorer shows a banner with a ready-to-paste snippet.</p>
+<pre><code class="language-json">{
+  "infer_layers": false
+}</code></pre>
+      <p>Set <code>infer_layers</code> to <code>false</code> to audit an unlayered project as-is (strict mode, no Layer Violations). Declaring your own <code>layers</code> also disables inference; setting a top-level <code>coupling_mode</code> keeps your mode but still uses the inferred layers.</p>
+
       <h2 id="coupling-mode">Coupling Mode</h2>
       <p>The <code>coupling_mode</code> setting controls which dependencies are treated as violations:</p>
 <pre><code class="language-json">{

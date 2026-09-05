@@ -40,6 +40,15 @@ pub struct Settings {
     /// "actionable": only circular deps are violations, siblings are informational.
     #[serde(default)]
     pub coupling_mode: Option<String>,
+    /// Infer layers from path names when `layers` is empty (ADR 0001) and
+    /// switch to actionable coupling mode when that fires. Default: true.
+    /// Set to false to audit an unlayered project as-is, in strict mode.
+    #[serde(default = "default_infer_layers")]
+    pub infer_layers: bool,
+}
+
+fn default_infer_layers() -> bool {
+    true
 }
 
 fn default_allow_inline_suppression() -> bool {
@@ -271,6 +280,7 @@ impl Default for Settings {
             modules: Vec::new(),
             risk_weights: default_risk_weights(),
             coupling_mode: None,
+            infer_layers: default_infer_layers(),
         }
     }
 }

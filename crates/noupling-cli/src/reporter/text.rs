@@ -38,7 +38,7 @@ pub fn format_text(result: &AuditResult) -> String {
     if result.layers_auto_detected {
         let names: Vec<&str> = result.layers.iter().map(|l| l.name.as_str()).collect();
         output.push_str(&format!(
-            "Layers: inferred from path names ({}) — set `layers` in .noupling/settings.json to override\n",
+            "Layers: inferred from path names ({}) — set `layers` in .noupling/settings.json to take over, or `infer_layers: false` to turn inference off\n",
             names.join(", ")
         ));
     }

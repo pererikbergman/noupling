@@ -645,6 +645,40 @@ fn audit_with_settings_explicit_coupling_mode_wins_over_inference() {
 }
 
 #[test]
+fn infer_layers_false_disables_inference_and_keeps_strict_mode() {
+    let (modules, deps) = layered_by_path_project();
+    let settings: crate::settings::Settings =
+        serde_json::from_str(r#"{"infer_layers": false}"#).unwrap();
+
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+
+    assert!(
+        !result.layers_auto_detected,
+        "the switch turns inference off"
+    );
+    assert!(result.layers.is_empty());
+    assert!(
+        result.layer_violations.is_empty(),
+        "no layers → no Layer Violations"
+    );
+    assert!(
+        result.violations.iter().any(|v| !v.is_circular),
+        "without inferred layers the default coupling mode (strict) applies"
+    );
+}
+
+#[test]
+fn infer_layers_defaults_to_on() {
+    let settings = crate::settings::Settings::default();
+    assert!(settings.infer_layers, "inference is on unless switched off");
+    let json = serde_json::to_string(&settings).unwrap();
+    assert!(
+        json.contains("\"infer_layers\":true"),
+        "init writes the switch: {json}"
+    );
+}
+
+#[test]
 fn audit_with_settings_leaves_flag_unset_when_nothing_detectable() {
     let modules = vec![
         make_module("a", "src/alpha/mod.rs"),

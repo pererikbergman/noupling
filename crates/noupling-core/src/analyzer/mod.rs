@@ -551,7 +551,8 @@ pub fn audit(modules: &[Module], dependencies: &[Dependency]) -> AuditResult {
 /// Call order matters and is fixed here so callers can't get it wrong.
 ///
 /// **One audit per snapshot (ADR 0001).** When `settings.layers` is empty
-/// the layers are inferred from path names ([`detect_layers`]); if that
+/// and `settings.infer_layers` is true (the default) the layers are inferred
+/// from path names ([`detect_layers`]); if that
 /// produces anything, the audit switches to `actionable` coupling mode
 /// unless the settings name a `coupling_mode` explicitly. The result records
 /// the effective `layers` and `layers_auto_detected` so every format sees
@@ -616,6 +617,9 @@ fn resolve_layers(
 ) -> (Vec<crate::settings::Layer>, bool) {
     if !settings.layers.is_empty() {
         return (settings.layers.clone(), false);
+    }
+    if !settings.infer_layers {
+        return (Vec::new(), false);
     }
     let inferred = detect_layers(modules);
     let auto = !inferred.is_empty();

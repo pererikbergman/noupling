@@ -39,7 +39,8 @@ CONFIGURATION (.noupling/settings.json):
       \"**/build/**\",
       \"**/generated/**\"
     ],
-    \"source_extensions\": [\"kt\", \"java\", \"ts\", \"rs\"]  // File types to scan
+    \"source_extensions\": [\"kt\", \"java\", \"ts\", \"rs\"],  // File types to scan
+    \"infer_layers\": true         // Infer layers from path names when \"layers\" is empty
   }
 
 HEALTH SCORE:
