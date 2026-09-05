@@ -29,7 +29,10 @@ Every violation gets a **risk score (RRI)** based on dependency direction and de
 - **16 languages**: C#, Dart, Elixir, Go, Haskell, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Scala, Swift, TypeScript, Zig
 - **Tree-sitter parsing**: Fast, accurate AST-based import extraction (no regex)
 - **Parallel scanning**: Rayon-powered file discovery and parsing
-- **13 report formats**: JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy, Explorer (or `all` to generate every format)
+- **Same Issues in every report**: nine Issue kinds (Coupling Violation, Cycle, Rule Violation, Layer Violation, Gravity Well, Red Flag, Stability Violation, Zone Flag, Low Cohesion), each an Issue card with a severity band, reason, recommendation and score impact — identical wording in text, JSON, Sonar, HTML and the Explorer
+- **14 report formats**: Text, JSON, XML, Markdown, HTML, SonarCloud, Mermaid, DOT, Sunburst, Dashboard, PR, Briefing, Strategy, Explorer (or `all` to generate every format)
+- **Baseline every kind**: `noupling baseline save` records the accepted Issues; `audit --baseline` and `report --baseline` keep them visible, marked, and fail CI only on new ones
+- **Layer inference**: projects without configured `layers` get a sensible set inferred from path names (turn off with `infer_layers: false`)
 - **Interactive HTML report**: Kover-style drill-down with color-coded scores
 - **Sunburst visualization**: Zoomable D3.js dependency graph with animated drill-down
 - **Technical Leader Dashboard**: Single-page executive view with all metrics, sortable scorecard, risk matrix
@@ -110,7 +113,7 @@ Discovers source files, parses imports via Tree-sitter, and stores the dependenc
 noupling audit /path/to/project
 ```
 
-Displays a health score (0-100), coupling violations sorted by severity, and circular dependencies grouped by cycle order.
+Prints the health score (0-100), Top Actions, and every Issue as an Issue card — kind, severity band, subject, reason, recommendation, score impact — in canonical order, followed by the Metric sections. Add `--baseline` to mark accepted Issues and fail only on new ones.
 
 Use `--fail-below` to fail in CI when the score drops:
 
@@ -121,7 +124,8 @@ noupling audit /path/to/project --fail-below 80  # Exit code 1 if score < 80
 ### Generate reports
 
 ```bash
-noupling report /path/to/project --format json      # Comprehensive JSON
+noupling report /path/to/project --format text      # The same text audit prints, saved to .noupling/report.txt
+noupling report /path/to/project --format json      # Comprehensive JSON (one `issues` array of Issue cards + Metric arrays)
 noupling report /path/to/project --format xml       # Comprehensive XML
 noupling report /path/to/project --format md        # Multi-file navigable Markdown
 noupling report /path/to/project --format html      # Interactive HTML with drill-down
@@ -130,6 +134,9 @@ noupling report /path/to/project --format mermaid   # Mermaid flowchart diagram
 noupling report /path/to/project --format dot       # GraphViz DOT graph
 noupling report /path/to/project --format bundle    # Zoomable sunburst with dependency edges
 noupling report /path/to/project --format dashboard # Interactive Technical Leader Dashboard
+noupling report /path/to/project --format pr        # Tight Markdown summary for a PR comment
+noupling report /path/to/project --format briefing  # Sprint briefing: top 10 Issues by score impact
+noupling report /path/to/project --format strategy  # Multi-snapshot trend: score and Issue counts per kind
 noupling report /path/to/project --format explorer  # Interactive Explorer: layered map, drill-down, issues, click-to-source
 noupling report /path/to/project --format all       # Generate every format above in one command
 ```
@@ -176,7 +183,7 @@ The workflow installs noupling from the latest release, runs a diff scan, and po
 
 ### SonarCloud
 
-Generate the generic issue import file and reference it in your Sonar config:
+Generate the generic issue import file (one Sonar issue per noupling Issue, all nine kinds, `ruleId` `noupling:<kind>`) and reference it in your Sonar config:
 
 ```bash
 noupling report . --format sonar
@@ -236,7 +243,8 @@ Settings are stored in `.noupling/settings.json` (auto-created on first run):
 | `source_extensions` | File types to scan | 17 extensions |
 | `allow_inline_suppression` | Enable `noupling:ignore` comments | true |
 | `risk_weights` | Risk weights per dependency direction (downward, sibling, upward, external, transitive, circular) | 2, 4, 6, 8, 9, 10 |
-| `coupling_mode` | Coupling analysis mode (`strict` or `relaxed`) | `strict` |
+| `coupling_mode` | Coupling analysis mode (`strict` or `actionable`) | `strict` |
+| `infer_layers` | Infer layers from path names when `layers` is empty (switches to `actionable` mode when it fires) | `true` |
 
 ### Architectural Layers
 
