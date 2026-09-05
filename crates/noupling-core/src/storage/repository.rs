@@ -190,6 +190,56 @@ impl<'a> SnapshotRepository<'a> {
         })
     }
 
+    /// Record the layers the audit inferred for a snapshot — an empty list
+    /// when it ran with configured layers or inferred none (#355).
+    pub fn save_inferred_layers(
+        &self,
+        snapshot_id: &str,
+        layers: &[crate::settings::Layer],
+    ) -> Result<()> {
+        let json = serde_json::to_string(layers)?;
+        self.conn.execute(
+            "UPDATE snapshots SET inferred_layers = ?1 WHERE id = ?2",
+            rusqlite::params![json, snapshot_id],
+        )?;
+        Ok(())
+    }
+
+    /// The layers inferred for a snapshot, or `None` when it was never
+    /// audited or predates the column.
+    pub fn get_inferred_layers(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<Vec<crate::settings::Layer>>> {
+        let json: Option<String> = self.conn.query_row(
+            "SELECT inferred_layers FROM snapshots WHERE id = ?1",
+            rusqlite::params![snapshot_id],
+            |row| row.get(0),
+        )?;
+        Ok(match json {
+            Some(j) => Some(serde_json::from_str(&j)?),
+            None => None,
+        })
+    }
+
+    /// The inferred layers of the most recent snapshot before `snapshot_id`
+    /// that has any recorded, oldest→newest order assumed from `get_all`.
+    pub fn get_previous_inferred_layers(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<Option<Vec<crate::settings::Layer>>> {
+        let all = self.get_all()?;
+        let Some(pos) = all.iter().position(|s| s.id == snapshot_id) else {
+            return Ok(None);
+        };
+        for prev in all[..pos].iter().rev() {
+            if let Some(layers) = self.get_inferred_layers(&prev.id)? {
+                return Ok(Some(layers));
+            }
+        }
+        Ok(None)
+    }
+
     /// Return every snapshot (oldest first) with its recorded health
     /// score, skipping rows where the score is NULL (legacy snapshots
     /// taken before the column existed, or pre-audit rows).

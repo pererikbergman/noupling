@@ -689,4 +689,60 @@ fn monorepo_audit_matches_report_module_and_renders_issue_cards() {
         single_out.contains(&format!("Issues ({report_issues})")),
         "audit --module must list the same {report_issues} Issues:\n{single_out}"
     );
+
+// ── inference hysteresis (#355) ──────────────────────────────────────────
+
+/// Layers inferred on one snapshot stay in force on the next while they
+/// still fit, so adding two unrelated files near the 30% coverage threshold
+/// does not flip the audit from layered to unlayered.
+#[test]
+fn inferred_layers_survive_a_commit_that_dips_under_the_threshold() {
+    let fixture = tempfile::tempdir().unwrap();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    let write = |rel: &str| {
+        let p = project.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, "pub fn f() {}\n").unwrap();
+    };
+    // 3 ui files of 9 = 33%: inferred.
+    for i in 0..3 {
+        write(&format!("src/ui/s{i}.rs"));
+    }
+    for i in 0..6 {
+        write(&format!("src/misc/m{i}.rs"));
+    }
+    scan(project);
+    let first = run_noupling(&["audit", root]);
+    let first_out = String::from_utf8_lossy(&first.stdout).into_owned();
+    assert!(first_out.contains("Layers: inferred"), "{first_out}");
+
+    // Two more unrelated files: 3 of 11 = 27%, under the entry threshold.
+    write("src/misc/m6.rs");
+    write("src/misc/m7.rs");
+    scan(project);
+    let second = run_noupling(&["audit", root]);
+    let second_out = String::from_utf8_lossy(&second.stdout).into_owned();
+    assert!(
+        second_out.contains("Layers: inferred"),
+        "the previous snapshot's layers must be kept:\n{second_out}"
+    );
+
+    // The same 11 files as a fresh project have no history to lean on.
+    let fresh = tempfile::tempdir().unwrap();
+    let fresh_root = fresh.path().to_str().unwrap();
+    for i in 0..3 {
+        let p = fresh.path().join(format!("src/ui/s{i}.rs"));
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, "pub fn f() {}\n").unwrap();
+    }
+    for i in 0..8 {
+        let p = fresh.path().join(format!("src/misc/m{i}.rs"));
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, "pub fn f() {}\n").unwrap();
+    }
+    scan(fresh.path());
+    let fresh_out =
+        String::from_utf8_lossy(&run_noupling(&["audit", fresh_root]).stdout).into_owned();
+    assert!(!fresh_out.contains("Layers: inferred"), "{fresh_out}");
 }

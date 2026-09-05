@@ -65,12 +65,20 @@ pub struct PipelineOutcome {
 pub struct SnapshotTrend {
     pub score: f64,
     pub kind_counts: std::collections::BTreeMap<String, usize>,
+    /// The layers this audit inferred (empty when configured or none), kept
+    /// on the snapshot so the next audit can reuse them (#355).
+    pub inferred_layers: Vec<noupling_core::settings::Layer>,
 }
 
 impl SnapshotTrend {
     fn of(result: &AuditResult) -> Self {
         let issues = result.issues();
         SnapshotTrend {
+            inferred_layers: if result.layers_auto_detected {
+                result.layers.clone()
+            } else {
+                Vec::new()
+            },
             score: result.score,
             kind_counts: noupling_core::analyzer::IssueKind::ALL
                 .iter()
@@ -132,11 +140,23 @@ impl<'a> AuditPipeline<'a> {
         // layer violation checks live inside `audit_with_settings`, so
         // every caller sees the same Issues.
         let type_counts = scanner::recompute_type_counts(self.project_path, &filtered_modules);
-        let mut result = analyzer::audit_with_settings(
+        // Inference hysteresis (#355): the layers the previous snapshot
+        // inferred stay in force while they still fit, so one commit near
+        // the coverage threshold cannot flip the audit's mode. Whole-
+        // snapshot runs only; a --module run is not the snapshot.
+        let prior_inferred = if options.module_filter.is_none() {
+            snap_repo
+                .get_previous_inferred_layers(&snapshot.id)
+                .unwrap_or(None)
+        } else {
+            None
+        };
+        let mut result = analyzer::audit_with_settings_and_prior_layers(
             &filtered_modules,
             &filtered_deps,
             &type_counts,
             self.settings,
+            prior_inferred.as_deref(),
         );
 
         // (4) Enrich with scan-time metadata (suppressed count + external
@@ -203,6 +223,7 @@ pub fn record_snapshot_trends(snap_repo: &SnapshotRepository<'_>, outcome: &Pipe
     let snapshot_id = outcome.snapshot.id.as_str();
     let _ = snap_repo.save_health_score(snapshot_id, trend.score);
     let _ = snap_repo.save_issue_kind_counts(snapshot_id, &trend.kind_counts);
+    let _ = snap_repo.save_inferred_layers(snapshot_id, &trend.inferred_layers);
 }
 
 fn apply_module_filter(
