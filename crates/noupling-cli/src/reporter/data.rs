@@ -81,10 +81,15 @@ pub struct JsonDirectory {
     pub kind: &'static str,
     pub module_count: usize,
     pub score: f64,
+    /// A violation is anchored here or anywhere below (rolled up).
     pub has_violations: bool,
     pub children: Vec<String>,
     pub files: Vec<String>,
+    /// Coupling Violations and Cycles anchored at this directory **or any
+    /// descendant** (since 0.9.1, #381; before that, this directory only).
+    /// `score` stays local to the directory's own violations.
     pub violations_count: usize,
+    /// The Cycles among `violations_count`, rolled up the same way.
     pub circular_count: usize,
 }
 
@@ -250,38 +255,32 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
         }
     }
 
-    // Count violations per directory
+    // Count violations per directory. Same anchor rule as Issue::anchor_dir,
+    // so a violation is counted under the directory whose page lists its
+    // Issue; ring hops are folded into their Cycle so the count matches the
+    // cards (#358). Counts roll up to every ancestor like `module_count`
+    // does, so a directory flagged `has_violations` never shows 0 (#381).
     for v in result.issue_violations() {
-        // Same anchor rule as Issue::anchor_dir, so a violation is counted
-        // under the directory whose page lists its Issue; ring hops are
-        // folded into their Cycle so the count matches the cards (#358).
-        let parent = if v.is_circular && !v.cycle_path.is_empty() {
+        let anchor = if v.is_circular && !v.cycle_path.is_empty() {
             let members: Vec<&str> = v.cycle_path.iter().map(String::as_str).collect();
             common_parent_dir(&members)
         } else {
             common_parent_dir(&[&v.dir_a, &v.dir_b])
         };
-        if let Some(dir) = dirs.get_mut(&parent) {
-            dir.violations_count += 1;
-            if v.is_circular {
-                dir.circular_count += 1;
+        let mut current = Some(std::path::Path::new(&anchor));
+        while let Some(dir_path) = current {
+            let key = dir_path.to_string_lossy();
+            if key.is_empty() {
+                break;
             }
-            dir.has_violations = true;
-        }
-    }
-
-    // Mark dirs with deep violations
-    for path in &sorted_paths {
-        let has_child_violations = {
-            let prefix = format!("{}/", path);
-            dir_paths.iter().any(|p| {
-                p.starts_with(&prefix) && dirs.get(p).map(|d| d.has_violations).unwrap_or(false)
-            })
-        };
-        if has_child_violations {
-            if let Some(dir) = dirs.get_mut(path) {
+            if let Some(dir) = dirs.get_mut(key.as_ref()) {
+                dir.violations_count += 1;
+                if v.is_circular {
+                    dir.circular_count += 1;
+                }
                 dir.has_violations = true;
             }
+            current = dir_path.parent();
         }
     }
 

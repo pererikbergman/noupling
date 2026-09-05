@@ -17,6 +17,9 @@ struct DirNode {
     violations_here: Vec<ViolationInfo>,
     coupling_metrics_here: Vec<ViolationInfo>,
     has_deep_violations: bool,
+    /// Violations anchored here or anywhere below — what the directory
+    /// tables print, so the count agrees with the warning marker (#381).
+    deep_violation_count: usize,
     score: f64,
     module_count: usize,
 }
@@ -123,6 +126,7 @@ fn build_report_data(
                         violations_here: Vec::new(),
                         coupling_metrics_here: Vec::new(),
                         has_deep_violations: false,
+                        deep_violation_count: 0,
                         score: 100.0,
                         module_count: 0,
                     },
@@ -148,6 +152,7 @@ fn build_report_data(
                 violations_here: Vec::new(),
                 coupling_metrics_here: Vec::new(),
                 has_deep_violations: false,
+                deep_violation_count: 0,
                 score: 100.0,
                 module_count: 0,
             },
@@ -197,8 +202,7 @@ fn build_report_data(
         // For coupling violations, find the parent where dir_a and dir_b are siblings
         // Same anchor rule as the Issue cards on the page (Issue::anchor_dir),
         // so a violation is filed under the directory whose page lists its
-        // Issue. Counts still come from raw violations (a ring's hop edges
-        // count separately; issues() folds them into one Cycle, see #358).
+        // Issue, and one ring is one violation here as it is one Cycle there.
         let parent = if violation.is_circular && !violation.cycle_path.is_empty() {
             let members: Vec<&str> = violation.cycle_path.iter().map(String::as_str).collect();
             common_parent_dir(&members)
@@ -266,19 +270,21 @@ fn build_report_data(
         }
     }
 
-    // Mark directories that have violations anywhere in their subtree
+    // Count violations anywhere in each subtree (deepest first, so a
+    // child's total is final before its parent reads it).
     for dir_path in &dir_paths_sorted {
-        let has_violations = {
+        let deep = {
             let dir = dirs.get(dir_path).unwrap();
-            !dir.violations_here.is_empty()
-                || dir.children_dirs.iter().any(|c| {
-                    dirs.get(c)
-                        .map(|d| d.has_deep_violations || !d.violations_here.is_empty())
-                        .unwrap_or(false)
-                })
+            dir.violations_here.len()
+                + dir
+                    .children_dirs
+                    .iter()
+                    .filter_map(|c| dirs.get(c).map(|d| d.deep_violation_count))
+                    .sum::<usize>()
         };
         if let Some(dir) = dirs.get_mut(dir_path) {
-            dir.has_deep_violations = has_violations;
+            dir.deep_violation_count = deep;
+            dir.has_deep_violations = deep > 0;
         }
     }
 
@@ -430,7 +436,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
     let mut children_rows = String::new();
     for child_path in &dir.children_dirs {
         if let Some(child) = data.dirs.get(child_path) {
-            let warning = if child.has_deep_violations || !child.violations_here.is_empty() {
+            let warning = if child.has_deep_violations {
                 "<span class=\"warning\" title=\"Contains violations\">&#9888;</span>"
             } else {
                 ""
@@ -450,7 +456,7 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
                 child.module_count,
                 child_score_clr,
                 child.score,
-                child.violations_here.len(),
+                child.deep_violation_count,
             ));
         }
     }
@@ -688,7 +694,7 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
         score_clr = score_clr,
         score = dir.score,
         modules = dir.module_count,
-        violations = dir.violations_here.len(),
+        violations = dir.deep_violation_count,
         instability = instability_label,
         children_rows = children_rows,
         violations_html = violations_html,
@@ -1030,6 +1036,59 @@ mod tests {
         assert!(
             out.path().join("notes.txt").exists(),
             "files noupling did not write are left alone"
+        );
+    }
+
+    /// The Contents table counts violations anywhere under a child, matching
+    /// the warning marker beside it (#381).
+    #[test]
+    fn html_children_table_counts_deep_violations() {
+        let modules = vec![
+            make_module("a", "src/loose/x/p/p1.rs"),
+            make_module("b", "src/loose/x/q/q1.rs"),
+            make_module("c", "src/other/z.rs"),
+        ];
+        // Anchored two levels below `loose` (at src/loose/x).
+        let result = AuditResultBuilder::new()
+            .with_total_modules(3)
+            .with_violations(vec![CouplingViolation {
+                dir_a: "src/loose/x/p".to_string(),
+                dir_b: "src/loose/x/q".to_string(),
+                from_module: "src/loose/x/p/p1.rs".to_string(),
+                to_module: "src/loose/x/q/q1.rs".to_string(),
+                depth: 3,
+                severity: 0.33,
+                direction: noupling_core::analyzer::DependencyDirection::Sibling,
+                rri: 4.0,
+                is_circular: false,
+                cycle_path: Vec::new(),
+                cycle_hop_files: Vec::new(),
+                cycle_order: 0,
+                cycle_hop_counts: Vec::new(),
+                weakest_link: None,
+                break_cost: 0,
+                score_impact: 1.5,
+                line_number: 2,
+                weight: 1,
+            }])
+            .build();
+        let dir = tempfile::tempdir().unwrap();
+        generate_html_report(
+            &modules,
+            &result,
+            "snap-r",
+            dir.path(),
+            &Settings::default(),
+        )
+        .unwrap();
+
+        let root = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
+        let start = root.find("href=\"loose/index.html\"").expect("loose row");
+        let row = &root[start..start + root[start..].find("</tr>").unwrap()];
+        assert!(row.contains("&#9888;"), "marker missing: {row}");
+        assert!(
+            row.contains("<td class=\"center\">1</td>"),
+            "violations column must count the subtree: {row}"
         );
     }
 
