@@ -543,3 +543,73 @@ fn scan_records_issue_kind_counts_that_strategy_trends() {
         "the ring ui → domain → data → ui: {cycle}"
     );
 }
+
+// ── examples/ ────────────────────────────────────────────────────────────
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name() == ".noupling" {
+            continue; // never carry a developer's local scan into the test
+        }
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
+/// Scan a project under `examples/` in a scratch copy and return the Issue
+/// kinds its audit produces.
+fn example_issue_kinds(name: &str) -> std::collections::BTreeSet<String> {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples")
+        .join(name);
+    let tmp = tempfile::tempdir().unwrap();
+    copy_tree(&source, tmp.path());
+    scan(tmp.path());
+    let out = run_noupling(&["report", tmp.path().to_str().unwrap(), "--format", "json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(tmp.path().join(".noupling/report.json")).unwrap(),
+    )
+    .unwrap();
+    json["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["kind"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The three `examples/` projects demonstrate what `examples/README.md`
+/// says they do (#385): clean, a one-way sibling Coupling Violation with
+/// no Cycle, and a three-package Cycle.
+#[test]
+fn examples_demonstrate_their_documented_issue_kinds() {
+    let clean = example_issue_kinds("kotlin-clean");
+    assert!(clean.is_empty(), "kotlin-clean must audit clean: {clean:?}");
+
+    let coupled = example_issue_kinds("kotlin-coupled");
+    assert!(
+        coupled.contains("coupling_violation"),
+        "kotlin-coupled must show a Coupling Violation: {coupled:?}"
+    );
+    assert!(
+        !coupled.contains("cycle"),
+        "kotlin-coupled must not be a Cycle (that is kotlin-circular's job): {coupled:?}"
+    );
+
+    let circular = example_issue_kinds("kotlin-circular");
+    assert!(
+        circular.contains("cycle"),
+        "kotlin-circular must show a Cycle: {circular:?}"
+    );
+}

@@ -30,6 +30,7 @@
     <aside class="docs-sidebar">
       <h4>Getting started</h4>
       <a href="#quick-start">Quick start</a>
+      <a href="#try-an-example">Try an example</a>
       <a href="#read-the-audit">Read the audit</a>
       <a href="#first-cleanup">First clean-up</a>
 
@@ -78,6 +79,13 @@ noupling audit .         # health score + every Issue as an Issue card</code></p
 .noupling/*.md
 .noupling/*.mermaid
 .noupling/*.dot</code></pre>
+
+      <h2 id="try-an-example">Try it on an example</h2>
+      <p>The repository ships three tiny Kotlin projects under <a href="https://github.com/pererikbergman/noupling/tree/main/examples"><code>examples/</code></a>, each built to trigger one outcome: <code>kotlin-clean</code> (100.0, nothing to report), <code>kotlin-coupled</code> (a one-way sibling <strong>Coupling Violation</strong>), and <code>kotlin-circular</code> (a three-package <strong>Cycle</strong>). Its README lists the expected output for each.</p>
+<pre><code class="language-bash">git clone https://github.com/pererikbergman/noupling.git
+cd noupling
+noupling scan examples/kotlin-circular
+noupling audit examples/kotlin-circular     # one Cycle, weakest link named</code></pre>
 
       <h2 id="read-the-audit">Read the audit</h2>
       <p>The text output has three parts. The headline block, the Top Actions, then <code>Issues (N)</code> with one card per Issue in canonical order (critical first), followed by the Metric sections.</p>

@@ -81,6 +81,8 @@ noupling audit /path/to/project
 noupling report /path/to/project --format html
 ```
 
+No project at hand? [`examples/`](examples/README.md) has three tiny Kotlin projects (clean, a Coupling Violation, a Cycle) with their expected output.
+
 ---
 
 ## Installation
