@@ -47,7 +47,7 @@ The frontend reads its data from one of two places:
    `<script id="noupling-data" type="application/json">` element in
    `index.html` is filled at report-emission time by the Rust crate's
    `noupling_explorer::render(...)`. The TypeScript shape is in
-   `src/types.ts`; the Rust serializer is in
+   `src/shared/types.ts`; the Rust serializer is in
    `crates/noupling-explorer/src/data_contract.rs`. The two are
    version-locked — bump both together.
 
@@ -98,27 +98,37 @@ The current shell implements **Variant D** from the prototype
 
 ## File map
 
+Layered top to bottom; a directory imports only from the ones below it,
+and `noupling audit .` on this repo enforces that through the
+`explorer-*` layers in `.noupling/settings.json`.
+
 ```
 public/samples/         JSON fixtures for `pnpm dev`
 src/
-├── App.tsx             Grid layout (top bar / search row / panel / canvas)
+├── App.tsx             Grid layout (top bar / search row / panel / canvas)   ← explorer-app
 ├── main.tsx            Bootstraps React with the loaded Data Contract
 ├── data.ts             Reads <script id="noupling-data"> or falls back to /samples/
-├── types.ts            TypeScript mirror of the Rust DataContract
-├── sourceLink.ts       Editor URL templates (vscode/jetbrains/sublime/cursor)
 ├── styles.css          Tailwind base + design tokens (dark + light)
-├── components/
+├── components/         React UI                                              ← explorer-ui
 │   ├── TopBar.tsx
 │   ├── SearchRow.tsx
-│   ├── SidePanel.tsx   Tabs: Info / Files / Rules / Plan
+│   ├── SidePanel.tsx   Tabs: Info / Files / Levels / Issues / Rules
 │   ├── Breadcrumb.tsx  Drill chain shown above the canvas
 │   ├── DetailsPanel.tsx Right-slide panel on node click
-│   └── CanvasArea.tsx  Hosts the LSM + filter pills + toolbar
-├── lsm/
-│   ├── LSM.tsx         SVG renderer (cards, edges, layer bands, badges)
-│   └── layout.ts       Pure Data Contract → SVG geometry
-└── state/
-    └── explorerState.ts  Single owner; LocalStorage-persisted UI state.
+│   └── CanvasArea.tsx  Hosts the views + filter pills + toolbar
+├── lsm/                Canvas views                                          ← explorer-views
+│   ├── LSM.tsx         SVG renderer (cards, routed edges, layer bands)
+│   ├── layout.ts       Pure Data Contract → SVG geometry
+│   ├── Matrix.tsx
+│   └── CompositionView.tsx
+├── state/              UI state, queries, focus, highlight policy            ← explorer-state
+│   └── explorerState.ts  Single owner; LocalStorage-persisted UI state.
+└── shared/             Leaf modules everything may import                    ← explorer-shared
+    ├── types.ts        TypeScript mirror of the Rust DataContract
+    ├── labels.ts       Display names for nodes
+    ├── sourceLink.ts   Editor URL templates (vscode/jetbrains/sublime/cursor)
+    └── verdictExplainers.ts
+tests/unit/             node --experimental-strip-types tests for layout + state
 dist/explorer.html      Build artifact — consumed by the Rust crate.
                         Must be regenerated whenever src/ changes.
 ```

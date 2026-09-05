@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DataContract, NodeEntry } from "./types";
+import type { DataContract, NodeEntry } from "./shared/types";
 import { TopBar } from "./components/TopBar";
 import { SearchRow } from "./components/SearchRow";
 import { SidePanel } from "./components/SidePanel";

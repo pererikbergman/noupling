@@ -67,14 +67,62 @@
     }
   ],
   "layers": [
-    { "name": "explorer", "pattern": "**/crates/noupling-explorer/**" },
-    { "name": "reporter", "pattern": "**/crates/noupling-cli/src/reporter/**" },
-    { "name": "commands", "pattern": "**/crates/noupling-cli/src/commands/**" },
-    { "name": "scanner", "pattern": "**/crates/noupling-core/src/scanner/**" },
-    { "name": "storage", "pattern": "**/crates/noupling-core/src/storage/**" },
-    { "name": "analyzer", "pattern": "**/crates/noupling-core/src/analyzer/**" },
-    { "name": "core", "pattern": "**/crates/noupling-core/src/core/**" },
-    { "name": "settings", "pattern": "**/crates/noupling-core/src/settings.rs" }
+    {
+      "name": "explorer-app",
+      "pattern": "**/crates/noupling-explorer/template/src/{App,main,data}.{ts,tsx}"
+    },
+    {
+      "name": "explorer-ui",
+      "pattern": "**/crates/noupling-explorer/template/src/components/**"
+    },
+    {
+      "name": "explorer-views",
+      "pattern": "**/crates/noupling-explorer/template/src/lsm/**"
+    },
+    {
+      "name": "explorer-state",
+      "pattern": "**/crates/noupling-explorer/template/src/state/**"
+    },
+    {
+      "name": "explorer-shared",
+      "pattern": "**/crates/noupling-explorer/template/src/shared/**"
+    },
+    {
+      "name": "explorer-render",
+      "pattern": "**/crates/noupling-explorer/src/**"
+    },
+    {
+      "name": "explorer",
+      "pattern": "**/crates/noupling-explorer/**"
+    },
+    {
+      "name": "reporter",
+      "pattern": "**/crates/noupling-cli/src/reporter/**"
+    },
+    {
+      "name": "commands",
+      "pattern": "**/crates/noupling-cli/src/commands/**"
+    },
+    {
+      "name": "scanner",
+      "pattern": "**/crates/noupling-core/src/scanner/**"
+    },
+    {
+      "name": "storage",
+      "pattern": "**/crates/noupling-core/src/storage/**"
+    },
+    {
+      "name": "analyzer",
+      "pattern": "**/crates/noupling-core/src/analyzer/**"
+    },
+    {
+      "name": "core",
+      "pattern": "**/crates/noupling-core/src/core/**"
+    },
+    {
+      "name": "settings",
+      "pattern": "**/crates/noupling-core/src/settings.rs"
+    }
   ],
   "allow_inline_suppression": true,
   "modules": []

@@ -1,4 +1,4 @@
-import type { DataContract } from "../../types";
+import type { DataContract } from "../../shared/types";
 import { firstViolationForRule, ruleOffenders } from "../../state/queries";
 import { bandClass, subjectFull } from "./IssuesTab";
 

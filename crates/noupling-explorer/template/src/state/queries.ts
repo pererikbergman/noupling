@@ -6,7 +6,7 @@ import type {
   IssueKindId,
   NodeEntry,
   ViolationEntry,
-} from "../types";
+} from "../shared/types";
 
 /**
  * The only module that touches raw `data.*` arrays. Tabs and details

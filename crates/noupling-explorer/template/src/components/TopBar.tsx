@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DataContract } from "../types";
+import type { DataContract } from "../shared/types";
 import type { ViewMode } from "../state/explorerState";
 import { HelpDialog } from "./HelpDialog";
 import { MethodologyDialog } from "./MethodologyDialog";

@@ -1,5 +1,5 @@
-import type { NodeEntry, EdgeEntry } from "../types";
-import { displayLabel } from "../labels";
+import type { NodeEntry, EdgeEntry } from "../shared/types";
+import { displayLabel } from "../shared/labels";
 
 /**
  * Composition view (PRD §10.8). Answers "what *kind* of thing is

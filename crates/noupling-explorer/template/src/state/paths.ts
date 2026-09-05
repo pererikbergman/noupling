@@ -1,4 +1,4 @@
-import type { DataContract } from "../types";
+import type { DataContract } from "../shared/types";
 
 /**
  * Breadth-first shortest path from → to over `data.edges` (treated as a

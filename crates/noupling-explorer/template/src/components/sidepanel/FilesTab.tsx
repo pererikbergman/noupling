@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { DataContract, NodeEntry } from "../../types";
+import type { DataContract, NodeEntry } from "../../shared/types";
 import { buildChildIndex } from "../../state/queries";
 import { DrillBreadcrumb } from "../DrillBreadcrumb";
 import { basename, layerAccent } from "./shared";

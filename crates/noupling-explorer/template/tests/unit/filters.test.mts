@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applySpotFilter } from "../../src/state/explorerState.ts";
-import type { DataContract } from "../../src/types.ts";
+import type { DataContract } from "../../src/shared/types.ts";
 
 // A gravity well two levels down: filtering at the top must keep the
 // containers that lead to it, or the canvas goes blank (#402).

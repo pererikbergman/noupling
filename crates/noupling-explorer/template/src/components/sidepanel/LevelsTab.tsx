@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { DataContract } from "../../types";
+import type { DataContract } from "../../shared/types";
 import {
   allViolations,
   buildChildIndex,

@@ -3,9 +3,9 @@
  * absolute geometry the SVG renderer paints. Separated from the
  * component so the layout is unit-testable and deterministic.
  */
-import type { DataContract, EdgeEntry, LayerEntry, NodeEntry } from "../types";
+import type { DataContract, EdgeEntry, LayerEntry, NodeEntry } from "../shared/types";
 // Explicit extension: the unit tests run this file under node --experimental-strip-types.
-import { displayLabel } from "../labels.ts";
+import { displayLabel } from "../shared/labels.ts";
 
 export interface PositionedNode {
   id: string;

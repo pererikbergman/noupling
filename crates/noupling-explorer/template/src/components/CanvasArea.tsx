@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { DataContract, NodeEntry } from "../types";
+import type { DataContract, NodeEntry } from "../shared/types";
 import { LSM } from "../lsm/LSM";
 import { computeLSMLayout } from "../lsm/layout";
 import { Matrix } from "../lsm/Matrix";
@@ -12,7 +12,7 @@ import {
   type PathFinder,
 } from "../state/explorerState";
 import { nodeById } from "../state/queries";
-import { collapsedLabel } from "../labels";
+import { collapsedLabel } from "../shared/labels";
 import type { HighlightPolicy } from "../state/highlightPolicy";
 
 export interface CanvasAreaProps {

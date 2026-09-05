@@ -1,4 +1,4 @@
-import type { DataContract, IssueEntry, IssueSubject, SeverityBand } from "../../types";
+import type { DataContract, IssueEntry, IssueSubject, SeverityBand } from "../../shared/types";
 import { allIssues } from "../../state/queries";
 import { basename } from "./shared";
 
