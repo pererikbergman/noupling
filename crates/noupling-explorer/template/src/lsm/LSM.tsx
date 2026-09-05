@@ -225,6 +225,8 @@ function EdgePath({
         strokeDasharray={dash}
         opacity={opacity}
         markerEnd={`url(#${accent === "cycle" ? "lsm-arrow-cycle" : "lsm-arrow"})`}
+        data-edge={`${edge.from}→${edge.to}`}
+        data-accent={accent}
       >
         {edge.isViolation && edge.violationMessage ? (
           <title>{edge.violationMessage}</title>

@@ -599,7 +599,6 @@
       "participants": [
         "src/infra/db.rs",
         "src/ui/CheckoutForm.tsx",
-        "src/ui/PaymentForm.tsx",
         "src/domain/payment.rs"
       ]
     },
