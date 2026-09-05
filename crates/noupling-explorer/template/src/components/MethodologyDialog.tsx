@@ -272,7 +272,7 @@ function Concepts() {
         <Strong>recommendation</Strong>, and <Strong>score impact</Strong>.
         Cards marked <em>accepted</em> are <Strong>baselined</Strong>: the
         team has recorded them with <code>noupling baseline save</code>, so
-        they are still reported but never counted as new.
+        they are still reported but never counted against the baseline gate.
       </P>
 
       <H3>The nine kinds</H3>
@@ -388,7 +388,7 @@ function Workflow() {
         (critical, high, medium, low), then kind, then subject. Baselined
         Issues — ones the team has accepted with{" "}
         <code>noupling baseline save</code> — are dimmed and marked{" "}
-        <em>accepted</em>; they never count as new.
+        <em>accepted</em>; they never count against the baseline gate.
       </P>
       <P>
         2. Click an issue. The canvas drills to the lowest common ancestor of
@@ -479,7 +479,7 @@ function Glossary() {
         <dd className="m-0 text-muted">
           An Issue the team has accepted with{" "}
           <code>noupling baseline save</code>. Still shown, marked{" "}
-          <em>accepted</em>, never counted as new.
+          <em>accepted</em>, never counted against the baseline gate.
         </dd>
       </dl>
     </>

@@ -5,7 +5,7 @@
 //! identity — the subject, or the directory pair for Coupling Violations
 //! and Red Flags) into `.noupling/baseline.json`. A later audit or report run with
 //! `--baseline` loads that set and marks matching Issues `baselined`:
-//! they are still reported, never dropped, and never counted as new.
+//! they are still reported, never dropped, and never counted against the baseline gate.
 //!
 //! Older files are not migrated: loading one yields an empty set flagged
 //! `legacy_format`, so callers can say "re-run `noupling baseline save`".

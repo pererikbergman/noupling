@@ -22,7 +22,7 @@ The importance of an Issue on a four-step scale: critical, high, medium, low. As
 _Avoid_: level, priority, RRI (RRI is the underlying number for the kinds that have one)
 
 **Baseline**:
-The set of Issues a team has explicitly accepted. An Issue in the baseline is **baselined**: still reported, marked as accepted, and never counted as new. The baseline covers every Issue kind.
+The set of Issues a team has explicitly accepted. An Issue in the baseline is **baselined**: still reported, marked as accepted, and not counted by the CI gate. The baseline covers every Issue kind. Not to be confused with **Violation Age**, whose _new_ bucket means "first seen in the latest snapshot" regardless of the baseline.
 _Avoid_: ignored, suppressed (a **suppression** hides an edge at scan time; a baselined Issue is still visible)
 
 **Issue card**:
@@ -105,6 +105,6 @@ A report format that shows how Issue counts and the score move across snapshots 
 **Dev:** Modules A, B and C import each other in a ring. How many Issues is that?
 **Domain expert:** One Cycle. Its subject is the ring, its reason names the cheapest break edge. Nobody also lists A → B as a Coupling Violation.
 **Dev:** The team accepted that cycle last quarter.
-**Domain expert:** Then it's baselined. It still shows up on every report, marked accepted, and the CI gate doesn't count it as new.
+**Domain expert:** Then it's baselined. It still shows up on every report, marked accepted, and the CI gate doesn't count it against you.
 **Dev:** Why does the Explorer say "high" and the text report say "24.0" for the same Red Flag?
 **Domain expert:** They shouldn't differ. The band is "high"; 24.0 is the RRI underneath it. Every format shows the same band, and may also print the RRI.

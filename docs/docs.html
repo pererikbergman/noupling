@@ -155,7 +155,7 @@ noupling audit . --fail-below 80</code></pre>
       </table>
 
       <h3 id="issue-card-fields">The Issue card</h3>
-      <p>Every Issue is presented the same way in every format: <strong>kind</strong>, <strong>severity band</strong> (critical / high / medium / low, assigned once by the audit &mdash; Coupling Violations and Cycles step to <em>critical</em> at <code>critical_severity</code>; Rule and Layer Violations are high; Gravity Wells and Red Flags map their RRI; Stability Violations and Zone Flags are medium; Low Cohesion is low), <strong>subject</strong> (one module, one <code>from &rarr; to</code> edge, or a ring), a one-sentence <strong>reason</strong> with this instance's numbers, a one-sentence <strong>recommendation</strong>, and its <strong>score impact</strong>. When you audit with <code>--baseline</code>, accepted Issues are additionally marked <strong>baselined</strong>: still listed, never counted as new.</p>
+      <p>Every Issue is presented the same way in every format: <strong>kind</strong>, <strong>severity band</strong> (critical / high / medium / low, assigned once by the audit &mdash; Coupling Violations and Cycles step to <em>critical</em> at <code>critical_severity</code>; Rule and Layer Violations are high; Gravity Wells and Red Flags map their RRI; Stability Violations and Zone Flags are medium; Low Cohesion is low), <strong>subject</strong> (one module, one <code>from &rarr; to</code> edge, or a ring), a one-sentence <strong>reason</strong> with this instance's numbers, a one-sentence <strong>recommendation</strong>, and its <strong>score impact</strong>. When you audit with <code>--baseline</code>, accepted Issues are additionally marked <strong>baselined</strong>: still listed, not counted by the CI gate.</p>
 
 <h2 id="cmd-scan">scan</h2>
       <p>Discover source files, parse imports, resolve dependencies, store in SQLite.</p>
@@ -175,7 +175,7 @@ noupling audit . --fail-below 80</code></pre>
         <thead><tr><th>Flag</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><code>--fail-below</code></td><td>Exit code 1 if score is below this. Use in CI.</td></tr>
-          <tr><td><code>--baseline</code></td><td>Mark Issues accepted by <code>.noupling/baseline.json</code> as <em>baselined</em> (still listed) and exit 1 only when there are new Issues.</td></tr>
+          <tr><td><code>--baseline</code></td><td>Mark Issues accepted by <code>.noupling/baseline.json</code> as <em>baselined</em> (still listed) and exit 1 only when there are Issues not in the baseline.</td></tr>
           <tr><td><code>--snapshot</code></td><td>Audit a specific snapshot instead of the latest.</td></tr>
           <tr><td><code>--module</code></td><td>Show results for one module only (monorepo).</td></tr>
         </tbody>

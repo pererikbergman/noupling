@@ -85,7 +85,7 @@ pub fn format_pr(
     if result.baseline.is_some() {
         let baselined = issues.iter().filter(|i| i.baselined).count();
         out.push_str(&format!(
-            "| New / baselined | {} / {} |\n",
+            "| Not in baseline / baselined | {} / {} |\n",
             issues.len() - baselined,
             baselined
         ));

@@ -247,7 +247,7 @@ fn format_issue_cards(result: &AuditResult) -> String {
     let baselined = issues.iter().filter(|i| i.baselined).count();
     let baseline_counts = if result.baseline.is_some() {
         format!(
-            "{} new, {} baselined; ",
+            "{} not in baseline, {} baselined; ",
             issues.len() - baselined,
             baselined
         )
