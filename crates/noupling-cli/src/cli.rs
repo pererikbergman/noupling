@@ -194,22 +194,22 @@ pub enum Commands {
         last: usize,
 
         /// Output path for the explorer report (default: <path>/.noupling/explorer.html).
-        /// Only honored when --format explorer is used.
+        /// Only honored with --format explorer or all.
         #[arg(long, value_name = "FILE")]
         output: Option<String>,
 
         /// Editor URL scheme used by the explorer report's click-to-source
-        /// links: vscode, jetbrains, sublime, cursor. Only used with --format explorer.
+        /// links: vscode, jetbrains, sublime, cursor. Only used with --format explorer or all.
         #[arg(long, value_name = "EDITOR")]
         editor: Option<String>,
 
         /// Override the codebase title shown in the explorer report header.
-        /// Only used with --format explorer.
+        /// Only used with --format explorer or all.
         #[arg(long, value_name = "STRING")]
         title: Option<String>,
 
         /// Exclude the snapshot history block from the explorer report.
-        /// Shrinks the output file. Only used with --format explorer.
+        /// Shrinks the output file. Only used with --format explorer or all.
         #[arg(long)]
         no_history: bool,
 

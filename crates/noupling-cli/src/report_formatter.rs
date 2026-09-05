@@ -65,7 +65,7 @@ pub trait ReportFormatter {
     fn render(&self, ctx: &FormatterContext<'_>) -> Result<Output>;
 }
 
-/// Built-in adapters — twelve formats minus `strategy` and
+/// Built-in adapters — the fourteen formats minus `strategy` and
 /// `explorer`, which keep bespoke arms in `commands/report.rs`.
 /// Strategy needs the `SnapshotRepository`/`ModuleRepository`/
 /// `DependencyRepository` triad for its history walk; explorer

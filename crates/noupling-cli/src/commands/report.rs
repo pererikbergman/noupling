@@ -44,7 +44,7 @@ pub fn run(
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
 
-    // Eleven of the thirteen formats run through one registry
+    // Twelve of the fourteen formats run through one registry
     // (#317 widens the #301 seam). Only `strategy` (needs the
     // session/repo triad for its history walk) and `explorer`
     // (carries an option struct that would balloon
