@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DataContract } from "../shared/types";
-import type { EdgeAccent, HighlightPolicy } from "../state/highlightPolicy";
+import type { EdgeAccent, HighlightPolicy, NodeEmphasis } from "../state/highlightPolicy";
 import { computeLSMLayout, type LayerBand, type PositionedEdge, type PositionedNode } from "./layout";
 
 export interface LSMProps {
@@ -101,11 +101,16 @@ export function LSM({
             e.isViolation,
             e.isCycle,
           );
+          const emphasis = highlight.edgeEmphasis(e.from, e.to);
           return (
             <EdgePath
               key={`${e.from}->${e.to}`}
               edge={e}
-              dimmed={directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))}
+              dimmed={
+                (directDeps !== null && !(directDeps.has(e.from) && directDeps.has(e.to))) ||
+                emphasis === "dimmed"
+              }
+              emphasis={emphasis}
               accent={accent}
               onClick={
                 onEdgeClick ? () => onEdgeClick(e.from, e.to) : undefined
@@ -121,7 +126,11 @@ export function LSM({
           <NodeCard
             key={n.id}
             node={n}
-            dimmed={directDeps !== null && !directDeps.has(n.id)}
+            dimmed={
+              (directDeps !== null && !directDeps.has(n.id)) ||
+              highlight.nodeEmphasis(n.id) === "dimmed"
+            }
+            emphasis={highlight.nodeEmphasis(n.id)}
             cycleBadgeCount={highlight.cycleBadgeCount(n.id)}
             onMouseEnter={() => setHovered(n.id)}
             onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
@@ -191,11 +200,13 @@ function layerOverlayTint(name: string): string {
 function EdgePath({
   edge,
   dimmed,
+  emphasis,
   accent,
   onClick,
 }: {
   edge: PositionedEdge;
   dimmed: boolean;
+  emphasis: NodeEmphasis | null;
   accent: EdgeAccent;
   onClick?: () => void;
 }) {
@@ -229,6 +240,7 @@ function EdgePath({
         markerEnd={`url(#${accent === "cycle" ? "lsm-arrow-cycle" : "lsm-arrow"})`}
         data-edge={`${edge.from}→${edge.to}`}
         data-accent={accent}
+        data-emphasis={emphasis ?? undefined}
       >
         {edge.isViolation && edge.violationMessage ? (
           <title>{edge.violationMessage}</title>
@@ -298,6 +310,7 @@ const ACCENT_STROKE: Record<EdgeAccent, string> = {
 function NodeCard({
   node,
   dimmed,
+  emphasis,
   cycleBadgeCount,
   onMouseEnter,
   onMouseLeave,
@@ -306,6 +319,7 @@ function NodeCard({
 }: {
   node: PositionedNode;
   dimmed: boolean;
+  emphasis: NodeEmphasis | null;
   cycleBadgeCount: number;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -320,6 +334,7 @@ function NodeCard({
       role="button"
       tabIndex={0}
       aria-label={ariaLabel}
+      data-emphasis={emphasis ?? undefined}
       transform={`translate(${node.x},${node.y})`}
       opacity={baseOpacity}
       style={{ cursor: "pointer", transition: "opacity 120ms", outline: "none" }}

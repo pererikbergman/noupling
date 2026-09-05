@@ -152,6 +152,25 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(banner).not.toContainText("skill");
   });
 
+  test("issue focus puts the participants in the viewport and dims everything else (#334, #335)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // First card: Coupling Violation CheckoutForm.tsx → db.rs.
+    await page.locator("#side-panel ul li button[data-issue-key]").first().click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    const card = (name: string) =>
+      page.locator(`#root-canvas svg g[role='button'][aria-label^='${name} ']`).first();
+    await expect(card("CheckoutForm.tsx")).toBeInViewport();
+    await expect(card("db.rs")).toBeInViewport();
+    // Participants at full opacity; the untouched sibling package dimmed.
+    await expect(card("CheckoutForm.tsx")).toHaveAttribute("data-emphasis", "participant");
+    await expect(card("domain")).toHaveAttribute("data-emphasis", "dimmed");
+    // The offending edge stays prominent; an unrelated edge is dimmed.
+    const offending = page.locator("#root-canvas svg path[data-edge='src/ui/CheckoutForm.tsx→src/infra/db.rs']");
+    await expect(offending).toHaveAttribute("data-emphasis", "participant");
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {

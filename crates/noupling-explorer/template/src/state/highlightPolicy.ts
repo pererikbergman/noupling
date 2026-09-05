@@ -54,7 +54,19 @@ export interface HighlightPolicy {
 
   /** Number of cycles `id` participates in, or 0 if cycles are hidden. */
   cycleBadgeCount(id: string): number;
+
+  /**
+   * Under issue focus, whether a node is one of the participants (or a
+   * container holding one) or just there for orientation (#335). `null`
+   * when no Issue is focused, so views leave their normal styling alone.
+   */
+  nodeEmphasis(id: string): NodeEmphasis | null;
+
+  /** Same for an edge: offending edges keep full weight, the rest dim. */
+  edgeEmphasis(from: string, to: string): NodeEmphasis | null;
 }
+
+export type NodeEmphasis = "participant" | "dimmed";
 
 export interface HighlightInputs {
   /** Edges currently highlighted as the path-finder result. */
@@ -97,6 +109,17 @@ export function buildHighlightPolicy(
   const selectedKey = selectedEdge
     ? `${selectedEdge.from}→${selectedEdge.to}`
     : null;
+  const focusIds = issueFocus
+    ? new Set([...issueFocus.participantFiles, ...issueFocus.expandedContainers])
+    : null;
+  const isParticipant = (id: string) => {
+    if (!focusIds) return false;
+    if (focusIds.has(id)) return true;
+    // A card standing in for a collapsed chain or a package that holds a
+    // participant counts as one.
+    for (const f of focusIds) if (f.startsWith(id + "/")) return true;
+    return false;
+  };
 
   return {
     highlightViolations,
@@ -115,6 +138,16 @@ export function buildHighlightPolicy(
     },
     cycleBadgeCount(id) {
       return highlightCycles ? cyclesByNode.get(id) ?? 0 : 0;
+    },
+    nodeEmphasis(id) {
+      if (!focusIds) return null;
+      return isParticipant(id) ? "participant" : "dimmed";
+    },
+    edgeEmphasis(from, to) {
+      if (!issueFocus) return null;
+      if (issueFocus.edges.has(`${from}→${to}`)) return "participant";
+      // An aggregated edge between two participant cards is the Issue's edge.
+      return isParticipant(from) && isParticipant(to) ? "participant" : "dimmed";
     },
   };
 }
