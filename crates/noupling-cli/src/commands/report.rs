@@ -44,7 +44,7 @@ pub fn run(
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
 
-    // Eleven of the thirteen formats run through one registry
+    // Twelve of the fourteen formats run through one registry
     // (#317 widens the #301 seam). Only `strategy` (needs the
     // session/repo triad for its history walk) and `explorer`
     // (carries an option struct that would balloon
@@ -74,66 +74,25 @@ pub fn run(
 
     match format {
         "explorer" => {
-            // Load all prior snapshots with recorded scores so the
-            // history scrubber has a trend to render. Cheap: small,
-            // indexed SELECT. Returns empty for fresh projects.
-            let history: Vec<noupling_explorer::HistoryEntry> = snap_repo
-                .get_all_with_scores()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|r| noupling_explorer::HistoryEntry {
-                    snapshot_id: r.snapshot_id,
-                    taken_at: r.taken_at,
-                    health_score: r.health_score,
-                })
-                .collect();
-
-            // #280: load optional per-module LLM enrichment from
-            // .noupling/enrichment/modules.json. Skipped entirely if
-            // the file doesn't exist; warn-and-skip on parse errors so
-            // a broken sidecar can't break report generation.
-            let module_enrichment = load_module_enrichment(Path::new(path));
-
-            let options = noupling_explorer::RenderOptions {
-                editor: explorer_editor.map(str::to_string),
-                title: explorer_title.map(str::to_string),
-                include_history: !explorer_no_history,
-                history,
-                module_enrichment,
-            };
-            // Resolve the codebase root to an absolute path so the template's
-            // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at
-            // a real file on disk. The Snapshot stored at scan-time may carry
-            // a relative path like `.` or `./project`, which is fine for
-            // analysis but produces broken editor links.
-            let abs_root = std::fs::canonicalize(path)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| snapshot.root_path.clone());
-            let resolved_snapshot = noupling_core::core::Snapshot {
-                root_path: abs_root,
-                ..snapshot.clone()
-            };
-
-            // The Explorer is a view over the same AuditResult every other
-            // format reads (ADR 0001). Inferred layers and the actionable
-            // fallback already happened inside the pipeline; the result
-            // carries `layers` + `layers_auto_detected` for the banner.
-            let html = noupling_explorer::render(
-                &report_modules,
-                &report_deps,
-                &result,
-                &project_settings,
-                &resolved_snapshot,
-                &options,
-            )?;
             let file_path = match explorer_output {
                 Some(p) => Path::new(p).to_path_buf(),
                 None => report_dir.join("explorer.html"),
             };
-            if let Some(parent) = file_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(&file_path, html)?;
+            generate_explorer_report(
+                &ExplorerInputs {
+                    path,
+                    snap_repo: &snap_repo,
+                    snapshot: &snapshot,
+                    modules: &report_modules,
+                    deps: &report_deps,
+                    result: &result,
+                    settings: &project_settings,
+                    editor: explorer_editor,
+                    title: explorer_title,
+                    no_history: explorer_no_history,
+                },
+                &file_path,
+            )?;
             println!("Report saved to {}", file_path.display());
         }
         "strategy" => {
@@ -199,6 +158,37 @@ pub fn run(
                     failed += 1;
                 }
             }
+            // Explorer is the other bespoke arm; `all` promises every
+            // format, so it is included with the same options the focused
+            // arm honours (#382).
+            let explorer_path = match explorer_output {
+                Some(p) => Path::new(p).to_path_buf(),
+                None => report_dir.join("explorer.html"),
+            };
+            match generate_explorer_report(
+                &ExplorerInputs {
+                    path,
+                    snap_repo: &snap_repo,
+                    snapshot: &snapshot,
+                    modules: &report_modules,
+                    deps: &report_deps,
+                    result: &result,
+                    settings: &project_settings,
+                    editor: explorer_editor,
+                    title: explorer_title,
+                    no_history: explorer_no_history,
+                },
+                &explorer_path,
+            ) {
+                Ok(()) => {
+                    succeeded += 1;
+                    println!("Report saved to {}", explorer_path.display());
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to generate 'explorer' report: {}", e);
+                    failed += 1;
+                }
+            }
             println!(
                 "\nGenerated {} report(s){}",
                 succeeded,
@@ -217,6 +207,84 @@ pub fn run(
         }
     }
 
+    Ok(())
+}
+
+/// Everything the Explorer renderer needs beyond the shared
+/// `FormatterContext`: the history repo for the scrubber, the codebase
+/// path for absolute editor links, and the explorer-only CLI options.
+struct ExplorerInputs<'a> {
+    path: &'a str,
+    snap_repo: &'a noupling_core::storage::repository::SnapshotRepository<'a>,
+    snapshot: &'a noupling_core::core::Snapshot,
+    modules: &'a [noupling_core::core::Module],
+    deps: &'a [noupling_core::core::Dependency],
+    result: &'a noupling_core::analyzer::AuditResult,
+    settings: &'a noupling_core::settings::Settings,
+    editor: Option<&'a str>,
+    title: Option<&'a str>,
+    no_history: bool,
+}
+
+/// Render the Explorer to `file_path`. Shared by the focused `explorer`
+/// arm and `all` (#382).
+fn generate_explorer_report(inputs: &ExplorerInputs<'_>, file_path: &Path) -> anyhow::Result<()> {
+    // Load all prior snapshots with recorded scores so the history
+    // scrubber has a trend to render. Cheap: small, indexed SELECT.
+    // Returns empty for fresh projects.
+    let history: Vec<noupling_explorer::HistoryEntry> = inputs
+        .snap_repo
+        .get_all_with_scores()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| noupling_explorer::HistoryEntry {
+            snapshot_id: r.snapshot_id,
+            taken_at: r.taken_at,
+            health_score: r.health_score,
+        })
+        .collect();
+
+    // #280: load optional per-module LLM enrichment from
+    // .noupling/enrichment/modules.json. Skipped entirely if the file
+    // doesn't exist; warn-and-skip on parse errors so a broken sidecar
+    // can't break report generation.
+    let module_enrichment = load_module_enrichment(Path::new(inputs.path));
+
+    let options = noupling_explorer::RenderOptions {
+        editor: inputs.editor.map(str::to_string),
+        title: inputs.title.map(str::to_string),
+        include_history: !inputs.no_history,
+        history,
+        module_enrichment,
+    };
+    // Resolve the codebase root to an absolute path so the template's
+    // editor URLs (e.g. `vscode://file//Users/me/foo.kt:1`) point at a
+    // real file on disk. The Snapshot stored at scan-time may carry a
+    // relative path like `.` or `./project`, which is fine for analysis
+    // but produces broken editor links.
+    let abs_root = std::fs::canonicalize(inputs.path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| inputs.snapshot.root_path.clone());
+    let resolved_snapshot = noupling_core::core::Snapshot {
+        root_path: abs_root,
+        ..inputs.snapshot.clone()
+    };
+    // The Explorer is a view over the same AuditResult every other format
+    // reads (ADR 0001). Inferred layers and the actionable fallback
+    // already happened inside the pipeline; the result carries `layers` +
+    // `layers_auto_detected` for the banner.
+    let html = noupling_explorer::render(
+        inputs.modules,
+        inputs.deps,
+        inputs.result,
+        inputs.settings,
+        &resolved_snapshot,
+        &options,
+    )?;
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(file_path, html)?;
     Ok(())
 }
 
