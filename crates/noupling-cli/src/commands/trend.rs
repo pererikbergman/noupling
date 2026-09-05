@@ -32,7 +32,7 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
 
     println!(
         "{:<12} {:<22} {:>8} {:>10} {:>10} {:>8}",
-        "SNAPSHOT", "TIMESTAMP", "SCORE", "MODULES", "VIOLATIONS", "DELTA"
+        "SNAPSHOT", "TIMESTAMP (UTC)", "SCORE", "MODULES", "VIOLATIONS", "DELTA"
     );
     println!("{}", "-".repeat(76));
 
@@ -51,19 +51,7 @@ pub fn run(path: &str, last: usize, by_module: bool) -> anyhow::Result<()> {
             &project_settings,
         );
 
-        let delta = match prev_score {
-            Some(prev) => {
-                let d = result.score - prev;
-                if d > 0.0 {
-                    format!("+{:.1}", d)
-                } else if d < 0.0 {
-                    format!("{:.1}", d)
-                } else {
-                    "0.0".to_string()
-                }
-            }
-            None => "-".to_string(),
-        };
+        let delta = format_delta(prev_score, result.score);
 
         let short_id = if snap.id.len() > 8 {
             &snap.id[..8]
@@ -191,4 +179,47 @@ fn run_by_module(
     );
 
     Ok(())
+}
+
+/// The DELTA column: the score change since the previous snapshot, signed,
+/// to one decimal. Rounds *before* choosing the sign so a float-noise
+/// difference that displays as 0.0 is never printed as "+0.0" (#384).
+fn format_delta(prev_score: Option<f64>, score: f64) -> String {
+    let Some(prev) = prev_score else {
+        return "-".to_string();
+    };
+    let d = ((score - prev) * 10.0).round() / 10.0;
+    if d > 0.0 {
+        format!("+{:.1}", d)
+    } else if d < 0.0 {
+        format!("{:.1}", d)
+    } else {
+        "0.0".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_delta;
+
+    #[test]
+    fn first_snapshot_has_no_delta() {
+        assert_eq!(format_delta(None, 95.3), "-");
+    }
+
+    #[test]
+    fn deltas_are_signed_to_one_decimal() {
+        assert_eq!(format_delta(Some(98.3), 95.3), "-3.0");
+        assert_eq!(format_delta(Some(95.0), 96.7), "+1.7");
+    }
+
+    #[test]
+    fn float_noise_prints_as_unsigned_zero() {
+        assert_eq!(
+            format_delta(Some(95.34188034188034), 95.34188034188035),
+            "0.0"
+        );
+        assert_eq!(format_delta(Some(95.3), 95.3 - 1e-12), "0.0");
+        assert_eq!(format_delta(Some(95.3), 95.34), "0.0");
+    }
 }
