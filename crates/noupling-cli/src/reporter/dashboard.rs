@@ -1,6 +1,6 @@
 //! Interactive Technical Leader Dashboard.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, IssueCard, IssueKind};
 use noupling_core::core::{Dependency, Module};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
@@ -26,6 +26,39 @@ pub struct DashboardData {
     pub sunburst_violation_deps: Vec<DepEdge>,
     pub top_actions: Vec<DashboardAction>,
     pub projected_score: f64,
+    /// Every Issue as an Issue card, in `issues()` order (ADR 0002).
+    pub issues: Vec<IssueCard>,
+    /// One entry per kind, all nine, zero included, in canonical order.
+    pub issue_kind_counts: Vec<IssueKindCount>,
+}
+
+#[derive(Serialize)]
+pub struct IssueKindCount {
+    pub kind: &'static str,
+    pub kind_name: &'static str,
+    pub count: usize,
+    /// Tile accent colour.
+    pub color: &'static str,
+    /// One line on what the kind means, for the tile.
+    pub hint: &'static str,
+}
+
+/// Tile colour and one-line hint per kind. Exhaustive so a new kind must
+/// pick how the dashboard shows it.
+fn kind_tile(kind: IssueKind) -> (&'static str, &'static str) {
+    match kind {
+        IssueKind::CouplingViolation => ("#f59e0b", "Sibling or upward import the audit disallows"),
+        IssueKind::Cycle => ("#ef4444", "Directories that depend on each other in a ring"),
+        IssueKind::RuleViolation => ("#dc2626", "Import forbidden by a dependency rule"),
+        IssueKind::LayerViolation => ("#b91c1c", "Import into a higher layer"),
+        IssueKind::GravityWell => ("#8b5cf6", "Module carrying disproportionate risk"),
+        IssueKind::RedFlag => ("#db2777", "Named structural anti-pattern"),
+        IssueKind::StabilityViolation => {
+            ("#0ea5e9", "Stable directory depends on a less stable one")
+        }
+        IssueKind::ZoneFlag => ("#14b8a6", "Directory in the Zone of Pain or Uselessness"),
+        IssueKind::LowCohesion => ("#64748b", "Package whose children barely use each other"),
+    }
 }
 
 #[derive(Serialize)]
@@ -382,6 +415,22 @@ fn build_dashboard_data(
         dashboard_score
     };
 
+    let issues = result.issues();
+    let issue_cards: Vec<IssueCard> = issues.iter().map(|i| i.to_card()).collect();
+    let issue_kind_counts: Vec<IssueKindCount> = IssueKind::ALL
+        .iter()
+        .map(|kind| {
+            let (color, hint) = kind_tile(*kind);
+            IssueKindCount {
+                kind: kind.id(),
+                kind_name: kind.name(),
+                count: issues.iter().filter(|i| i.kind() == *kind).count(),
+                color,
+                hint,
+            }
+        })
+        .collect();
+
     DashboardData {
         score: dashboard_score,
         tri: result.tri,
@@ -409,6 +458,8 @@ fn build_dashboard_data(
         sunburst_violation_deps,
         top_actions,
         projected_score,
+        issues: issue_cards,
+        issue_kind_counts,
     }
 }
 
@@ -595,4 +646,43 @@ fn strip_prefix(path: &str, prefix: &str) -> String {
     }
     let with_slash = format!("{}/", prefix);
     path.strip_prefix(&with_slash).unwrap_or(path).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use noupling_core::analyzer::{AuditResultBuilder, RuleViolation};
+
+    /// The dashboard embeds every Issue card and a count for all nine kinds.
+    #[test]
+    fn dashboard_data_carries_issue_cards_and_all_kind_counts() {
+        let result = AuditResultBuilder::new()
+            .with_total_modules(3)
+            .with_rule_violations(vec![RuleViolation {
+                from_module: "src/a/x.rs".into(),
+                to_module: "src/b/y.rs".into(),
+                line_number: 1,
+                message: "no".into(),
+            }])
+            .build();
+        let data = build_dashboard_data(&[], &[], &result);
+        assert_eq!(data.issues.len(), 1);
+        assert_eq!(data.issues[0].kind, "rule_violation");
+        assert_eq!(data.issue_kind_counts.len(), 9, "every kind, zero included");
+        let rule = data
+            .issue_kind_counts
+            .iter()
+            .find(|k| k.kind == "rule_violation")
+            .unwrap();
+        assert_eq!(rule.count, 1);
+        assert_eq!(rule.kind_name, "Rule Violation");
+        let out = tempfile::tempdir().unwrap().path().join("dashboard.html");
+        generate_dashboard(&[], &[], &result, &out).unwrap();
+        let html = std::fs::read_to_string(&out).unwrap();
+        assert!(html.contains("id=\"issue-kinds\""), "tile row mount point");
+        assert!(
+            html.contains("id=\"issue-table\""),
+            "issue table mount point"
+        );
+    }
 }

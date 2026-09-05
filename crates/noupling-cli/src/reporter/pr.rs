@@ -2,7 +2,7 @@
 //! for posting as a PR comment; length-bounded regardless of
 //! project size.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, IssueDetail, IssueKind};
 
 use super::VERSION;
 
@@ -79,7 +79,29 @@ pub fn format_pr(
     if let Some(r) = resolved_violations {
         out.push_str(&format!("| Resolved violations | {} |\n", r));
     }
+    // Every Issue kind, with a count — a kind is never silently absent.
+    let issues = result.issues();
+    out.push_str(&format!("| Issues | {} |\n", issues.len()));
+    if result.baseline.is_some() {
+        let baselined = issues.iter().filter(|i| i.baselined).count();
+        out.push_str(&format!(
+            "| New / baselined | {} / {} |\n",
+            issues.len() - baselined,
+            baselined
+        ));
+    }
     out.push('\n');
+    let by_kind: Vec<String> = IssueKind::ALL
+        .iter()
+        .map(|kind| {
+            format!(
+                "{} {}",
+                kind,
+                issues.iter().filter(|i| i.kind() == *kind).count()
+            )
+        })
+        .collect();
+    out.push_str(&format!("**By kind:** {}\n\n", by_kind.join(" · ")));
 
     // Top actions
     let actions = noupling_core::analyzer::compute_top_actions(result, 3);
@@ -101,13 +123,41 @@ pub fn format_pr(
         out.push_str("### Action items\n\nNo violations to fix \u{1f389}\n\n");
     }
 
-    if !result.red_flags.is_empty() {
-        out.push_str(&format!("### Red Flags ({})\n\n", result.red_flags.len()));
-        for f in result.red_flags.iter().take(5) {
+    // Top Issues by band (issues() order), capped so the comment stays short.
+    const TOP: usize = 5;
+    if !issues.is_empty() {
+        out.push_str("### Top issues\n\n");
+        for issue in issues.iter().take(TOP) {
+            // One compact number per kind; the reason carries the rest.
+            let figure: String = match &issue.detail {
+                IssueDetail::CouplingViolation(v) => format!(
+                    "{} import{}",
+                    v.weight.max(1),
+                    if v.weight.max(1) == 1 { "" } else { "s" }
+                ),
+                IssueDetail::Cycle(v) => format!("break cost {}", v.break_cost),
+                IssueDetail::RuleViolation(r) => format!("line {}", r.line_number),
+                IssueDetail::LayerViolation(l) => format!("{} → {}", l.from_layer, l.to_layer),
+                IssueDetail::GravityWell(g) => format!("RRI {:.0}", g.total_rri),
+                IssueDetail::RedFlag(f) => format!("RRI {:.0}", f.rri),
+                IssueDetail::StabilityViolation(s) => {
+                    format!("I {:.2} → {:.2}", s.from_instability, s.to_instability)
+                }
+                IssueDetail::ZoneFlag(d) => format!("D {:.2}", d.distance),
+                IssueDetail::LowCohesion(c) => format!("cohesion {:.2}", c.cohesion.unwrap_or(0.0)),
+            };
             out.push_str(&format!(
-                "- **{:?}** (RRI: {:.0}) {}\n",
-                f.flag_type, f.rri, f.recommendation
+                "- **[{}] {}** `{}` _({}{})_\n  {}\n",
+                issue.severity().name().to_uppercase(),
+                issue.kind(),
+                issue.subject(),
+                figure,
+                if issue.baselined { ", baselined" } else { "" },
+                issue.recommendation()
             ));
+        }
+        if issues.len() > TOP {
+            out.push_str(&format!("- … and {} more\n", issues.len() - TOP));
         }
         out.push('\n');
     }
