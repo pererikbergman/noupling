@@ -16,11 +16,11 @@ export interface CompositionViewProps {
   nodes: NodeEntry[];
   edges: EdgeEntry[];
   onNodeClick?: (id: string) => void;
-  /** Under issue focus: the participants. Other cards stay, dimmed (#335, #401). */
-  focusIds?: Set<string> | null;
+  /** Under issue focus: the policy's per-node emphasis. Non-participants stay, dimmed (#335, #401). */
+  emphasisOf?: ((id: string) => "participant" | "dimmed" | null) | null;
 }
 
-export function CompositionView({ nodes, onNodeClick, focusIds }: CompositionViewProps) {
+export function CompositionView({ nodes, onNodeClick, emphasisOf }: CompositionViewProps) {
   // The same node set the LSM shows at this scope: directories, and the
   // files that stand in for an expanded container under issue focus.
   // Filtering files out here made a focused Issue show only the
@@ -41,7 +41,7 @@ export function CompositionView({ nodes, onNodeClick, focusIds }: CompositionVie
           <ContainerCard
             key={n.id}
             node={n}
-            dimmed={!!focusIds && focusIds.size > 0 && !focusIds.has(n.id)}
+            dimmed={emphasisOf?.(n.id) === "dimmed"}
             onClick={() => onNodeClick?.(n.id)}
           />
         ))}

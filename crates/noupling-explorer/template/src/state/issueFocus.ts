@@ -45,7 +45,14 @@ export function computeIssueFocus(
   const lcaPrefix = lca === "" ? "" : lca + "/";
   for (const p of participants) {
     if (!p.startsWith(lcaPrefix) && p !== lca) continue;
-    const rest = p === lca ? "" : p.slice(lcaPrefix.length);
+    if (p === lca) {
+      // A directory-shaped Issue about the scope itself (Zone Flag, Low
+      // Cohesion): the whole scope is the participant, not an empty
+      // `${lca}/` path that nothing matches (#335 review).
+      expandedContainers.add(p);
+      continue;
+    }
+    const rest = p.slice(lcaPrefix.length);
     const firstSegment = rest.split("/")[0];
     const container = lca === "" ? firstSegment : `${lca}/${firstSegment}`;
     expandedContainers.add(container);

@@ -273,7 +273,8 @@ export function CanvasArea({
         >
           <span>
             <strong className="text-edge-violation">Issue focused.</strong>{" "}
-            Canvas scoped to the participants; offending edges highlighted.
+            Showing the participants' shared parent; participants and offending
+            edges at full strength, the rest dimmed.
           </span>
           <button
             onClick={onCancelIssueFocus}
@@ -342,11 +343,7 @@ export function CanvasArea({
             nodes={lsmData.nodes}
             edges={lsmData.edges}
             onNodeClick={onNodeClick}
-            focusIds={
-              issueFocusActive
-                ? new Set([...participantFiles, ...expandedContainers])
-                : null
-            }
+            emphasisOf={issueFocusActive ? (id) => highlight.nodeEmphasis(id) : null}
           />
         </div>
       )}

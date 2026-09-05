@@ -152,6 +152,41 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(banner).not.toContainText("skill");
   });
 
+  test("issue focus puts the participants in the viewport and dims everything else (#334, #335)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // First card: Coupling Violation CheckoutForm.tsx → db.rs.
+    await page.locator("#side-panel ul li button[data-issue-key]").first().click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    const card = (name: string) =>
+      page.locator(`#root-canvas svg g[role='button'][aria-label^='${name} ']`).first();
+    await expect(card("CheckoutForm.tsx")).toBeInViewport();
+    await expect(card("db.rs")).toBeInViewport();
+    // Participants at full opacity; the untouched sibling package dimmed.
+    await expect(card("CheckoutForm.tsx")).toHaveAttribute("data-emphasis", "participant");
+    await expect(card("domain")).toHaveAttribute("data-emphasis", "dimmed");
+    // The offending edge stays prominent; an unrelated edge is dimmed.
+    const offending = page.locator("#root-canvas svg path[data-edge='src/ui/CheckoutForm.tsx→src/infra/db.rs']");
+    await expect(offending).toHaveAttribute("data-emphasis", "participant");
+  });
+
+  test("focusing a directory-shaped Issue keeps its children at full strength (#335)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // The sample's Low Cohesion Issue is about src/ui; its files are the participants.
+    await page.locator("#side-panel ul li button[data-issue-kind='low_cohesion']").first().click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    const cards = page.locator("#root-canvas svg g[role='button']");
+    expect(await cards.count()).toBeGreaterThan(0);
+    const dimmed = page.locator("#root-canvas svg g[role='button'][data-emphasis='dimmed']");
+    expect(await dimmed.count()).toBe(0);
+    // Drilling somewhere else ends the focus.
+    await page.locator("#root-canvas nav[aria-label='Drill scope'] button").first().click();
+    await expect(page.locator("text=Issue focused")).toHaveCount(0);
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {
