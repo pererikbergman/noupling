@@ -293,6 +293,34 @@ export function breadcrumbFor(scope: string): BreadcrumbSegment[] {
 }
 
 /**
+ * The scope the Explorer opens at: the root, unless the root is a chain
+ * of single-child directories (a repo whose only top-level entry is
+ * `crates/`), in which case the first level that branches or holds files.
+ * A one-node canvas tells the reader nothing (#397).
+ */
+export function homeScope(data: DataContract): string {
+  let scope = "";
+  for (;;) {
+    const children = data.nodes.filter((n) =>
+      scope === "" ? n.parent === null : n.parent === scope,
+    );
+    if (children.length !== 1 || children[0].kind === "file") return scope;
+    scope = children[0].id;
+  }
+}
+
+/**
+ * Scopes above `home` (including `""`) resolve to `home`; anything at or
+ * below it is kept. The stored scope stays `""` for "home", so a report
+ * regenerated with a different tree still opens at the right place.
+ */
+export function clampScope(scope: string, home: string): string {
+  if (home === "") return scope;
+  if (scope === home || scope.startsWith(home + "/")) return scope;
+  return home;
+}
+
+/**
  * True when `path` is inside `scope` (or scope is empty).
  */
 export function inScope(path: string, scope: string): boolean {

@@ -850,3 +850,60 @@ fn codebase_path_comes_from_snapshot_root() {
     let contract = extract_data_contract(&html);
     assert_eq!(contract["codebase"]["path"], "/Users/me/code/acme");
 }
+
+/// A directory inherits a layer from its files only when they all agree;
+/// a container over several layers carries none (#398 — `crates` was
+/// labelled "scanner" because one descendant matched that layer).
+#[test]
+fn directory_layer_is_unanimous_or_absent() {
+    let snapshot = Snapshot {
+        id: "s".into(),
+        timestamp: "2026-06-04T12:00:00".into(),
+        root_path: "/p".into(),
+    };
+    let settings: Settings = serde_json::from_str(
+        r#"{"layers":[{"name":"scanner","pattern":"**/scanner/**"},{"name":"core","pattern":"**/core/**"}]}"#,
+    )
+    .unwrap();
+    let modules = vec![
+        file("a", "crates/lib/src/scanner/a.rs"),
+        file("b", "crates/lib/src/scanner/b.rs"),
+        file("c", "crates/lib/src/core/c.rs"),
+    ];
+    let audit = AuditResultBuilder::new()
+        .with_layers(settings.layers.clone(), false)
+        .build();
+    let html = render(
+        &modules,
+        &[],
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
+    let contract = extract_data_contract(&html);
+    let layer_of = |id: &str| {
+        contract["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == id)
+            .unwrap_or_else(|| panic!("no node {id}"))["layer"]
+            .clone()
+    };
+    assert_eq!(
+        layer_of("crates/lib/src/scanner"),
+        "scanner",
+        "every file agrees"
+    );
+    assert_eq!(layer_of("crates/lib/src/core"), "core");
+    assert!(
+        layer_of("crates/lib/src").is_null(),
+        "two layers below: no layer"
+    );
+    assert!(
+        layer_of("crates").is_null(),
+        "container over several layers: no layer"
+    );
+}

@@ -574,15 +574,22 @@ fn build_nodes(
             serde_json::Value::Null
         };
 
-        // Package layer: prefer the configured layer pattern (`layer_of`),
-        // but fall back to inheriting from any contained file when the
-        // directory itself doesn't match a layer pattern. This is what
-        // makes the LSM put packages on the right tier when settings.json
-        // patterns target file-inside-dir but not the dir itself.
+        // Directory layer: prefer the configured layer pattern (`layer_of`);
+        // otherwise inherit from the contained files, but only when every
+        // layered file below agrees. A container over several layers has
+        // no layer of its own (#398 — `crates` used to be labelled with
+        // whichever descendant matched first).
         let layer = layer_of(path).or_else(|| {
-            files_in_dir
-                .get(path)
-                .and_then(|fs| fs.iter().find_map(|f| layer_of(f)))
+            let mut unanimous: Option<String> = None;
+            for f in files_in_dir.get(path).into_iter().flatten() {
+                match (layer_of(f), &unanimous) {
+                    (None, _) => {}
+                    (Some(l), None) => unanimous = Some(l),
+                    (Some(l), Some(u)) if &l == u => {}
+                    (Some(_), Some(_)) => return None,
+                }
+            }
+            unanimous
         });
 
         // Ca/Ce per directory: count edges crossing the directory boundary.

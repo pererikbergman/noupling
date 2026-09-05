@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import { LSM } from "../lsm/LSM";
+import { computeLSMLayout } from "../lsm/layout";
 import { Matrix } from "../lsm/Matrix";
 import { CompositionView } from "../lsm/CompositionView";
 import { Breadcrumb } from "./Breadcrumb";
@@ -11,6 +12,7 @@ import {
   type PathFinder,
 } from "../state/explorerState";
 import { nodeById } from "../state/queries";
+import { collapsedLabel } from "../labels";
 import type { HighlightPolicy } from "../state/highlightPolicy";
 
 export interface CanvasAreaProps {
@@ -37,6 +39,14 @@ export interface CanvasAreaProps {
 const ZOOM_STEP = 1.2;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
+/** Fit never enlarges a small graph past this — one node must not fill the screen (#397, #399). */
+const MAX_FIT_ZOOM = 1.15;
+/** Left gutter so the zoom stack never covers the first column or a band label (#399). */
+const CANVAS_GUTTER_CLASS = "pl-14";
+/** Matrix cells scale with the canvas between these bounds (#399). */
+const MATRIX_CELL_MIN = 14;
+const MATRIX_CELL_MAX = 36;
+const MATRIX_LABEL_COLUMN = 220;
 // Stable empty Set so issue-focus-off renders don't churn child memos
 // keyed on identity.
 const EMPTY_STRING_SET: Set<string> = new Set();
@@ -61,6 +71,8 @@ export function CanvasArea({
 }: CanvasAreaProps) {
   const segments = breadcrumbFor(scope);
   const [zoom, setZoom] = useState(1);
+  const canvasRef = useRef<HTMLElement>(null);
+  const canvasSize = useElementSize(canvasRef);
   const expandedContainers =
     highlight.issueFocus?.expandedContainers ?? EMPTY_STRING_SET;
   const participantFiles =
@@ -83,7 +95,7 @@ export function CanvasArea({
     }
     const immediate = data.nodes.filter((n) => isImmediateChild(n, scope));
     const collapsed = immediate.map((n) =>
-      collapseSingletonChain(n, childrenByParent),
+      collapsedLabel(n, collapseSingletonChain(n, childrenByParent)),
     );
     // Issue-focus expansion (#275 follow-up): for containers in the
     // expanded set, replace the single container card with the
@@ -158,6 +170,35 @@ export function CanvasArea({
     };
   }, [data, scope, expandedContainers, participantFiles]);
 
+  // Fit the LSM to the canvas whenever what it shows changes (scope,
+  // view, focus, filters). Manual zooming still works afterwards; the
+  // fit button re-applies this (#399).
+  const lsmExtent = useMemo(() => {
+    const l = computeLSMLayout(lsmData);
+    return { width: l.width, height: l.height };
+  }, [lsmData]);
+  const fitZoom = useMemo(() => {
+    if (canvasSize.width === 0 || canvasSize.height === 0) return 1;
+    const topOffset = issueFocusActive ? 144 : 96; // pt-36 / pt-24
+    const availW = canvasSize.width - 56 - 32; // gutter + right padding
+    const availH = canvasSize.height - topOffset - 64; // bottom padding
+    const z = Math.min(availW / lsmExtent.width, availH / lsmExtent.height);
+    return Math.max(MIN_ZOOM, Math.min(MAX_FIT_ZOOM, z));
+  }, [canvasSize, lsmExtent, issueFocusActive]);
+  const sizeReady = canvasSize.width > 0;
+  useEffect(() => {
+    if (sizeReady) setZoom(fitZoom);
+    // Re-fit on content change and the first measured size — not on
+    // every resize, so a manual zoom survives opening the details panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, viewMode, lsmData, sizeReady]);
+
+  const matrixCell = useMemo(() => {
+    const n = Math.max(1, lsmData.nodes.length);
+    const avail = canvasSize.width - MATRIX_LABEL_COLUMN - 56 - 48;
+    return Math.max(MATRIX_CELL_MIN, Math.min(MATRIX_CELL_MAX, Math.floor(avail / n)));
+  }, [canvasSize.width, lsmData.nodes.length]);
+
   function onNodeDoubleClick(id: string) {
     const node = nodeById(data, id);
     if (!node) return;
@@ -166,7 +207,7 @@ export function CanvasArea({
   }
 
   return (
-    <main id="root-canvas" className="relative overflow-hidden bg-canvas">
+    <main id="root-canvas" ref={canvasRef} className="relative overflow-hidden bg-canvas">
       {/* Spot-filter pills overlay on the canvas (PRD F5.5). Sits
           below the breadcrumb row; top offset accounts for it. */}
       <div className="absolute left-4 top-14 z-10 flex flex-wrap gap-1.5">
@@ -245,15 +286,23 @@ export function CanvasArea({
       )}
 
       {viewMode === "lsm" && (
-        <div className={`h-full w-full overflow-auto px-4 pb-16 ${canvasTop}`}>
+        <div className={`h-full w-full overflow-auto pr-4 pb-16 ${CANVAS_GUTTER_CLASS} ${canvasTop}`}>
+          {/* The outer box takes the scaled size so the scroll extent matches
+              what is drawn; the inner box carries the transform. */}
           <div
             style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: "top left",
-              display: "inline-block",
-              minWidth: "100%",
+              width: lsmExtent.width * zoom,
+              height: lsmExtent.height * zoom,
             }}
           >
+            <div
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+                width: lsmExtent.width,
+                height: lsmExtent.height,
+              }}
+            >
             <LSM
               data={lsmData}
               onNodeClick={onNodeClick}
@@ -261,13 +310,15 @@ export function CanvasArea({
               highlight={highlight}
               onEdgeClick={onEdgeClick}
             />
+            </div>
           </div>
         </div>
       )}
       {viewMode === "matrix" && (
-        <div className={`h-full w-full overflow-auto px-4 pb-16 ${canvasTop}`}>
+        <div className={`h-full w-full overflow-auto pr-4 pb-16 ${CANVAS_GUTTER_CLASS} ${canvasTop}`}>
           <Matrix
             data={lsmData}
+            cellSize={matrixCell}
             onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             highlight={highlight}
@@ -276,7 +327,7 @@ export function CanvasArea({
         </div>
       )}
       {viewMode === "composition" && (
-        <div className={`h-full w-full ${canvasTop}`}>
+        <div className={`h-full w-full ${CANVAS_GUTTER_CLASS} ${canvasTop}`}>
           <CompositionView
             nodes={lsmData.nodes}
             edges={lsmData.edges}
@@ -302,9 +353,9 @@ export function CanvasArea({
           −
         </ZoomBtn>
         <ZoomBtn
-          title="Reset zoom to 100%"
-          ariaLabel="Reset zoom"
-          onClick={() => setZoom(1)}
+          title={`Fit to view (${Math.round(fitZoom * 100)}%)`}
+          ariaLabel="Fit to view"
+          onClick={() => setZoom(fitZoom)}
         >
           ⛶
         </ZoomBtn>
@@ -327,6 +378,23 @@ export function CanvasArea({
       </div>
     </main>
   );
+}
+
+/** Live size of an element, via ResizeObserver; `{0,0}` until measured. */
+function useElementSize(ref: React.RefObject<HTMLElement | null>) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () =>
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return size;
 }
 
 function isImmediateChild(node: NodeEntry, scope: string): boolean {

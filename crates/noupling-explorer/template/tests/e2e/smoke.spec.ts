@@ -32,20 +32,22 @@ test.describe("Explorer — acme-payments sample", () => {
   });
 
   test("LSM renders nodes (immediate children of scope)", async ({ page }) => {
-    // The sample wraps everything under `src/`, so root scope shows a
-    // single container; the layered tiers appear once we drill in.
+    // The sample wraps everything under `src/`; the home scope is `src`
+    // itself (#397), so the canvas opens on its packages, not one card.
     const nodes = page.locator("g[role='button']");
     await expect(nodes.first()).toBeVisible();
-    expect(await nodes.count()).toBeGreaterThan(0);
+    expect(await nodes.count()).toBeGreaterThan(1);
   });
 
-  test("drill-in via double-click reveals the layered tiers", async ({
+  test("the Explorer opens at the first level that branches, with the layered tiers visible (#397)", async ({
     page,
   }) => {
-    // Double-click the root container (`src`) → tiers UI / DOMAIN / INFRA
-    // become visible inside.
-    const root = page.locator("g[role='button']").first();
-    await root.dblclick();
+    // The sample wraps everything under a lone `src/`; the home scope
+    // skips that single-child chain so the first canvas shows the
+    // tiers UI / DOMAIN / INFRA, not one `src` card.
+    await expect(
+      page.locator("#root-canvas nav[aria-label='Drill scope']"),
+    ).toContainText("src");
     // Tier band labels contain the layer name + file count.
     await expect(page.locator("svg text:has-text('UI')").first()).toBeVisible();
     await expect(
@@ -84,8 +86,6 @@ test.describe("Explorer — acme-payments sample", () => {
   }) => {
     // Sample wraps everything under src/, and the llm.summary lives on
     // src/ui — drill into src first so Composition shows that level.
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     await page.locator("button:has-text('Composition')").click();
     await expect(
       page.locator("text=Checkout + receipt UI").first(),
@@ -102,8 +102,6 @@ test.describe("Explorer — acme-payments sample", () => {
     // sample packages (ui, domain, data, infra) are immediate
     // children; the matrix must render at least one coloured cell
     // for the aggregated file-level imports between them.
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     await page.locator("button:has-text('Matrix')").click();
     // accent-domain alpha-tinted cells = healthy (non-violation) edges.
     const coloured = page.locator(
@@ -137,8 +135,6 @@ test.describe("Explorer — acme-payments sample", () => {
     // bring the cycle into scope. The dblclick also triggers a single
     // click that opens the details panel — dismiss it with Esc before
     // reaching for the toolbar button on the right edge.
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     const minCut = page.locator("button[aria-label*='minimum cut']");
     await expect(minCut).toBeVisible();
     await minCut.click();
@@ -337,7 +333,11 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(
       page.locator("#side-panel button[aria-label*='Up to']").first(),
     ).toBeVisible();
-    expect(await rows.count()).toBeGreaterThan(0);
+    // The drilled package is a leaf (no sub-containers), so the list is
+    // empty and the tab says so; the shared scope moved with it.
+    await expect(
+      page.locator("#root-canvas nav[aria-label='Drill scope']"),
+    ).toContainText("domain");
   });
 
   test("Files tab: double-click drills, in-tab breadcrumb navigates back, Hide files persists (#273)", async ({
@@ -449,8 +449,6 @@ test.describe("Explorer — acme-payments sample", () => {
   test("Matrix row label is click-to-select / double-click-to-drill (keeps state in sync)", async ({
     page,
   }) => {
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     await page.locator("button:has-text('Matrix')").click();
     // Single click on a row label selects the node — DetailsPanel
     // opens (same selection state the LSM uses).
@@ -475,8 +473,6 @@ test.describe("Explorer — acme-payments sample", () => {
   }) => {
     // Drill into src so packages are immediate children, switch to
     // Matrix, then click one of the coloured (populated) cells.
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     await page.locator("button:has-text('Matrix')").click();
     const populated = page.locator(
       "#root-canvas td[style*='accent-domain'], #root-canvas td[style*='edge-violation']",
@@ -491,8 +487,6 @@ test.describe("Explorer — acme-payments sample", () => {
   test("Clicking an LSM edge opens the edge-details inlay (#295)", async ({
     page,
   }) => {
-    await page.locator("g[role='button']").first().dblclick();
-    await page.keyboard.press("Escape");
     // Each edge sits inside a <g style="cursor: pointer"> that owns the
     // visible path + the fat invisible hit area. Click it.
     const edges = page.locator("#root-canvas svg g > g[style*='cursor']");

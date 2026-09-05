@@ -13,6 +13,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "useDefineForClassFields": true,
     "baseUrl": ".",
