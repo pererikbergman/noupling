@@ -3,7 +3,7 @@
 
 use fxhash::{FxHashMap, FxHashSet};
 
-use super::{audit, AuditResult};
+use super::{audit_with_settings, AuditResult};
 use crate::core::{Dependency, Module};
 
 /// A cross-module dependency that violates the declared `depends_on` graph.
@@ -34,12 +34,20 @@ pub struct MonorepoResult {
     pub total_modules: usize,
 }
 
-/// Run independent audits per configured module and detect cross-module violations.
+/// Run the shared audit pipeline (`audit_with_settings`: risk weights, layer
+/// resolution and inference, rules, layer violations) once per configured
+/// module, and detect cross-module violations against `depends_on`.
+///
+/// Each module is audited exactly as `noupling audit --module X` and
+/// `noupling report --module X` audit it, so the three agree (ADR 0001,
+/// #357). `type_counts` may be empty when the caller cannot recompute them.
 pub fn audit_modules(
     all_modules: &[Module],
     all_dependencies: &[Dependency],
-    module_configs: &[crate::settings::ModuleConfig],
+    type_counts: &[crate::core::ModuleTypeCounts],
+    settings: &crate::settings::Settings,
 ) -> MonorepoResult {
+    let module_configs = &settings.modules;
     let id_to_path: FxHashMap<&str, &str> = all_modules
         .iter()
         .map(|m| (m.id.as_str(), m.path.as_str()))
@@ -84,7 +92,22 @@ pub fn audit_modules(
             .cloned()
             .collect();
 
-        let result = audit(&filtered_modules, &filtered_deps);
+        let filtered_paths: FxHashSet<&str> =
+            filtered_modules.iter().map(|m| m.path.as_str()).collect();
+        let filtered_counts: Vec<crate::core::ModuleTypeCounts> = type_counts
+            .iter()
+            .filter(|t| filtered_paths.contains(t.module_path.as_str()))
+            .map(|t| crate::core::ModuleTypeCounts {
+                module_path: t.module_path.clone(),
+                counts: t.counts.clone(),
+            })
+            .collect();
+        let result = audit_with_settings(
+            &filtered_modules,
+            &filtered_deps,
+            &filtered_counts,
+            settings,
+        );
         let file_count = filtered_modules.len();
         weighted_score_sum += result.score * file_count as f64;
         total_files += file_count;
@@ -162,6 +185,66 @@ mod tests {
         }
     }
 
+    fn settings_with(modules: Vec<crate::settings::ModuleConfig>) -> crate::settings::Settings {
+        let mut s: crate::settings::Settings = serde_json::from_str("{}").unwrap();
+        s.modules = modules;
+        s
+    }
+
+    /// Monorepo mode runs the same pipeline as a single-module audit (#357):
+    /// declared layers produce Layer Violations, risk weights fill TRI, and a
+    /// module's score equals `audit_with_settings` on that module alone.
+    #[test]
+    fn audit_modules_runs_the_shared_pipeline_per_module() {
+        let modules = vec![
+            make_module("a1", "app/src/data/repo.rs"),
+            make_module("a2", "app/src/ui/screen.rs"),
+            make_module("l1", "lib/src/core.rs"),
+        ];
+        // data → ui: upward against the declared order (ui above data).
+        let deps = vec![Dependency {
+            from_module_id: "a1".to_string(),
+            to_module_id: "a2".to_string(),
+            line_number: 1,
+        }];
+        let mut settings = settings_with(vec![
+            crate::settings::ModuleConfig {
+                name: "app".to_string(),
+                path: "app/src".to_string(),
+                depends_on: vec![],
+            },
+            crate::settings::ModuleConfig {
+                name: "lib".to_string(),
+                path: "lib/src".to_string(),
+                depends_on: vec![],
+            },
+        ]);
+        settings.layers = serde_json::from_str(
+            r#"[{"name":"ui","pattern":"**/ui/**"},{"name":"data","pattern":"**/data/**"}]"#,
+        )
+        .unwrap();
+
+        let result = audit_modules(&modules, &deps, &[], &settings);
+        let (_, app) = &result.module_results[0];
+        assert_eq!(
+            app.layer_violations.len(),
+            1,
+            "layers are applied: {:?}",
+            app.layer_violations
+        );
+        assert_eq!(
+            app.layers.len(),
+            2,
+            "the result carries the layers it was audited under"
+        );
+        assert!(app.tri > 0.0, "risk weights are applied");
+
+        let app_modules: Vec<Module> = modules.iter().take(2).cloned().collect();
+        let alone = audit_with_settings(&app_modules, &deps, &[], &settings);
+        assert_eq!(app.score, alone.score, "same score as `--module app` alone");
+        assert_eq!(app.issues().len(), alone.issues().len());
+    }
+
     #[test]
     fn audit_modules_independent_analysis() {
         let modules = vec![
@@ -189,7 +272,8 @@ mod tests {
             },
         ];
 
-        let result = audit_modules(&modules, &deps, &configs);
+        let settings = settings_with(configs);
+        let result = audit_modules(&modules, &deps, &[], &settings);
         assert_eq!(result.module_results.len(), 2);
         assert_eq!(result.module_results[0].0, "app");
         assert_eq!(result.module_results[1].0, "lib");
@@ -223,7 +307,8 @@ mod tests {
             },
         ];
 
-        let result = audit_modules(&modules, &deps, &configs);
+        let settings = settings_with(configs);
+        let result = audit_modules(&modules, &deps, &[], &settings);
         assert_eq!(result.cross_module_violations.len(), 1);
         assert_eq!(result.cross_module_violations[0].from_config, "app");
         assert_eq!(result.cross_module_violations[0].to_config, "lib");
@@ -253,7 +338,8 @@ mod tests {
             },
         ];
 
-        let result = audit_modules(&modules, &deps, &configs);
+        let settings = settings_with(configs);
+        let result = audit_modules(&modules, &deps, &[], &settings);
         assert!(result.cross_module_violations.is_empty());
     }
 
@@ -280,7 +366,8 @@ mod tests {
             },
         ];
 
-        let result = audit_modules(&modules, &deps, &configs);
+        let settings = settings_with(configs);
+        let result = audit_modules(&modules, &deps, &[], &settings);
         // Both modules have score 100, weighted average is 100
         assert!((result.overall_score - 100.0).abs() < 0.01);
         assert_eq!(result.total_modules, 4);
@@ -294,7 +381,8 @@ mod tests {
         let deps = vec![];
         let configs = vec![];
 
-        let result = audit_modules(&modules, &deps, &configs);
+        let settings = settings_with(configs);
+        let result = audit_modules(&modules, &deps, &[], &settings);
         assert!(result.module_results.is_empty());
         assert_eq!(result.overall_score, 100.0);
     }

@@ -361,7 +361,7 @@ import com.example.legacy.OtherHelper</code></pre>
 
       <!-- Advanced -->
       <h2 id="monorepo">Monorepo Support</h2>
-      <p>Define independent modules, each analyzed separately with its own health score.</p>
+      <p>Define independent modules, each analyzed separately with its own health score. Every module goes through the same audit as a single-module project &mdash; risk weights, your <code>layers</code> and <code>dependency_rules</code>, layer inference &mdash; so <code>audit</code>, <code>audit --module X</code> and <code>report --module X</code> agree, and the multi-module summary lists each module's Issue cards.</p>
 <pre><code class="language-json">{
   "modules": [
     { "name": "app", "path": "app/src", "depends_on": ["lib-core"] },
