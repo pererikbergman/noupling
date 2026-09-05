@@ -278,8 +278,10 @@ function narrowData(
   const visibleEdges = data.edges.filter(
     (e) => allScopeIds.has(e.from) && allScopeIds.has(e.to),
   );
+  // `module_count` keeps the contract's meaning (core calls every file a
+  // module); directory counts are derived from `nodes` where shown (#402).
   const fileCount = visibleNodes.filter((n) => n.kind === "file").length;
-  const moduleCount = visibleNodes.filter((n) => n.kind !== "file").length;
+  const moduleCount = fileCount;
   const visibleCycles = data.cycles.filter((c) => c.members.every((id) => allScopeIds.has(id)));
   const visibleViolations = data.violations.filter(
     (v) => allScopeIds.has(v.edge.from) && allScopeIds.has(v.edge.to),

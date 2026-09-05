@@ -506,6 +506,8 @@ fn build_nodes(
         }
     }
 
+    let mut loc_of: HashMap<&str, usize> = HashMap::new();
+
     // File nodes
     for m in &files {
         let parent = parent_dir(&m.path).map(str::to_string);
@@ -517,6 +519,7 @@ fn build_nodes(
             serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0)
         };
         let loc = count_lines(codebase_root, &m.path);
+        loc_of.insert(m.path.as_str(), loc);
         let blast_up = blast_radius_for(m.path.as_str(), &upstream_adj);
         let blast_down = blast_radius_for(m.path.as_str(), &downstream_adj);
         nodes.push(NodeEntry {
@@ -592,9 +595,15 @@ fn build_nodes(
             unanimous
         });
 
-        // Ca/Ce per directory: count edges crossing the directory boundary.
+        // Ca/Ce per directory: the audit's instability row when it has one
+        // (the same numbers the Stability Violation and Zone Flag cards
+        // quote, #402); otherwise count edges crossing the directory
+        // boundary.
+        let audited = audit_result.instability.iter().find(|i| i.dir == *path);
         let inside = files_in_dir.get(path);
-        let (ca, ce) = if let Some(inside) = inside {
+        let (ca, ce) = if let Some(i) = audited {
+            (i.ca, i.ce)
+        } else if let Some(inside) = inside {
             let mut ca = 0usize;
             let mut ce = 0usize;
             for d in dependencies {
@@ -619,11 +628,32 @@ fn build_nodes(
         } else {
             (0, 0)
         };
-        let instability = if ca + ce == 0 {
-            serde_json::Value::Null
-        } else {
-            serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0)
+        let instability = match audited {
+            Some(i) => serde_json::Value::from((i.instability * 100.0).round() / 100.0),
+            None if ca + ce == 0 => serde_json::Value::Null,
+            None => serde_json::Value::from((ce as f64 / (ca + ce) as f64 * 100.0).round() / 100.0),
         };
+        let abstractness = audit_result
+            .abstractness
+            .iter()
+            .find(|a| a.dir == *path)
+            .map(|a| serde_json::Value::from((a.abstractness * 100.0).round() / 100.0))
+            .unwrap_or(serde_json::Value::Null);
+        let distance = audit_result
+            .distance
+            .iter()
+            .find(|d| d.dir == *path)
+            .map(|d| serde_json::Value::from((d.distance * 100.0).round() / 100.0))
+            .unwrap_or(serde_json::Value::Null);
+        // Every file below this directory, and their lines, roll up (#402).
+        let all_files = inside.map(|f| f.len()).unwrap_or(0);
+        let loc: usize = inside
+            .map(|fs| {
+                fs.iter()
+                    .map(|f| *loc_of.get(f.as_str()).unwrap_or(&0))
+                    .sum()
+            })
+            .unwrap_or(0);
 
         nodes.push(NodeEntry {
             id: path.clone(),
@@ -634,11 +664,12 @@ fn build_nodes(
                 "afferent": ca,
                 "efferent": ce,
                 "instability": instability,
-                "abstractness": null,
-                "distance_from_main_sequence": null,
+                "abstractness": abstractness,
+                "distance_from_main_sequence": distance,
                 "cohesion": cohesion,
-                "file_count": info.file_count,
-                "loc": 0,
+                "file_count": all_files,
+                "direct_file_count": info.file_count,
+                "loc": loc,
             }),
         });
     }

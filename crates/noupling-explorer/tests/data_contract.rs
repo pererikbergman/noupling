@@ -907,3 +907,62 @@ fn directory_layer_is_unanimous_or_absent() {
         "container over several layers: no layer"
     );
 }
+
+/// Directory metrics are the audit's numbers, not a second derivation
+/// (#402): a package's Ca/Ce/I match the Stability Violation card that
+/// quotes them, `file_count` counts every file below, and `loc` sums them.
+#[test]
+fn directory_metrics_come_from_the_audit_and_roll_up() {
+    use noupling_core::analyzer::InstabilityMetric;
+    let snapshot = Snapshot {
+        id: "s".into(),
+        timestamp: "2026-06-04T12:00:00".into(),
+        root_path: "/definitely/not/on/disk".into(),
+    };
+    let settings: Settings = serde_json::from_str("{}").unwrap();
+    let modules = vec![
+        file("lib", "src/lib.rs"),
+        file("a", "src/analyzer/a.rs"),
+        file("b", "src/analyzer/deep/b.rs"),
+    ];
+    let deps = vec![dep("lib", "a")];
+    let audit = AuditResultBuilder::new()
+        .with_instability(vec![InstabilityMetric {
+            dir: "src".into(),
+            ca: 3,
+            ce: 4,
+            instability: 0.57,
+        }])
+        .build();
+    let html = render(
+        &modules,
+        &deps,
+        &audit,
+        &settings,
+        &snapshot,
+        &RenderOptions::default(),
+    )
+    .expect("render must succeed");
+    let contract = extract_data_contract(&html);
+    let node = |id: &str| {
+        contract["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == id)
+            .unwrap_or_else(|| panic!("no node {id}"))
+            .clone()
+    };
+    let src = node("src");
+    assert_eq!(src["metrics"]["afferent"], 3, "Ca is the audit's");
+    assert_eq!(src["metrics"]["efferent"], 4, "Ce is the audit's");
+    assert_eq!(src["metrics"]["instability"], 0.57);
+    assert_eq!(
+        src["metrics"]["file_count"], 3,
+        "every file below, not only direct ones"
+    );
+    assert_eq!(src["metrics"]["direct_file_count"], 1);
+    assert_eq!(node("src/analyzer")["metrics"]["file_count"], 2);
+    // No audit row for src/analyzer: fall back to the boundary count.
+    assert_eq!(node("src/analyzer")["metrics"]["afferent"], 1);
+}
