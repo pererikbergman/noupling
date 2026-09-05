@@ -115,9 +115,14 @@ export function buildHighlightPolicy(
   const isParticipant = (id: string) => {
     if (!focusIds) return false;
     if (focusIds.has(id)) return true;
-    // A card standing in for a collapsed chain or a package that holds a
-    // participant counts as one.
-    for (const f of focusIds) if (f.startsWith(id + "/")) return true;
+    for (const f of focusIds) {
+      // A card standing in for a collapsed chain or a package that holds a
+      // participant counts as one …
+      if (f.startsWith(id + "/")) return true;
+      // … and so does anything inside a participant directory (the children
+      // shown when a directory-shaped Issue is focused).
+      if (id.startsWith(f + "/")) return true;
+    }
     return false;
   };
 

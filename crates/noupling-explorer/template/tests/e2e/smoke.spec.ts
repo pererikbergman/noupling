@@ -171,6 +171,22 @@ test.describe("Explorer — acme-payments sample", () => {
     await expect(offending).toHaveAttribute("data-emphasis", "participant");
   });
 
+  test("focusing a directory-shaped Issue keeps its children at full strength (#335)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    // The sample's Low Cohesion Issue is about src/ui; its files are the participants.
+    await page.locator("#side-panel ul li button[data-issue-kind='low_cohesion']").first().click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    const cards = page.locator("#root-canvas svg g[role='button']");
+    expect(await cards.count()).toBeGreaterThan(0);
+    const dimmed = page.locator("#root-canvas svg g[role='button'][data-emphasis='dimmed']");
+    expect(await dimmed.count()).toBe(0);
+    // Drilling somewhere else ends the focus.
+    await page.locator("#root-canvas nav[aria-label='Drill scope'] button").first().click();
+    await expect(page.locator("text=Issue focused")).toHaveCount(0);
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {

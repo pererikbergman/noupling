@@ -343,11 +343,7 @@ export function CanvasArea({
             nodes={lsmData.nodes}
             edges={lsmData.edges}
             onNodeClick={onNodeClick}
-            focusIds={
-              issueFocusActive
-                ? new Set([...participantFiles, ...expandedContainers])
-                : null
-            }
+            emphasisOf={issueFocusActive ? (id) => highlight.nodeEmphasis(id) : null}
           />
         </div>
       )}

@@ -186,7 +186,10 @@ export function App({ data }: AppProps) {
         data={data}
         scope={state.scope}
         homeScope={home}
-        onScope={(scope) => state.setState({ scope })}
+        onScope={(scope) => {
+          if (issueFocus && scope !== issueFocus.lca) setIssueFocus(null);
+          state.setState({ scope });
+        }}
         onSelect={(selected) => state.setState({ selected })}
         onSpotFilter={(spotFilter) => {
           // Clearing spot filter (back to "all") also exits focus mode
@@ -204,8 +207,16 @@ export function App({ data }: AppProps) {
         data={visibleData}
         scope={state.scope}
         codebaseTitle={codebaseTitleOf(data)}
-        onScope={(scope) => state.setState({ scope })}
-        onClearScope={() => state.setState({ scope: "" })}
+        onScope={(scope) => {
+          // Leaving the participants' shared parent ends the focus; the
+          // banner must never describe a canvas it no longer applies to.
+          if (issueFocus && scope !== issueFocus.lca) setIssueFocus(null);
+          state.setState({ scope });
+        }}
+        onClearScope={() => {
+          setIssueFocus(null);
+          state.setState({ scope: "" });
+        }}
         onNodeClick={onNodePicked}
         spotFilter={state.spotFilter}
         onSpotFilter={(spotFilter) => state.setState({ spotFilter })}
