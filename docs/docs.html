@@ -547,7 +547,7 @@ noupling audit .</code></pre>
 
       <h2 id="abstractness">Abstractness (Martin's A)</h2>
 <pre><code>A = abstract_declarations / (abstract_declarations + concrete_declarations)</code></pre>
-      <p>Counted per file by the language parser and summed per directory. <strong>Abstract</strong>: interfaces, abstract classes, Rust traits, Kotlin/Java interfaces and abstract classes. <strong>Concrete</strong>: classes, enums, structs, and module-level functions (declared or arrow), so a file of React components or free functions counts as implementation even when it also declares a <code>Props</code> interface. Type aliases count as neither. A directory with no declarations at all has no A and no Zone Flag.</p>
+      <p>Counted per file by the language parser and summed per directory. <strong>Abstract</strong>: interfaces, abstract classes, Rust traits, Kotlin/Java interfaces and abstract classes. <strong>Concrete</strong>: classes, objects, enums, structs, and module-level functions (declared or arrow in TypeScript, free <code>fn</code> in Rust, top-level <code>fun</code> in Kotlin), so a file of React or Compose components or free functions counts as implementation even when it also declares a <code>Props</code> interface. Type aliases count as neither. A directory with no declarations at all has no A and no Zone Flag.</p>
 
 
       <h2 id="dependency-depth">Dependency Depth</h2>

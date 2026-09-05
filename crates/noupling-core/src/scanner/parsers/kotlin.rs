@@ -46,6 +46,14 @@ impl LanguageParser for KotlinParser {
     }
 }
 
+/// True for a `fun` declared directly in the file, false for a member of a
+/// class/object/interface body (or a local function).
+fn is_top_level_fun(node: tree_sitter::Node) -> bool {
+    node.parent()
+        .map(|p| p.kind() == "source_file")
+        .unwrap_or(true)
+}
+
 fn count_kotlin_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCounts) {
     match node.kind() {
         // tree-sitter-kotlin-ng folds both `interface` and `class` into
@@ -58,6 +66,9 @@ fn count_kotlin_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCo
             }
         }
         "object_declaration" => counts.concrete_count += 1,
+        // A top-level `fun` (every @Composable screen file) is implementation
+        // (#413); member functions belong to their class.
+        "function_declaration" if is_top_level_fun(node) => counts.concrete_count += 1,
         _ => {}
     }
     let _ = source;
@@ -199,6 +210,16 @@ mod tests {
         assert_eq!(imports.len(), 1);
         assert_eq!(imports[0].path, "com.example.MyClass");
         assert_eq!(imports[0].line_number, 1);
+    }
+
+    /// A file of top-level `fun`s next to one interface is implementation,
+    /// not "100% abstract" (#413). Member functions are not counted twice.
+    #[test]
+    fn kotlin_counts_top_level_functions_as_concrete() {
+        let source = "interface Repo {\n    fun load(): Int\n}\n\nfun screen() {\n}\n\nfun row() {\n}\n\nclass Impl : Repo {\n    override fun load(): Int {\n        return 1\n    }\n}\n";
+        let counts = KotlinParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 1, "{counts:?}");
+        assert_eq!(counts.concrete_count, 3, "Screen, Row, Impl: {counts:?}");
     }
 
     #[test]
