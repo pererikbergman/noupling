@@ -164,7 +164,7 @@ impl<'a> AuditPipeline<'a> {
         // (5) Diff filter — if the scan ran against a diff base, narrow
         // the result to the files that changed.
         if let Some(ref changed_files) = scan_meta.diff_changed_files {
-            result.filter_by_changed_files(changed_files);
+            result.filter_by_changed_files(changed_files, &self.settings.risk_weights);
         }
 
         // (6) Baseline — mark accepted Issues; never drop them.

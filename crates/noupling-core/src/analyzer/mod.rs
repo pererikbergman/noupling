@@ -279,8 +279,13 @@ impl AuditResultBuilder {
 }
 
 impl AuditResult {
-    /// Keep only violations involving at least one changed file and recalculate the score.
-    pub fn filter_by_changed_files(&mut self, changed_files: &[String]) {
+    /// Keep only violations involving at least one changed file and re-score
+    /// the survivors on TRI — the same formula every other path uses (#354).
+    pub fn filter_by_changed_files(
+        &mut self,
+        changed_files: &[String],
+        weights: &crate::settings::RiskWeights,
+    ) {
         self.violations.retain(|v| {
             // Coupling: check if from_module or to_module is a changed file
             if !v.is_circular {
@@ -308,7 +313,7 @@ impl AuditResult {
             }
             false
         });
-        self.recalculate_score();
+        self.score_by_tri(weights);
     }
 
     /// Remove violations below the given severity threshold and recalculate the score.
@@ -396,11 +401,20 @@ impl AuditResult {
         // a reduced weight; apply it before the RRIs are summed (#354).
         self.apply_layer_weights(layers);
 
-        // Compute TRI (Total Risk Index) and derive health score.
-        // TRI = sum of all violation RRIs.
-        // Score = 100 * (1 - TRI / (total_modules * max_weight)), clamped to 0-100.
-        // max_weight is the highest configured weight (typically circular=10),
-        // so a project where every module averages 1 worst-case violation scores 0.
+        self.score_by_tri(weights);
+
+        // Detect Gravity Wells: modules with disproportionately high aggregate RRI.
+        self.gravity_wells = compute_gravity_wells(&self.violations, &self.coupling_metrics);
+        self.red_flags = compute_red_flags(&self.violations, &self.coupling_metrics);
+    }
+
+    /// The score, from the violations' RRIs (#354): TRI is their sum and
+    /// Score = 100 · (1 − TRI / (total_modules · max_weight)), clamped to
+    /// 0–100. `max_weight` is the highest configured weight (typically
+    /// circular = 10), so a project where every module averages one
+    /// worst-case violation scores 0. Every path that changes the violation
+    /// set after RRIs exist ends here, never on the severity sum.
+    pub fn score_by_tri(&mut self, weights: &crate::settings::RiskWeights) {
         self.tri = self.violations.iter().map(|v| v.rri).sum();
         let max_weight = weights
             .downward
@@ -415,10 +429,6 @@ impl AuditResult {
         } else {
             self.assign_score(|_| 0.0);
         }
-
-        // Detect Gravity Wells: modules with disproportionately high aggregate RRI.
-        self.gravity_wells = compute_gravity_wells(&self.violations, &self.coupling_metrics);
-        self.red_flags = compute_red_flags(&self.violations, &self.coupling_metrics);
     }
 
     /// Severity-sum score. Only the bare `audit()` (no settings) and the

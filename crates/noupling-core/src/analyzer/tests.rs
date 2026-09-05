@@ -768,3 +768,33 @@ fn layer_filtering_keeps_tri_in_step_with_the_score() {
     assert_eq!(result.tri, 0.0, "no violations, no risk");
     assert_eq!(result.score, 100.0);
 }
+
+/// Narrowing to changed files re-scores the survivors on TRI, like every
+/// other path (#354): after dropping one of two equal violations the score
+/// is exactly what the TRI formula gives for the one that remains.
+#[test]
+fn changed_files_filter_scores_on_tri() {
+    let modules = vec![
+        make_module("a", "src/alpha/a.rs"),
+        make_module("b", "src/beta/b.rs"),
+        make_module("c", "src/gamma/c.rs"),
+        make_module("d", "src/delta/d.rs"),
+    ];
+    let deps = vec![make_dep("a", "b", 1), make_dep("c", "d", 1)];
+    let settings = crate::settings::Settings::default();
+    let mut result = audit_with_settings(&modules, &deps, &[], &settings);
+    assert_eq!(result.violations.len(), 2);
+    result.filter_by_changed_files(&["src/alpha/a.rs".to_string()], &settings.risk_weights);
+    assert_eq!(result.violations.len(), 1);
+    let max_weight = settings.risk_weights.circular;
+    let expected = 100.0 - 100.0 * result.tri / (result.total_modules as f64 * max_weight);
+    assert!(
+        (result.score - expected).abs() < 1e-9,
+        "{} vs {expected}",
+        result.score
+    );
+    assert_eq!(
+        result.tri, result.violations[0].rri,
+        "tri follows the surviving set"
+    );
+}
