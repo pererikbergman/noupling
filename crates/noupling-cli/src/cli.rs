@@ -104,7 +104,7 @@ pub enum Commands {
     /// Save or manage the Issue baseline.
     /// `noupling baseline save .` records every current Issue (all nine kinds) as accepted.
     /// `audit --baseline` and `report --baseline` then mark those Issues baselined and
-    /// `audit` fails only on new ones.
+    /// `audit` fails only on Issues that are not in the baseline.
     Baseline {
         /// Action: "save" to create the baseline from the current Issues
         action: String,
@@ -132,7 +132,7 @@ pub enum Commands {
 
         /// Compare against .noupling/baseline.json: accepted Issues are marked
         /// baselined (still listed) and the exit code is 1 only when there are
-        /// new Issues.
+        /// Issues not in the baseline.
         #[arg(long)]
         baseline: bool,
 

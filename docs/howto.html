@@ -35,7 +35,7 @@
 
       <h4>CI/CD</h4>
       <a href="#ci-gate">Score gate</a>
-      <a href="#ci-new-only">Fail only on new Issues</a>
+      <a href="#ci-new-only">Fail only on unbaselined Issues</a>
       <a href="#ci-pr-comment">PR comment</a>
       <a href="#ci-sonar">SonarQube / SonarCloud</a>
       <a href="#pre-commit">Pre-commit hook</a>
@@ -122,7 +122,7 @@ jobs:
         <strong>Pick the threshold from your current score.</strong> Run <code>noupling audit .</code> locally, subtract a couple of points of headroom, and raise the bar as you clean up. A threshold above the current score fails every build on day one.
       </div>
 
-      <h2 id="ci-new-only">CI: fail only on new Issues</h2>
+      <h2 id="ci-new-only">CI: fail only on Issues not in the baseline</h2>
       <p>Two options, and they compose. <strong>Diff mode</strong> narrows the audit to files changed against a base branch; <strong>baseline</strong> fails only on Issues the team has not accepted (see <a href="#baseline">below</a>). Diff mode needs full git history.</p>
 <pre><code class="language-yaml">      - uses: actions/checkout@v4
         with:
@@ -160,9 +160,9 @@ noupling hook uninstall .</code></pre>
 noupling baseline save .            # writes .noupling/baseline.json: every current Issue, all nine kinds
 git add .noupling/baseline.json
 git commit -m "chore: accept current architecture Issues as the baseline"</code></pre>
-<pre><code class="language-bash">noupling audit . --baseline          # exit 1 only on new Issues
+<pre><code class="language-bash">noupling audit . --baseline          # exit 1 only on Issues not in the baseline
 noupling report . --format html --baseline   # any report can mark accepted Issues</code></pre>
-      <p>Baselined Issues are identified by kind and identity (the directory pair for Coupling Violations and Red Flags, the ring for Cycles, the subject otherwise), so adding another import between two directories that are already coupled does not count as new. When the team fixes an accepted Issue it simply disappears; re-run <code>baseline save</code> whenever you want the accepted set to shrink.</p>
+      <p>Baselined Issues are identified by kind and identity (the directory pair for Coupling Violations and Red Flags, the ring for Cycles, the subject otherwise), so adding another import between two directories that are already coupled does not count against the gate. When the team fixes an accepted Issue it simply disappears; re-run <code>baseline save</code> whenever you want the accepted set to shrink.</p>
       <div class="callout-warn callout">
         <strong>Upgrading from 0.8.x?</strong> Older baseline files covered only coupling violations and load as &ldquo;nothing baselined&rdquo; with a one-line warning. Run <code>noupling baseline save .</code> once after upgrading.
       </div>

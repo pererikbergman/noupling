@@ -22,7 +22,7 @@ The importance of an Issue on a four-step scale: critical, high, medium, low. As
 _Avoid_: level, priority, RRI (RRI is the underlying number for the kinds that have one)
 
 **Baseline**:
-The set of Issues a team has explicitly accepted. An Issue in the baseline is **baselined**: still reported, marked as accepted, and never counted as "not in baseline" by the CI gate. The baseline covers every Issue kind. Not to be confused with **Violation Age**, whose _new_ bucket means "first seen in the latest snapshot" regardless of the baseline.
+The set of Issues a team has explicitly accepted. An Issue in the baseline is **baselined**: still reported, marked as accepted, and not counted by the CI gate. The baseline covers every Issue kind. Not to be confused with **Violation Age**, whose _new_ bucket means "first seen in the latest snapshot" regardless of the baseline.
 _Avoid_: ignored, suppressed (a **suppression** hides an edge at scan time; a baselined Issue is still visible)
 
 **Issue card**:

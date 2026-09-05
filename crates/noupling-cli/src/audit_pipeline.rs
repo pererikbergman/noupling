@@ -50,7 +50,7 @@ pub struct PipelineOutcome {
     pub modules: Vec<Module>,
     pub dependencies: Vec<Dependency>,
     pub result: AuditResult,
-    /// New / baselined / resolved counts when `baseline` was requested.
+    /// Not-in-baseline / baselined / resolved counts when `baseline` was requested.
     pub baseline: Option<BaselineComparison>,
     /// The snapshot's whole-project trend point — score and per-kind Issue
     /// counts captured *before* any diff filter — or `None` when a

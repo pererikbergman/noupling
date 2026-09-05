@@ -709,7 +709,7 @@ fn render_issue_section(issues: &[&Issue], is_root: bool, baseline_applied: bool
     let baselined = issues.iter().filter(|i| i.baselined).count();
     let counts = if baseline_applied {
         format!(
-            "({} &middot; {} new &middot; {} baselined)",
+            "({} &middot; {} not in baseline &middot; {} baselined)",
             issues.len(),
             issues.len() - baselined,
             baselined

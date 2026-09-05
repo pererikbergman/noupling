@@ -187,7 +187,7 @@ impl fmt::Display for Subject {
 #[derive(Debug, Clone)]
 pub struct Issue {
     /// True when the project's baseline accepts this Issue: still reported,
-    /// never counted as new (`CONTEXT.md` § Baseline).
+    /// never counted against the baseline gate (`CONTEXT.md` § Baseline).
     pub baselined: bool,
     /// The severity band, assigned once by the audit from the configured
     /// `critical_severity` threshold (see [`Issue::severity`]).
