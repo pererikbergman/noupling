@@ -9,6 +9,8 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+use serde::Serialize;
+
 use super::{
     AuditResult, CohesionMetrics, CouplingViolation, DependencyDirection, DistanceMetric,
     GravityWell, LayerViolation, RedFlag, RedFlagType, RuleViolation, StabilityViolation, Zone,
@@ -520,6 +522,150 @@ impl Issue {
             .then_with(|| self.kind().cmp(&other.kind()))
             .then_with(|| self.subject().sort_path().cmp(other.subject().sort_path()))
             .then_with(|| self.subject().to_string().cmp(&other.subject().to_string()))
+    }
+}
+
+// ── Serialised Issue card (ADR 0002) ────────────────────────────────────
+//
+// One JSON shape for every consumer: the JSON / XML / Sonar reports and
+// the Explorer's Data Contract all embed `IssueCard` as produced here, so
+// they cannot drift. Documented in docs/docs.html § Report Formats.
+
+/// The serialised form of one Issue: the card header plus a per-kind
+/// `detail` payload. Field names are the public contract.
+#[derive(Debug, Clone, Serialize)]
+pub struct IssueCard {
+    /// Machine id of the kind, e.g. `"coupling_violation"` ([`IssueKind::id`]).
+    pub kind: &'static str,
+    /// Glossary name of the kind, e.g. `"Coupling Violation"`.
+    pub kind_name: &'static str,
+    /// `"critical" | "high" | "medium" | "low"`.
+    pub severity: &'static str,
+    pub subject: SubjectCard,
+    pub reason: String,
+    pub recommendation: String,
+    /// Points this Issue takes off the score; 0 for non-scoring kinds.
+    pub score_impact: f64,
+    pub baselined: bool,
+    /// `<kind>:<subject>`, the baseline identity.
+    pub fingerprint: String,
+    /// Per-kind numbers, keyed by snake_case field names (see docs).
+    pub detail: serde_json::Value,
+}
+
+/// Serialised [`Subject`], tagged by shape.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SubjectCard {
+    Module { path: String },
+    Edge { from: String, to: String },
+    Ring { members: Vec<String> },
+}
+
+impl From<Subject> for SubjectCard {
+    fn from(s: Subject) -> Self {
+        match s {
+            Subject::Module(path) => SubjectCard::Module { path },
+            Subject::Edge { from, to } => SubjectCard::Edge { from, to },
+            Subject::Ring(members) => SubjectCard::Ring { members },
+        }
+    }
+}
+
+impl Issue {
+    /// The serialised Issue card. Every JSON-bearing format embeds this
+    /// verbatim (ADR 0002).
+    pub fn to_card(&self) -> IssueCard {
+        IssueCard {
+            kind: self.kind().id(),
+            kind_name: self.kind().name(),
+            severity: self.severity().name(),
+            subject: self.subject().into(),
+            reason: self.reason(),
+            recommendation: self.recommendation(),
+            score_impact: self.score_impact(),
+            baselined: self.baselined,
+            fingerprint: self.fingerprint(),
+            detail: self.detail_json(),
+        }
+    }
+
+    /// Per-kind payload. Exhaustive so a new kind must declare its numbers.
+    fn detail_json(&self) -> serde_json::Value {
+        use serde_json::json;
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => json!({
+                "dir_a": v.dir_a,
+                "dir_b": v.dir_b,
+                "line_number": v.line_number,
+                "depth": v.depth,
+                "imports": v.weight,
+                "raw_severity": v.severity,
+                "rri": v.rri,
+                "direction": v.direction,
+            }),
+            IssueDetail::Cycle(v) => json!({
+                "order": v.cycle_order,
+                "depth": v.depth,
+                "raw_severity": v.severity,
+                "rri": v.rri,
+                "hop_import_counts": v.cycle_hop_counts,
+                "hops": v.cycle_hop_files.iter().map(|(from, to, line)| json!({
+                    "from_file": from,
+                    "to_file": to,
+                    "line_number": line,
+                })).collect::<Vec<_>>(),
+                "weakest_link": v.weakest_link,
+                "break_cost": v.break_cost,
+            }),
+            IssueDetail::RuleViolation(r) => json!({
+                "line_number": r.line_number,
+                "message": r.message,
+            }),
+            IssueDetail::LayerViolation(l) => json!({
+                "line_number": l.line_number,
+                "from_layer": l.from_layer,
+                "to_layer": l.to_layer,
+            }),
+            IssueDetail::GravityWell(g) => json!({
+                "total_rri": g.total_rri,
+                "relationship_count": g.relationship_count,
+                "direction_count": g.direction_count,
+                "downward_rri": g.downward_rri,
+                "sibling_rri": g.sibling_rri,
+                "upward_rri": g.upward_rri,
+                "circular_rri": g.circular_rri,
+            }),
+            IssueDetail::RedFlag(f) => json!({
+                "flag_type": match f.flag_type {
+                    RedFlagType::FusedSibling => "fused_sibling",
+                    RedFlagType::TrappedChild => "trapped_child",
+                },
+                "modules": f.modules,
+                "rri": f.rri,
+                "imports": f.imports,
+                "median_density": f.median_density,
+            }),
+            IssueDetail::StabilityViolation(s) => json!({
+                "from_instability": s.from_instability,
+                "to_instability": s.to_instability,
+            }),
+            IssueDetail::ZoneFlag(d) => json!({
+                "zone": match d.zone {
+                    Zone::Pain => "pain",
+                    Zone::Uselessness => "uselessness",
+                    Zone::MainSequence => "main_sequence",
+                },
+                "abstractness": d.abstractness,
+                "instability": d.instability,
+                "distance": d.distance,
+            }),
+            IssueDetail::LowCohesion(c) => json!({
+                "cohesion": c.cohesion,
+                "n_children": c.n_children,
+                "internal_deps": c.internal_deps,
+            }),
+        }
     }
 }
 

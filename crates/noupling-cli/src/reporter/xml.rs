@@ -1,8 +1,9 @@
 //! XML format adapter. Reads the canonical `JsonReport` and serialises
-//! it as a tabular `<noupling-report>` document with circular,
-//! coupling, directory-tree, gravity-well, and red-flag children.
+//! it as a tabular `<noupling-report>` document: the shared `<issues>`
+//! list (every Issue kind, ADR 0002) plus the legacy circular, coupling,
+//! directory-tree, gravity-well, and red-flag children.
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, SubjectCard};
 use noupling_core::core::Module;
 
 use super::data::JsonReport;
@@ -19,6 +20,62 @@ pub fn format_xml(modules: &[Module], result: &AuditResult, snapshot_id: &str) -
         report.violation_age.new_count, report.violation_age.recent_count, report.violation_age.chronic_count,
         report.critical_violations, report.total_circular, report.total_coupling,
     ));
+
+    // Issues — every kind, from the shared Issue cards (ADR 0002). The
+    // per-kind sections below stay until #350 removes them.
+    xml.push_str(&format!("  <issues count=\"{}\">\n", report.issues.len()));
+    for card in &report.issues {
+        xml.push_str(&format!(
+            "    <issue kind=\"{}\" severity=\"{}\" baselined=\"{}\" scoreImpact=\"{:.1}\" fingerprint=\"{}\">\n",
+            xml_escape(card.kind),
+            xml_escape(card.severity),
+            card.baselined,
+            card.score_impact,
+            xml_escape(&card.fingerprint),
+        ));
+        match &card.subject {
+            SubjectCard::Module { path } => xml.push_str(&format!(
+                "      <subject type=\"module\" path=\"{}\"/>\n",
+                xml_escape(path)
+            )),
+            SubjectCard::Edge { from, to } => xml.push_str(&format!(
+                "      <subject type=\"edge\" from=\"{}\" to=\"{}\"/>\n",
+                xml_escape(from),
+                xml_escape(to)
+            )),
+            SubjectCard::Ring { members } => {
+                xml.push_str("      <subject type=\"ring\">\n");
+                for m in members {
+                    xml.push_str(&format!("        <member>{}</member>\n", xml_escape(m)));
+                }
+                xml.push_str("      </subject>\n");
+            }
+        }
+        xml.push_str(&format!(
+            "      <reason>{}</reason>\n      <recommendation>{}</recommendation>\n",
+            xml_escape(&card.reason),
+            xml_escape(&card.recommendation),
+        ));
+        // Scalar detail fields become attributes; nested ones (cycle hops)
+        // are the JSON report's job.
+        let mut attrs = String::new();
+        if let Some(obj) = card.detail.as_object() {
+            for (k, v) in obj {
+                let text = match v {
+                    serde_json::Value::String(t) => t.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    serde_json::Value::Null
+                    | serde_json::Value::Array(_)
+                    | serde_json::Value::Object(_) => continue,
+                };
+                attrs.push_str(&format!(" {}=\"{}\"", xml_escape(k), xml_escape(&text)));
+            }
+        }
+        xml.push_str(&format!("      <detail{}/>\n", attrs));
+        xml.push_str("    </issue>\n");
+    }
+    xml.push_str("  </issues>\n");
 
     // Circular dependencies
     if !report.circular_dependencies.is_empty() {

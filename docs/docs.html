@@ -402,6 +402,38 @@ noupling audit .</code></pre>
         </tbody>
       </table>
 
+      <h3 id="issue-card">The <code>issues</code> array (Issue cards)</h3>
+      <p>Every format that carries data — <code>json</code>, <code>xml</code>, <code>sonar</code>, and the Explorer's embedded Data Contract — lists the same Issues, serialised once as <strong>Issue cards</strong>. In <code>report.json</code> they are the top-level <code>issues</code> array, in canonical order: severity band descending, then kind, then subject path. Filter by <code>kind</code>; every kind is present when the audit found one.</p>
+<pre><code>{
+  "kind": "cycle",                       // machine id, one of the nine kinds below
+  "kind_name": "Cycle",                  // glossary name
+  "severity": "critical",                // critical | high | medium | low
+  "subject": { "type": "ring", "members": ["src/ring/alpha", "src/ring/beta", "src/ring/alpha"] },
+                                         // or { "type": "edge", "from": "…", "to": "…" }
+                                         // or { "type": "module", "path": "…" }
+  "reason": "src/ring/alpha -> src/ring/beta -> src/ring/alpha form a cycle of 2 directories (2 imports in the ring); the cheapest break is src/ring/alpha -> src/ring/beta (1 import).",
+  "recommendation": "Cut the cycle at src/ring/alpha -> src/ring/beta by removing 1 import or moving that code behind an interface.",
+  "score_impact": 4.5,                   // points this Issue takes off the score; 0 for kinds that do not score
+  "baselined": false,                    // true when .noupling/baseline.json accepts it (run with --baseline)
+  "fingerprint": "cycle:src/ring/alpha -> src/ring/beta -> src/ring/alpha",
+  "detail": { … }                        // per-kind numbers, see table
+}</code></pre>
+      <table>
+        <thead><tr><th><code>kind</code></th><th>Subject shape</th><th><code>detail</code> fields</th></tr></thead>
+        <tbody>
+          <tr><td><code>coupling_violation</code></td><td>edge</td><td><code>dir_a</code>, <code>dir_b</code>, <code>line_number</code>, <code>depth</code>, <code>imports</code>, <code>raw_severity</code>, <code>rri</code>, <code>direction</code></td></tr>
+          <tr><td><code>cycle</code></td><td>ring</td><td><code>order</code>, <code>depth</code>, <code>raw_severity</code>, <code>rri</code>, <code>hop_import_counts</code>, <code>hops[]</code> (<code>from_file</code>, <code>to_file</code>, <code>line_number</code>), <code>weakest_link</code>, <code>break_cost</code></td></tr>
+          <tr><td><code>rule_violation</code></td><td>edge</td><td><code>line_number</code>, <code>message</code></td></tr>
+          <tr><td><code>layer_violation</code></td><td>edge</td><td><code>line_number</code>, <code>from_layer</code>, <code>to_layer</code></td></tr>
+          <tr><td><code>gravity_well</code></td><td>module</td><td><code>total_rri</code>, <code>relationship_count</code>, <code>direction_count</code>, <code>downward_rri</code>, <code>sibling_rri</code>, <code>upward_rri</code>, <code>circular_rri</code></td></tr>
+          <tr><td><code>red_flag</code></td><td>edge</td><td><code>flag_type</code> (<code>fused_sibling</code> | <code>trapped_child</code>), <code>modules</code>, <code>rri</code>, <code>imports</code>, <code>median_density</code></td></tr>
+          <tr><td><code>stability_violation</code></td><td>edge (directories)</td><td><code>from_instability</code>, <code>to_instability</code></td></tr>
+          <tr><td><code>zone_flag</code></td><td>module (directory)</td><td><code>zone</code> (<code>pain</code> | <code>uselessness</code>), <code>abstractness</code>, <code>instability</code>, <code>distance</code></td></tr>
+          <tr><td><code>low_cohesion</code></td><td>module (directory)</td><td><code>cohesion</code>, <code>n_children</code>, <code>internal_deps</code></td></tr>
+        </tbody>
+      </table>
+      <p>The XML report carries the same cards as <code>&lt;issues&gt;/&lt;issue&gt;</code> elements (scalar <code>detail</code> fields become attributes of <code>&lt;detail/&gt;</code>); the Sonar report emits one generic issue per card with <code>ruleId</code> <code>noupling:&lt;kind&gt;</code> and the band mapped to CRITICAL / MAJOR / MINOR / INFO.</p>
+
 
       <!-- Risk Framework -->
       <h2 id="rri">RRI (Relationship Risk Index)</h2>

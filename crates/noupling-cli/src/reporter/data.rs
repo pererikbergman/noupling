@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use noupling_core::analyzer::{AuditResult, CouplingViolation};
+use noupling_core::analyzer::{AuditResult, CouplingViolation, IssueCard};
 use noupling_core::core::Module;
 use serde::Serialize;
 
@@ -26,6 +26,9 @@ pub struct JsonReport {
     pub suppressed_count: usize,
     pub total_external_imports: usize,
     pub violation_age: JsonViolationAge,
+    /// Every Issue as an Issue card, in `issues()` order (ADR 0002). The
+    /// per-kind arrays below are kept until #350 removes them.
+    pub issues: Vec<IssueCard>,
     pub critical_violations: usize,
     pub total_circular: usize,
     pub total_coupling: usize,
@@ -289,6 +292,7 @@ impl JsonReport {
                 recent_count: result.violation_age.recent_count,
                 chronic_count: result.violation_age.chronic_count,
             },
+            issues: result.issues().iter().map(|i| i.to_card()).collect(),
             critical_violations,
             total_circular: circular.len(),
             total_coupling: coupling.len(),

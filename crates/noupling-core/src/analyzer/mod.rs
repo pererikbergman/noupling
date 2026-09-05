@@ -42,7 +42,7 @@ pub use instability::{
     compute_directory_instability, compute_stability_violations, InstabilityMetric,
     StabilityViolation,
 };
-pub use issue::{Issue, IssueDetail, IssueKind, SeverityBand, Subject};
+pub use issue::{Issue, IssueCard, IssueDetail, IssueKind, SeverityBand, Subject, SubjectCard};
 pub use layers::{check_layer_rules, LayerViolation};
 pub use metrics::{compute_hotspots, ExternalDepMetric, ModuleMetrics};
 #[allow(unused_imports)]
