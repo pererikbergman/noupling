@@ -18,7 +18,7 @@
       <li><a href="howto.html">How-to</a></li>
       <li><a href="changelog.html" class="active">Changelog</a></li>
       <li><a href="https://github.com/pererikbergman/noupling">GitHub</a></li>
-      <li><span class="badge">v0.9.0</span></li>
+      <li><span class="badge">v0.9.1</span></li>
     </ul>
   </div>
 </nav>
@@ -32,6 +32,34 @@
     </p>
 
     <!-- ── v0.7.0 ─────────────────────────────────────── -->
+    <article class="release">
+      <h2>v0.9.1 &mdash; Dogfooding Fixes</h2>
+      <div class="date">September 2026</div>
+
+      <p>Eight things found by running the released 0.9.0 on noupling itself and on the <code>examples/</code> projects: one band that contradicted its own score impact, three counts that disagreed between a header and the cards or between a parent page and its child, and a handful of cosmetics.</p>
+
+      <h3><span class="tag tag-fix">fix</span> A band never contradicts its score impact (<a href="https://github.com/pererikbergman/noupling/issues/379">#379</a>)</h3>
+      <p><strong>The friction:</strong> On a five-module project the only Cycle read <code>[LOW] Cycle &hellip; Score impact: 40.0</code>. The severity ladder is mostly a depth measure, so a shallow ring on a small codebase was "low" while costing 40 of 100 points &mdash; and the <code>pr</code> comment and Sonar import called it low too.</p>
+      <p><strong>The fix:</strong> Coupling Violations and Cycles are now floored by the points they cost: 10 is critical, 5 at least high, 1 at least medium. Large projects are unaffected (noupling's own 28 Issues keep their bands). The Explorer's per-node violation rows, which had a private three-step ladder, now show the band of their owning Issue.</p>
+
+      <h3><span class="tag tag-fix">fix</span> Counts that agree with the cards (<a href="https://github.com/pererikbergman/noupling/issues/380">#380</a>, <a href="https://github.com/pererikbergman/noupling/issues/381">#381</a>)</h3>
+      <ul>
+        <li><code>critical_violations</code> in JSON and XML counted ring hops above the threshold as extra violations. It is now the number of Coupling Violation and Cycle cards whose band is critical.</li>
+        <li>Directory pages in <code>html</code> and <code>md</code> (and <code>directory_tree</code> in JSON) roll violation counts up to every ancestor, so a row marked <code>!</code> never shows <code>0</code>. <code>violations_count</code> is now a subtree count.</li>
+      </ul>
+
+      <h3><span class="tag tag-fix">fix</span> Reports and CLI (<a href="https://github.com/pererikbergman/noupling/issues/382">#382</a>, <a href="https://github.com/pererikbergman/noupling/issues/383">#383</a>, <a href="https://github.com/pererikbergman/noupling/issues/384">#384</a>, <a href="https://github.com/pererikbergman/noupling/issues/386">#386</a>)</h3>
+      <ul>
+        <li><code>report --format all</code> includes the Explorer, as the help promised (14 reports); the <code>--format</code> help keeps its per-format lines.</li>
+        <li>The <code>html</code> and <code>md</code> writers clear their own previous pages before regenerating, so pages for renamed or removed source directories no longer linger.</li>
+        <li><code>trend</code> prints <code>0.0</code> instead of <code>+0.0</code> for float-noise deltas and labels its timestamp column UTC.</li>
+        <li>Baseline summaries say <em>not in baseline</em> instead of <em>new</em>, so they can no longer be confused with the Violation Age <em>new</em> bucket two lines below.</li>
+      </ul>
+
+      <h3><span class="tag tag-docs">docs</span> Examples with expected output (<a href="https://github.com/pererikbergman/noupling/issues/385">#385</a>)</h3>
+      <p><code>examples/README.md</code> explains the three Kotlin projects and what each should report; <code>kotlin-coupled</code> now demonstrates a Coupling Violation instead of a second Cycle, and a CLI test keeps all three honest. Linked from the <a href="howto.html#try-an-example">How-to</a> page.</p>
+    </article>
+
     <article class="release">
       <h2>v0.9.0 &mdash; Same Issues in Every Report</h2>
       <div class="date">September 2026</div>
