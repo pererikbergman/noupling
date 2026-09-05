@@ -219,7 +219,7 @@ fn gravity_wells_detected_for_high_rri_modules() {
         transitive: 9.0,
         circular: 10.0,
     };
-    result.apply_risk_weights(&weights);
+    result.apply_risk_weights(&weights, &[]);
 
     // All modules participate in violations, gravity wells depend on
     // whether any module's total RRI exceeds 2× the median
@@ -249,7 +249,7 @@ fn apply_risk_weights_computes_rri() {
         transitive: 9.0,
         circular: 10.0,
     };
-    result.apply_risk_weights(&weights);
+    result.apply_risk_weights(&weights, &[]);
 
     let siblings: Vec<&CouplingViolation> = result
         .violations
@@ -281,7 +281,7 @@ fn apply_risk_weights_circular_uses_hop_counts() {
         transitive: 9.0,
         circular: 10.0,
     };
-    result.apply_risk_weights(&weights);
+    result.apply_risk_weights(&weights, &[]);
 
     let circular: Vec<&CouplingViolation> =
         result.violations.iter().filter(|v| v.is_circular).collect();
@@ -310,7 +310,7 @@ fn tri_computed_from_rri_sum() {
         transitive: 9.0,
         circular: 10.0,
     };
-    result.apply_risk_weights(&weights);
+    result.apply_risk_weights(&weights, &[]);
 
     // Sibling violation with density 2: RRI = 4 × 2 = 8
     // TRI = sum of all RRIs = 8
@@ -429,9 +429,8 @@ fn audit_with_settings_matches_manual_pipeline() {
     let mut manual = audit(&modules, &deps);
     manual.filter_by_severity(settings.thresholds.minimum_severity);
     manual.apply_coupling_mode(settings.effective_coupling_mode());
-    manual.apply_risk_weights(&settings.risk_weights);
-    manual.apply_layer_weights(&settings.layers);
     manual.filter_by_layers(&settings.layers);
+    manual.apply_risk_weights(&settings.risk_weights, &settings.layers);
 
     assert_eq!(auto.score, manual.score);
     assert_eq!(auto.violations.len(), manual.violations.len());
@@ -692,4 +691,80 @@ fn audit_with_settings_leaves_flag_unset_when_nothing_detectable() {
     assert!(!result.layers_auto_detected);
     assert!(result.layers.is_empty());
     assert!(result.layer_violations.is_empty());
+}
+
+// ── one score formula, whatever the layering (#354) ──
+
+/// The score formula must not depend on whether the project has layers.
+/// Two projects with the same graph — one whose directory names match the
+/// layer catalogue (so layers are inferred), one whose names do not — score
+/// identically when the layers change no violation, and a layered project
+/// keeps `tri` consistent with its score.
+#[test]
+fn score_formula_is_the_same_with_and_without_layers() {
+    // A single 2-directory cycle; the layer order (ui above data) suppresses
+    // nothing because cycles are always kept.
+    // Three files per directory so inference has enough to go on.
+    let build = |top: &str, bottom: &str| {
+        let modules = vec![
+            make_module("a", &format!("src/{top}/a.rs")),
+            make_module("b", &format!("src/{bottom}/b.rs")),
+            make_module("c", &format!("src/{top}/c.rs")),
+            make_module("d", &format!("src/{bottom}/d.rs")),
+            make_module("e", &format!("src/{top}/e.rs")),
+            make_module("f", &format!("src/{bottom}/f.rs")),
+        ];
+        let deps = vec![make_dep("a", "b", 1), make_dep("b", "a", 1)];
+        (modules, deps)
+    };
+    // Same coupling mode for both, so only the layering differs.
+    let settings = crate::settings::Settings {
+        coupling_mode: Some("actionable".to_string()),
+        ..Default::default()
+    };
+    let (m1, d1) = build("ui", "data");
+    let (m2, d2) = build("alpha", "beta");
+    let layered = audit_with_settings(&m1, &d1, &[], &settings);
+    let plain = audit_with_settings(&m2, &d2, &[], &settings);
+    assert!(layered.layers_auto_detected, "ui/data must infer layers");
+    assert!(!plain.layers_auto_detected, "alpha/beta must not");
+    assert_eq!(layered.violation_count(), plain.violation_count());
+    assert_eq!(
+        layered.score, plain.score,
+        "same graph, same score: layered {} vs plain {}",
+        layered.score, plain.score
+    );
+    assert_eq!(layered.tri, plain.tri);
+    // The score is the TRI formula, and tri is what the score was computed from.
+    let max_weight = settings.risk_weights.circular;
+    let expected = 100.0 - 100.0 * layered.tri / (layered.total_modules as f64 * max_weight);
+    assert!(
+        (layered.score - expected).abs() < 1e-9,
+        "{} vs {expected}",
+        layered.score
+    );
+}
+
+/// Declared layers that suppress a downward sibling import remove it from
+/// both the violations and the TRI, so `tri` never goes stale (#354).
+#[test]
+fn layer_filtering_keeps_tri_in_step_with_the_score() {
+    let modules = vec![
+        make_module("u", "src/ui/u.rs"),
+        make_module("d", "src/data/d.rs"),
+        make_module("x", "src/ui/x.rs"),
+    ];
+    // ui → data is downward under the declared order: not a violation.
+    let deps = vec![make_dep("u", "d", 1), make_dep("u", "d", 2)];
+    let settings = crate::settings::Settings {
+        layers: serde_json::from_str(
+            r#"[{"name":"ui","pattern":"**/ui/**"},{"name":"data","pattern":"**/data/**"}]"#,
+        )
+        .unwrap(),
+        ..Default::default()
+    };
+    let result = audit_with_settings(&modules, &deps, &[], &settings);
+    assert!(result.violations.is_empty(), "{:?}", result.violations);
+    assert_eq!(result.tri, 0.0, "no violations, no risk");
+    assert_eq!(result.score, 100.0);
 }
