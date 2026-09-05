@@ -69,6 +69,7 @@
       <a href="#independence">Module Independence</a>
       <a href="#blast-radius">Blast Radius</a>
       <a href="#instability">Instability (Martin's I)</a>
+      <a href="#abstractness">Abstractness (Martin's A)</a>
       <a href="#dependency-depth">Dependency Depth</a>
       <a href="#violation-age">Violation Age</a>
       <a href="#dashboard">Dashboard</a>
@@ -543,6 +544,10 @@ noupling audit .</code></pre>
         <li><strong>I = 1.0</strong>: Maximally unstable. Depends on many; nothing depends on it. Should be concrete.</li>
       </ul>
       <p>The <strong>Zone of Pain</strong>: stable (I &lt; 0.3) modules with high fan-in (&ge; 5) are foundational but hard to change with wide impact. These are flagged separately.</p>
+
+      <h2 id="abstractness">Abstractness (Martin's A)</h2>
+<pre><code>A = abstract_declarations / (abstract_declarations + concrete_declarations)</code></pre>
+      <p>Counted per file by the language parser and summed per directory. <strong>Abstract</strong>: interfaces, abstract classes, Rust traits, Kotlin/Java interfaces and abstract classes. <strong>Concrete</strong>: classes, objects, enums, structs, and module-level functions (declared or arrow in TypeScript, free <code>fn</code> in Rust, top-level <code>fun</code> in Kotlin), so a file of React or Compose components or free functions counts as implementation even when it also declares a <code>Props</code> interface. Type aliases count as neither. A directory with no declarations at all has no A and no Zone Flag.</p>
 
 
       <h2 id="dependency-depth">Dependency Depth</h2>

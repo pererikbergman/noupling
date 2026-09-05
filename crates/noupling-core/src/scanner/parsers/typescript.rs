@@ -66,12 +66,43 @@ fn count_typescript_types(source: &str, tsx: bool) -> TypeCounts {
     counts
 }
 
+/// Declared at the top of the module, directly or behind `export`.
+fn is_module_level(node: tree_sitter::Node) -> bool {
+    match node.parent() {
+        None => true,
+        Some(p) if p.kind() == "program" => true,
+        Some(p) if p.kind() == "export_statement" => {
+            p.parent().map(|gp| gp.kind() == "program").unwrap_or(true)
+        }
+        _ => false,
+    }
+}
+
+/// `const X = (...) => …` — any declarator whose value is an arrow function.
+fn declares_arrow_function(node: tree_sitter::Node) -> bool {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).any(|d| {
+        d.kind() == "variable_declarator"
+            && d.child_by_field_name("value")
+                .map(|v| v.kind() == "arrow_function")
+                .unwrap_or(false)
+    });
+    found
+}
+
 fn count_ts_types(node: tree_sitter::Node, source: &str, counts: &mut TypeCounts) {
     match node.kind() {
         "interface_declaration" => counts.abstract_count += 1,
         "abstract_class_declaration" => counts.abstract_count += 1,
         "class_declaration" => counts.concrete_count += 1,
         "enum_declaration" => counts.concrete_count += 1,
+        // Module-level functions — declared or arrow — are implementation
+        // (#413): a React component file is not "100% abstract" because it
+        // declares a Props interface. Nested helpers are not counted.
+        "function_declaration" if is_module_level(node) => counts.concrete_count += 1,
+        "lexical_declaration" if is_module_level(node) && declares_arrow_function(node) => {
+            counts.concrete_count += 1
+        }
         _ => {}
     }
     let _ = source;
@@ -271,6 +302,17 @@ mod tests {
         let counts = TypeScriptParser.count_type_declarations(source);
         assert_eq!(counts.abstract_count, 2, "got {:?}", counts);
         assert_eq!(counts.concrete_count, 2, "got {:?}", counts);
+    }
+
+    /// A React component module — a Props interface plus exported functions
+    /// — is implementation, not abstraction (#413). Nested helpers inside a
+    /// function body are not counted; type aliases are neither.
+    #[test]
+    fn ts_counts_exported_and_top_level_functions_as_concrete() {
+        let source = "interface Props { a: number }\ntype Mode = 'a' | 'b';\nexport function Card(p: Props) { const inner = () => 1; return inner(); }\nexport const Row = (p: Props) => null;\nfunction helper() {}\nconst n = 3;\n";
+        let counts = TsxParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 1, "{counts:?}");
+        assert_eq!(counts.concrete_count, 3, "Card, Row, helper: {counts:?}");
     }
 
     #[test]

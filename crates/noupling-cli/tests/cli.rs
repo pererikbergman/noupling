@@ -455,15 +455,21 @@ fn baseline_round_trip_fails_only_on_new_issues() {
 
     // A new sibling pair between two fresh directories outside the ring,
     // so instability of the existing directories is untouched and the
-    // only new Issue is the Coupling Violation itself.
+    // only new Issue is the Coupling Violation itself. `misc` exposes a
+    // trait: abstract and stable sits on the main sequence, so it earns no
+    // Zone Flag of its own (a concrete leaf would, since #413).
     std::fs::create_dir_all(project.join("src/tools")).unwrap();
     std::fs::create_dir_all(project.join("src/misc")).unwrap();
     std::fs::write(
         project.join("src/tools/a.rs"),
-        "use crate::misc::b;\npub fn run() { b::go(); }\n",
+        "use crate::misc::b;\npub fn run(g: &dyn b::Go) { g.go(); }\n",
     )
     .unwrap();
-    std::fs::write(project.join("src/misc/b.rs"), "pub fn go() {}\n").unwrap();
+    std::fs::write(
+        project.join("src/misc/b.rs"),
+        "pub trait Go { fn go(&self); }\n",
+    )
+    .unwrap();
     scan(project);
     let dirty = run_noupling(&["audit", root, "--baseline"]);
     let dirty_out = String::from_utf8_lossy(&dirty.stdout).into_owned();

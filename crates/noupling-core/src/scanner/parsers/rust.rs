@@ -50,11 +50,28 @@ fn count_rust_types(node: tree_sitter::Node, counts: &mut TypeCounts) {
     match node.kind() {
         "trait_item" => counts.abstract_count += 1,
         "struct_item" | "enum_item" | "union_item" => counts.concrete_count += 1,
+        // A free function is implementation (#413). Methods belong to their
+        // `impl` / trait and are not counted on their own.
+        "function_item" if is_free_function(node) => counts.concrete_count += 1,
         _ => {}
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         count_rust_types(child, counts);
+    }
+}
+
+/// True for a `fn` at file level or directly inside an inline `mod {}`,
+/// false for one inside an `impl` or `trait` body (or nested in another fn).
+fn is_free_function(node: tree_sitter::Node) -> bool {
+    match node.parent() {
+        None => true,
+        Some(p) if p.kind() == "source_file" => true,
+        Some(p) if p.kind() == "declaration_list" => p
+            .parent()
+            .map(|gp| gp.kind() == "mod_item")
+            .unwrap_or(false),
+        _ => false,
     }
 }
 
@@ -321,6 +338,20 @@ mod tests {
     }
 
     // Parser tests
+
+    /// Free functions are implementation too (#413): a module of `fn`s next
+    /// to one trait is not "100% abstract". Methods inside `impl` and trait
+    /// bodies are not counted separately from their type.
+    #[test]
+    fn counts_free_functions_as_concrete() {
+        let source = "pub trait T { fn t(&self); }\npub fn a() {}\nstruct X;\nimpl X { fn b() {} }\nmod m { pub fn c() {} }\n";
+        let counts = RustParser.count_type_declarations(source);
+        assert_eq!(counts.abstract_count, 1, "{counts:?}");
+        assert_eq!(
+            counts.concrete_count, 3,
+            "struct X + fn a + fn c: {counts:?}"
+        );
+    }
 
     #[test]
     fn counts_one_trait_one_struct() {
