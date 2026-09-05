@@ -437,6 +437,38 @@ mod tests {
         assert!(out.path().join("notes.txt").exists());
     }
 
+    /// A directory's Violations count includes its whole subtree, so the
+    /// `!` marker and the number never disagree (#381).
+    #[test]
+    fn violation_counts_roll_up_to_ancestor_pages() {
+        let modules = vec![
+            file("a", "src/loose/x/p/p1.rs"),
+            file("b", "src/loose/x/q/q1.rs"),
+            file("c", "src/other/z.rs"),
+        ];
+        // Anchored two levels below `loose` (at src/loose/x).
+        let result = AuditResultBuilder::new()
+            .with_total_modules(3)
+            .with_violations(vec![sibling(
+                "src/loose/x/p/p1.rs",
+                "src/loose/x/q/q1.rs",
+                "src/loose/x/p",
+                "src/loose/x/q",
+            )])
+            .build();
+        let out = tempfile::tempdir().unwrap();
+        generate_markdown_report(&modules, &result, "snap-md", out.path()).unwrap();
+
+        let root = std::fs::read_to_string(out.path().join("README.md")).unwrap();
+        assert!(root.contains("| Violations | 1 |"), "{root}");
+        assert!(
+            root.contains("| [loose](loose/README.md) ! | 2 | 1 |"),
+            "{root}"
+        );
+        let loose = std::fs::read_to_string(out.path().join("loose/README.md")).unwrap();
+        assert!(loose.contains("| Violations | 1 |"), "{loose}");
+    }
+
     #[test]
     fn baselined_issues_are_marked() {
         use noupling_core::baseline::Baseline;

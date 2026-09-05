@@ -146,6 +146,45 @@ mod tests {
         assert_eq!(report.critical_violations, 2);
     }
 
+    /// `directory_tree` violation counts include the subtree, like
+    /// `module_count` already does (#381).
+    #[test]
+    fn directory_tree_rolls_violation_counts_up_to_ancestors() {
+        let file = |id: &str, path: &str| Module {
+            id: id.to_string(),
+            snapshot_id: "snap".to_string(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().to_string(),
+            path: path.to_string(),
+            module_type: noupling_core::core::ModuleType::File,
+            depth: path.matches('/').count() as i32,
+        };
+        let modules = vec![
+            file("a", "src/loose/x/x1.rs"),
+            file("b", "src/loose/y/y1.rs"),
+        ];
+        let mut v = make_violation("src/loose/x/x1.rs", "src/loose/y/y1.rs", 0.33, 2);
+        v.dir_a = "src/loose/x".to_string();
+        v.dir_b = "src/loose/y".to_string();
+        let result = AuditResultBuilder::new()
+            .with_violations(vec![v])
+            .with_total_modules(2)
+            .build();
+
+        let report = JsonReport::from_audit(&modules, &result, "snap-5");
+        let count = |path: &str| {
+            report
+                .directory_tree
+                .iter()
+                .find(|d| d.path == path)
+                .map(|d| (d.violations_count, d.has_violations))
+                .unwrap_or_else(|| panic!("no dir {path}"))
+        };
+        assert_eq!(count("src/loose"), (1, true), "anchor");
+        assert_eq!(count("src"), (1, true), "ancestor");
+        assert_eq!(count("src/loose/x"), (0, false), "participant, not anchor");
+    }
+
     #[test]
     fn text_format_shows_score_and_violations() {
         let result = AuditResultBuilder::new()
