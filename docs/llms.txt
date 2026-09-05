@@ -10,6 +10,7 @@
 - [Contributing](https://github.com/pererikbergman/noupling/blob/main/CONTRIBUTING.md): Build instructions, coding standards, branching strategy, and how to add a new language parser.
 - [Glossary (CONTEXT.md)](https://github.com/pererikbergman/noupling/blob/main/CONTEXT.md): The words every report shares — Finding, Issue, Metric, the nine Issue kinds, severity band, baseline, Issue card, format classes.
 - [Docs site](https://pererikbergman.github.io/noupling/docs.html): CLI reference, configuration, Findings and Issue kinds, report formats and the `issues` JSON card shape.
+- [How-to](https://pererikbergman.github.io/noupling/howto.html): copy-paste recipes — quick start, CI score gate, fail only on new Issues, PR comment, Sonar, pre-commit hook, baseline, history and trends, layers, rules, suppression, monorepo, reports.
 
 ## Concepts
 
