@@ -509,6 +509,55 @@ mod tests {
     /// The representative edge of an aggregated sibling pair must not depend
     /// on module ids (fresh UUIDs per scan): D_acc is a hash set of ids, so
     /// whichever target hashed first used to become the representative.
+    /// A 3-node ring is reported starting from its lexicographically
+    /// smallest directory whichever node the SCC walk entered first, so
+    /// its subject and fingerprint are stable across unrelated edits.
+    #[test]
+    fn ring_path_starts_at_the_smallest_member_regardless_of_dfs_entry() {
+        let ring = |extra: Option<(&str, &str)>| {
+            let mut modules = vec![
+                make_module("a", "src/ring/alpha/a.rs"),
+                make_module("b", "src/ring/beta/b.rs"),
+                make_module("c", "src/ring/gamma/c.rs"),
+            ];
+            let mut deps = vec![
+                make_dep("a", "b", 1),
+                make_dep("b", "c", 1),
+                make_dep("c", "a", 1),
+            ];
+            if let Some((id, path)) = extra {
+                modules.push(make_module(id, path));
+                // An unrelated leaf importing beta changes the SCC entry order.
+                deps.push(make_dep(id, "b", 1));
+            }
+            let v = compute_coupling_violations(&modules, &deps);
+            v.into_iter()
+                .find(|v| v.is_circular)
+                .expect("ring detected")
+        };
+        let plain = ring(None);
+        let shifted = ring(Some(("z", "src/ring/aaa/z.rs")));
+        assert_eq!(
+            plain.cycle_path[0], "src/ring/alpha",
+            "{:?}",
+            plain.cycle_path
+        );
+        assert_eq!(plain.cycle_path, shifted.cycle_path);
+        assert_eq!(plain.cycle_hop_counts, shifted.cycle_hop_counts);
+        assert_eq!(
+            plain
+                .cycle_hop_files
+                .iter()
+                .map(|h| &h.0)
+                .collect::<Vec<_>>(),
+            shifted
+                .cycle_hop_files
+                .iter()
+                .map(|h| &h.0)
+                .collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn representative_edge_of_a_pair_is_the_smallest_regardless_of_input_order() {
         let build = |left: &str, r1: &str, r2: &str| {

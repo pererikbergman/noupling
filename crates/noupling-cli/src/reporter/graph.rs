@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::reporter::VERSION;
-use noupling_core::analyzer::{AuditResult, CouplingViolation, IssueDetail, IssueKind};
+use noupling_core::analyzer::{parent_dir, AuditResult, CouplingViolation, IssueDetail, IssueKind};
 use noupling_core::core::Module;
 
 /// One accented edge on a graph drawing: an edge-shaped Issue projected
@@ -67,45 +67,34 @@ fn accent_rank(kind: IssueKind) -> u8 {
     }
 }
 
-/// Style per edge-shaped kind: (colour, mermaid arrow, dot attributes).
-/// The legend in each format is generated from this table.
-const EDGE_STYLES: &[(IssueKind, &str, &str, &str)] = &[
-    (IssueKind::Cycle, "#ef4444", "-.->", "style=dashed"),
-    (
-        IssueKind::RuleViolation,
-        "#dc2626",
-        "--x",
-        "style=bold, arrowhead=box",
-    ),
-    (
-        IssueKind::LayerViolation,
-        "#b91c1c",
-        "==>",
-        "penwidth=2, arrowhead=tee",
-    ),
-    (
-        IssueKind::CouplingViolation,
-        "#eab308",
-        "-->",
-        "style=solid",
-    ),
-    (
-        IssueKind::StabilityViolation,
-        "#0ea5e9",
-        "--o",
-        "style=dotted",
-    ),
+/// The edge-shaped kinds a graph format draws, in legend order.
+pub(super) const EDGE_KINDS: [IssueKind; 5] = [
+    IssueKind::Cycle,
+    IssueKind::RuleViolation,
+    IssueKind::LayerViolation,
+    IssueKind::CouplingViolation,
+    IssueKind::StabilityViolation,
 ];
 
 /// Muted colour for baselined edges of any kind.
 const MUTED: &str = "#94a3b8";
 
+/// Style per kind: (colour, mermaid arrow, dot attributes). Exhaustive so
+/// a new kind must say how it is drawn; node-shaped kinds are never drawn
+/// but still name a style so the match stays total.
 fn edge_style(kind: IssueKind) -> (&'static str, &'static str, &'static str) {
-    EDGE_STYLES
-        .iter()
-        .find(|(k, _, _, _)| *k == kind)
-        .map(|(_, colour, arrow, dot)| (*colour, *arrow, *dot))
-        .unwrap_or((MUTED, "-->", "style=solid"))
+    let colour = kind.accent_color();
+    match kind {
+        IssueKind::Cycle => (colour, "-.->", "style=dashed"),
+        IssueKind::RuleViolation => (colour, "--x", "style=bold, arrowhead=box"),
+        IssueKind::LayerViolation => (colour, "==>", "penwidth=2, arrowhead=tee"),
+        IssueKind::CouplingViolation => (colour, "-->", "style=solid"),
+        IssueKind::StabilityViolation => (colour, "--o", "style=dotted"),
+        IssueKind::GravityWell
+        | IssueKind::RedFlag
+        | IssueKind::ZoneFlag
+        | IssueKind::LowCohesion => (MUTED, "-->", "style=invis"),
+    }
 }
 
 /// A drawn directory-level edge: how many Issues it carries, the kind
@@ -136,16 +125,19 @@ fn build_dir_graph(
     // the files' directories.
     let mut edges: BTreeMap<(String, String), EdgeInfo> = BTreeMap::new();
     for e in issue_edges(result) {
-        let (from, to) = match e.kind {
-            IssueKind::RuleViolation | IssueKind::LayerViolation => (
-                short_name(parent_dir(&e.from)),
-                short_name(parent_dir(&e.to)),
-            ),
-            _ => (short_name(&e.from), short_name(&e.to)),
+        let (from_dir, to_dir) = match e.kind {
+            IssueKind::RuleViolation | IssueKind::LayerViolation => {
+                (parent_dir(&e.from), parent_dir(&e.to))
+            }
+            _ => (e.from.as_str(), e.to.as_str()),
         };
-        if from == to {
+        // Only a genuine self-edge is dropped; two distinct directories that
+        // share a basename still get their edge (drawn between the nodes
+        // the basename keying gives them).
+        if from_dir == to_dir {
             continue;
         }
+        let (from, to) = (short_name(from_dir), short_name(to_dir));
         let entry = edges.entry((from, to)).or_insert(EdgeInfo {
             count: 0,
             kind: e.kind,
@@ -176,13 +168,6 @@ fn node_status(dir_name: &str, violations: &[CouplingViolation]) -> &'static str
         }
     }
     "healthy"
-}
-
-fn parent_dir(path: &str) -> &str {
-    match path.rfind('/') {
-        Some(i) => &path[..i],
-        None => "",
-    }
 }
 
 fn short_name(path: &str) -> String {
@@ -262,7 +247,8 @@ pub fn format_mermaid(modules: &[Module], result: &AuditResult) -> String {
 
     // Legend
     out.push_str("    %% Legend — edge accents by Issue kind:\n");
-    for (kind, colour, arrow, _) in EDGE_STYLES {
+    for kind in EDGE_KINDS {
+        let (colour, arrow, _) = edge_style(kind);
         out.push_str(&format!(
             "    %%   {}  {}  ({})\n",
             arrow,
@@ -352,7 +338,8 @@ pub fn format_dot(modules: &[Module], result: &AuditResult) -> String {
     out.push_str("    subgraph cluster_legend {\n");
     out.push_str("        label=\"Legend\"; fontsize=10; color=\"#cbd5e1\";\n");
     out.push_str("        node [shape=plaintext, style=\"\", fontsize=9];\n");
-    for (i, (kind, colour, _, dot_style)) in EDGE_STYLES.iter().enumerate() {
+    for (i, kind) in EDGE_KINDS.iter().enumerate() {
+        let (colour, _, dot_style) = edge_style(*kind);
         out.push_str(&format!(
             "        l{i}a [label=\"\"]; l{i}b [label=\"{}\"]; l{i}a -> l{i}b [{}, color=\"{}\"];\n",
             kind.name(),
@@ -517,11 +504,9 @@ mod tests {
             }])
             .build();
         result.apply_baseline(&Baseline {
-            fingerprints: [
-                "coupling_violation:src/loose/x/mod.rs -> src/loose/y/mod.rs".to_string(),
-            ]
-            .into_iter()
-            .collect(),
+            fingerprints: ["coupling_violation:src/loose/x -> src/loose/y".to_string()]
+                .into_iter()
+                .collect(),
             legacy_format: false,
         });
         result

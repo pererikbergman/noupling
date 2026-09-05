@@ -630,9 +630,10 @@ mod tests {
     fn text_format_marks_baselined_cards_and_prints_new_vs_baselined_counts() {
         use noupling_core::analyzer::{CouplingViolation, DependencyDirection};
         use noupling_core::baseline::Baseline;
+        // Two different directory pairs: the fingerprint is the pair.
         let edge = |from: &str, to: &str| CouplingViolation {
-            dir_a: "src/a".into(),
-            dir_b: "src/b".into(),
+            dir_a: from.rsplit_once('/').unwrap().0.into(),
+            dir_b: to.rsplit_once('/').unwrap().0.into(),
             from_module: from.into(),
             to_module: to.into(),
             line_number: 1,
@@ -654,11 +655,11 @@ mod tests {
             .with_total_modules(4)
             .with_violations(vec![
                 edge("src/a/old.rs", "src/b/y.rs"),
-                edge("src/a/new.rs", "src/b/y.rs"),
+                edge("src/c/new.rs", "src/b/y.rs"),
             ])
             .build();
         let accepted = Baseline {
-            fingerprints: ["coupling_violation:src/a/old.rs -> src/b/y.rs".to_string()]
+            fingerprints: ["coupling_violation:src/a -> src/b".to_string()]
                 .into_iter()
                 .collect(),
             legacy_format: false,
@@ -673,7 +674,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains("[CRITICAL] Coupling Violation: src/a/new.rs -> src/b/y.rs\n"),
+            text.contains("[CRITICAL] Coupling Violation: src/c/new.rs -> src/b/y.rs\n"),
             "new issue must not be marked: {text}"
         );
     }
@@ -832,7 +833,20 @@ mod tests {
     /// band mapped to a Sonar severity.
     #[test]
     fn sonar_report_emits_one_issue_per_issue_for_every_kind() {
-        let sonar = format_sonar(&result_with_a_zone_flag_and_a_rule_violation());
+        let file = |id: &str, path: &str| Module {
+            id: id.into(),
+            snapshot_id: "s".into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: noupling_core::core::ModuleType::File,
+            depth: 2,
+        };
+        let modules = vec![
+            file("z", "src/concrete/zz.rs"),
+            file("t", "src/concrete/types.rs"),
+        ];
+        let sonar = format_sonar(&modules, &result_with_a_zone_flag_and_a_rule_violation());
         let parsed: serde_json::Value = serde_json::from_str(&sonar).unwrap();
         let issues = parsed["issues"].as_array().unwrap();
         assert_eq!(issues.len(), 2);
@@ -852,7 +866,9 @@ mod tests {
             .find(|i| i["ruleId"] == "noupling:zone_flag")
             .expect("zone flag issue");
         assert_eq!(zone["severity"], "MINOR");
-        assert_eq!(zone["primaryLocation"]["filePath"], "src/concrete");
+        // Sonar drops locations that are not indexed files, so a
+        // directory-shaped Issue pins to the first file in that directory.
+        assert_eq!(zone["primaryLocation"]["filePath"], "src/concrete/types.rs");
     }
 
     /// A result with a Cycle (scoring), a Coupling Violation (scoring), a

@@ -199,7 +199,7 @@ mod adapters {
             );
             Ok(Output::SingleFile {
                 file_path,
-                content: reporter::format_sonar(ctx.result),
+                content: reporter::format_sonar(ctx.modules, ctx.result),
                 success_tail: Some(tail),
             })
         }

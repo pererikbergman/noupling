@@ -424,7 +424,7 @@ mod tests {
             .with_violations(vec![sibling("src/x/a.rs", "src/y/b.rs", "src/x", "src/y")])
             .build();
         result.apply_baseline(&Baseline {
-            fingerprints: ["coupling_violation:src/x/a.rs -> src/y/b.rs".to_string()]
+            fingerprints: ["coupling_violation:src/x -> src/y".to_string()]
                 .into_iter()
                 .collect(),
             legacy_format: false,

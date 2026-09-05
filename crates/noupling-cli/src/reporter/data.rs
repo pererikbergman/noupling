@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use noupling_core::analyzer::{AuditResult, CouplingViolation, IssueCard};
+use noupling_core::analyzer::{common_parent_dir, AuditResult, CouplingViolation, IssueCard};
 use noupling_core::core::Module;
 use serde::Serialize;
 
@@ -479,10 +479,13 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
 
     // Count violations per directory
     for v in &result.violations {
+        // Same anchor rule as Issue::anchor_dir, so per-directory counts
+        // match the Issue cards the html / md pages list there.
         let parent = if v.is_circular && !v.cycle_path.is_empty() {
-            find_common_ancestor(&v.cycle_path)
+            let members: Vec<&str> = v.cycle_path.iter().map(String::as_str).collect();
+            common_parent_dir(&members)
         } else {
-            common_parent(&v.dir_a, &v.dir_b)
+            common_parent_dir(&[&v.dir_a, &v.dir_b])
         };
         if let Some(dir) = dirs.get_mut(&parent) {
             dir.violations_count += 1;
@@ -515,52 +518,4 @@ fn build_json_dir_tree(modules: &[Module], result: &AuditResult) -> Vec<JsonDire
     }
 
     dirs.into_values().collect()
-}
-
-pub(super) fn find_common_ancestor(paths: &[String]) -> String {
-    if paths.is_empty() {
-        return String::new();
-    }
-    let mut common = std::path::Path::new(&paths[0])
-        .parent()
-        .unwrap_or(std::path::Path::new(""))
-        .to_string_lossy()
-        .to_string();
-    for path in &paths[1..] {
-        let p = std::path::Path::new(path)
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
-        while !p.starts_with(&common) && !common.is_empty() {
-            common = std::path::Path::new(&common)
-                .parent()
-                .map(|pp| pp.to_string_lossy().to_string())
-                .unwrap_or_default();
-        }
-    }
-    common
-}
-
-pub(super) fn common_parent(a: &str, b: &str) -> String {
-    let pa = std::path::Path::new(a);
-    let pb = std::path::Path::new(b);
-    if pa.parent() == pb.parent() {
-        return pa
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
-    }
-    let mut current = pa.to_path_buf();
-    loop {
-        let s = current.to_string_lossy().to_string();
-        if b.starts_with(&format!("{}/", s)) || b == s {
-            return s;
-        }
-        match current.parent() {
-            Some(p) if !p.as_os_str().is_empty() => current = p.to_path_buf(),
-            _ => return String::new(),
-        }
-    }
 }

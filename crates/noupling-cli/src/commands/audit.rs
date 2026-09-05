@@ -97,15 +97,20 @@ pub fn run(
 
     let pipeline =
         crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
-    let crate::audit_pipeline::PipelineOutcome {
-        mut result,
-        baseline: baseline_info,
-        ..
-    } = pipeline.run(crate::audit_pipeline::PipelineOptions {
+    let outcome = pipeline.run(crate::audit_pipeline::PipelineOptions {
         snapshot_id: Some(&snapshot.id),
         module_filter,
         baseline: use_baseline,
     })?;
+    // Persist the score and per-kind Issue counts on the snapshot row so
+    // the Explorer's history scrubber and the strategy report can trend
+    // them without re-auditing. Skipped for partial (diff / --module) runs.
+    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &outcome);
+    let crate::audit_pipeline::PipelineOutcome {
+        mut result,
+        baseline: baseline_info,
+        ..
+    } = outcome;
 
     // Compute violation age from snapshot history. Specific to audit;
     // not part of the shared pipeline.
@@ -127,11 +132,6 @@ pub fn run(
     }
     result.violation_age =
         noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
-
-    // Persist the score and per-kind Issue counts on the snapshot row so
-    // the Explorer's history scrubber and the strategy report can trend
-    // them without re-auditing.
-    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &result);
 
     print!("{}", crate::reporter::format_text(&result));
 

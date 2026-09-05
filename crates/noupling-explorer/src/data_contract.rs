@@ -1053,6 +1053,8 @@ mod builder_tests {
             .with_red_flags(vec![RedFlag {
                 flag_type: RedFlagType::FusedSibling,
                 modules: vec!["a".into(), "b".into()],
+                dir_a: String::new(),
+                dir_b: String::new(),
                 rri: 5.0,
                 imports: 0,
                 median_density: 0.0,

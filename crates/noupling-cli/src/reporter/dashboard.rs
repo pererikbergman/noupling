@@ -43,21 +43,19 @@ pub struct IssueKindCount {
     pub hint: &'static str,
 }
 
-/// Tile colour and one-line hint per kind. Exhaustive so a new kind must
-/// pick how the dashboard shows it.
-fn kind_tile(kind: IssueKind) -> (&'static str, &'static str) {
+/// One-line hint per kind for the tile. Exhaustive so a new kind must
+/// say what it means here; the colour comes from `IssueKind::accent_color`.
+fn kind_hint(kind: IssueKind) -> &'static str {
     match kind {
-        IssueKind::CouplingViolation => ("#f59e0b", "Sibling or upward import the audit disallows"),
-        IssueKind::Cycle => ("#ef4444", "Directories that depend on each other in a ring"),
-        IssueKind::RuleViolation => ("#dc2626", "Import forbidden by a dependency rule"),
-        IssueKind::LayerViolation => ("#b91c1c", "Import into a higher layer"),
-        IssueKind::GravityWell => ("#8b5cf6", "Module carrying disproportionate risk"),
-        IssueKind::RedFlag => ("#db2777", "Named structural anti-pattern"),
-        IssueKind::StabilityViolation => {
-            ("#0ea5e9", "Stable directory depends on a less stable one")
-        }
-        IssueKind::ZoneFlag => ("#14b8a6", "Directory in the Zone of Pain or Uselessness"),
-        IssueKind::LowCohesion => ("#64748b", "Package whose children barely use each other"),
+        IssueKind::CouplingViolation => "Sibling or upward import the audit disallows",
+        IssueKind::Cycle => "Directories that depend on each other in a ring",
+        IssueKind::RuleViolation => "Import forbidden by a dependency rule",
+        IssueKind::LayerViolation => "Import into a higher layer",
+        IssueKind::GravityWell => "Module carrying disproportionate risk",
+        IssueKind::RedFlag => "Named structural anti-pattern",
+        IssueKind::StabilityViolation => "Stable directory depends on a less stable one",
+        IssueKind::ZoneFlag => "Directory in the Zone of Pain or Uselessness",
+        IssueKind::LowCohesion => "Package whose children barely use each other",
     }
 }
 
@@ -419,15 +417,12 @@ fn build_dashboard_data(
     let issue_cards: Vec<IssueCard> = issues.iter().map(|i| i.to_card()).collect();
     let issue_kind_counts: Vec<IssueKindCount> = IssueKind::ALL
         .iter()
-        .map(|kind| {
-            let (color, hint) = kind_tile(*kind);
-            IssueKindCount {
-                kind: kind.id(),
-                kind_name: kind.name(),
-                count: issues.iter().filter(|i| i.kind() == *kind).count(),
-                color,
-                hint,
-            }
+        .map(|kind| IssueKindCount {
+            kind: kind.id(),
+            kind_name: kind.name(),
+            count: issues.iter().filter(|i| i.kind() == *kind).count(),
+            color: kind.accent_color(),
+            hint: kind_hint(*kind),
         })
         .collect();
 

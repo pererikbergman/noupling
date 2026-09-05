@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, IssueKind};
+use noupling_core::analyzer::{common_parent_dir, AuditResult, Issue, IssueDetail, IssueKind};
 use noupling_core::core::Module;
 use noupling_core::settings::Settings;
 
@@ -193,10 +193,13 @@ fn build_report_data(
     for violation in &result.violations {
         // For circular violations, find the common ancestor of ALL dirs in the cycle
         // For coupling violations, find the parent where dir_a and dir_b are siblings
+        // Same anchor rule as the Issue cards on the page (Issue::anchor_dir),
+        // so a directory's violation count and its listed Issues agree.
         let parent = if violation.is_circular && !violation.cycle_path.is_empty() {
-            find_common_ancestor_of_all(&violation.cycle_path)
+            let members: Vec<&str> = violation.cycle_path.iter().map(String::as_str).collect();
+            common_parent_dir(&members)
         } else {
-            find_common_parent(&violation.dir_a, &violation.dir_b)
+            common_parent_dir(&[&violation.dir_a, &violation.dir_b])
         };
 
         let info = ViolationInfo {
@@ -212,7 +215,7 @@ fn build_report_data(
 
     // Distribute coupling metrics (informational, not violations) to directories
     for cm in &result.coupling_metrics {
-        let parent = find_common_parent(&cm.dir_a, &cm.dir_b);
+        let parent = common_parent_dir(&[&cm.dir_a, &cm.dir_b]);
         let info = ViolationInfo {
             from_module: cm.from_module.clone(),
             to_module: cm.to_module.clone(),
@@ -332,57 +335,6 @@ fn find_common_root(modules: &[Module]) -> String {
         }
     }
     common
-}
-
-/// Find the common ancestor directory of all paths in the list.
-fn find_common_ancestor_of_all(paths: &[String]) -> String {
-    if paths.is_empty() {
-        return String::new();
-    }
-    // Start with the parent of the first path
-    let mut common = std::path::Path::new(&paths[0])
-        .parent()
-        .unwrap_or(std::path::Path::new(""))
-        .to_string_lossy()
-        .to_string();
-
-    for path in &paths[1..] {
-        let p = std::path::Path::new(path)
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
-        // Shrink common until it's a prefix of this path's parent
-        while !p.starts_with(&common) && !common.is_empty() {
-            common = std::path::Path::new(&common)
-                .parent()
-                .map(|pp| pp.to_string_lossy().to_string())
-                .unwrap_or_default();
-        }
-    }
-    common
-}
-
-fn find_common_parent(path_a: &str, path_b: &str) -> String {
-    let a = std::path::Path::new(path_a);
-    let b = std::path::Path::new(path_b);
-    let a_parent = a.parent().unwrap_or(std::path::Path::new(""));
-    let b_parent = b.parent().unwrap_or(std::path::Path::new(""));
-    if a_parent == b_parent {
-        return a_parent.to_string_lossy().to_string();
-    }
-    // Walk up until we find common ancestor
-    let mut current = a.to_path_buf();
-    loop {
-        let current_str = current.to_string_lossy().to_string();
-        if path_b.starts_with(&format!("{}/", current_str)) || path_b == current_str {
-            return current_str;
-        }
-        match current.parent() {
-            Some(p) if !p.as_os_str().is_empty() => current = p.to_path_buf(),
-            _ => return String::new(),
-        }
-    }
 }
 
 fn module_label(path: &str, current_dir: &str) -> String {

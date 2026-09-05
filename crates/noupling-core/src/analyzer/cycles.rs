@@ -170,7 +170,16 @@ pub(super) fn detect_sibling_cycles(
             });
             if !scc_covered {
                 // DFS from first node to find a cycle within the SCC
-                if let Some(cycle_nodes) = find_cycle_in_scc(&scc_set, &adj, scc[0]) {
+                if let Some(mut cycle_nodes) = find_cycle_in_scc(&scc_set, &adj, scc[0]) {
+                    // Canonical rotation: start the ring at its lexicographically
+                    // smallest directory so the reported path (and therefore the
+                    // Cycle's subject and baseline fingerprint) does not depend on
+                    // which node the SCC walk happened to enter first.
+                    if let Some(min_pos) =
+                        (0..cycle_nodes.len()).min_by_key(|&i| siblings[cycle_nodes[i]].as_str())
+                    {
+                        cycle_nodes.rotate_left(min_pos);
+                    }
                     let mut dir_path: Vec<String> = cycle_nodes
                         .iter()
                         .map(|&idx| siblings[idx].clone())

@@ -23,22 +23,23 @@ pub fn run(
     // specific to `report` (trend persistence + format dispatch).
     let pipeline =
         crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
+    let outcome = pipeline.run(crate::audit_pipeline::PipelineOptions {
+        snapshot_id: None,
+        module_filter,
+        baseline: use_baseline,
+    })?;
+    // Persist the score and per-kind Issue counts on the snapshot row so
+    // the Explorer's history scrubber and the strategy report can trend
+    // them, even when the user only ever runs `noupling report`. Skipped
+    // for partial (diff / --module) runs.
+    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &outcome);
     let crate::audit_pipeline::PipelineOutcome {
         snapshot,
         modules: report_modules,
         dependencies: report_deps,
         result,
         ..
-    } = pipeline.run(crate::audit_pipeline::PipelineOptions {
-        snapshot_id: None,
-        module_filter,
-        baseline: use_baseline,
-    })?;
-
-    // Persist the score and per-kind Issue counts on the snapshot row so
-    // the Explorer's history scrubber and the strategy report can trend
-    // them, even when the user only ever runs `noupling report`.
-    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &result);
+    } = outcome;
 
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;

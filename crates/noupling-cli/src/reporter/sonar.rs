@@ -6,9 +6,14 @@
 //! severity, and the message is the Issue card's reason + recommendation.
 
 use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, SeverityBand};
+use noupling_core::core::Module;
 
-pub fn format_sonar(result: &AuditResult) -> String {
-    let issues: Vec<serde_json::Value> = result.issues().iter().map(sonar_issue).collect();
+pub fn format_sonar(modules: &[Module], result: &AuditResult) -> String {
+    let issues: Vec<serde_json::Value> = result
+        .issues()
+        .iter()
+        .map(|i| sonar_issue(i, modules))
+        .collect();
     let report = serde_json::json!({ "issues": issues });
     serde_json::to_string_pretty(&report).unwrap_or_default()
 }
@@ -23,8 +28,21 @@ fn sonar_severity(band: SeverityBand) -> (&'static str, i32) {
 }
 
 /// Where Sonar should pin the Issue: a file and line when the Issue has
-/// one, otherwise the directory it is about (line 1).
-fn primary_location(issue: &Issue) -> (String, i32) {
+/// one, otherwise the first file (sorted) inside the directory it is
+/// about, at line 1. Sonar's generic-issue importer resolves `filePath`
+/// against indexed files and silently drops anything else, so a bare
+/// directory would lose the Issue.
+fn primary_location(issue: &Issue, modules: &[Module]) -> (String, i32) {
+    let file_in = |dir: &str| -> String {
+        let prefix = format!("{}/", dir);
+        modules
+            .iter()
+            .filter(|m| m.path.starts_with(&prefix))
+            .map(|m| m.path.as_str())
+            .min()
+            .unwrap_or(dir)
+            .to_string()
+    };
     match &issue.detail {
         IssueDetail::CouplingViolation(v) => (v.from_module.clone(), v.line_number.max(1)),
         IssueDetail::Cycle(v) => match v.cycle_hop_files.first() {
@@ -35,9 +53,9 @@ fn primary_location(issue: &Issue) -> (String, i32) {
         IssueDetail::LayerViolation(l) => (l.from_module.clone(), l.line_number.max(1)),
         IssueDetail::GravityWell(g) => (g.module_path.clone(), 1),
         IssueDetail::RedFlag(f) => (f.modules.first().cloned().unwrap_or_default(), 1),
-        IssueDetail::StabilityViolation(s) => (s.from_dir.clone(), 1),
-        IssueDetail::ZoneFlag(d) => (d.dir.clone(), 1),
-        IssueDetail::LowCohesion(c) => (c.dir.clone(), 1),
+        IssueDetail::StabilityViolation(s) => (file_in(&s.from_dir), 1),
+        IssueDetail::ZoneFlag(d) => (file_in(&d.dir), 1),
+        IssueDetail::LowCohesion(c) => (file_in(&c.dir), 1),
     }
 }
 
@@ -80,9 +98,9 @@ fn secondary_locations(issue: &Issue) -> Vec<serde_json::Value> {
     }
 }
 
-fn sonar_issue(issue: &Issue) -> serde_json::Value {
+fn sonar_issue(issue: &Issue, modules: &[Module]) -> serde_json::Value {
     let (severity, effort) = sonar_severity(issue.severity());
-    let (file_path, line) = primary_location(issue);
+    let (file_path, line) = primary_location(issue, modules);
     let mut value = serde_json::json!({
         "engineId": "noupling",
         "ruleId": format!("noupling:{}", issue.kind().id()),

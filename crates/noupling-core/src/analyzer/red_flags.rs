@@ -11,6 +11,11 @@ pub struct RedFlag {
     pub flag_type: RedFlagType,
     /// Modules involved (file paths or directory paths).
     pub modules: Vec<String>,
+    /// The directory pair the flag is about (`dir_a`/`dir_b` of the
+    /// underlying relationship). Its identity for the baseline: which
+    /// file happens to represent the pair may change between scans.
+    pub dir_a: String,
+    pub dir_b: String,
     /// The RRI that triggered this flag.
     pub rri: f64,
     /// Imports between the two modules' directories (the density that
@@ -57,6 +62,8 @@ pub fn compute_red_flags(
                 flags.push(RedFlag {
                     flag_type: RedFlagType::FusedSibling,
                     modules: vec![v.from_module.clone(), v.to_module.clone()],
+                    dir_a: v.dir_a.clone(),
+                    dir_b: v.dir_b.clone(),
                     rri: v.rri,
                     imports: v.weight,
                     median_density,
@@ -81,6 +88,8 @@ pub fn compute_red_flags(
         flags.push(RedFlag {
             flag_type: RedFlagType::TrappedChild,
             modules: vec![v.from_module.clone(), v.to_module.clone()],
+            dir_a: v.dir_a.clone(),
+            dir_b: v.dir_b.clone(),
             rri: v.rri,
             imports: v.weight,
             median_density: 0.0,
