@@ -32,6 +32,13 @@ h1 span {{ color: #3b82f6; }}
 .edge {{ fill: none; cursor: default; }}
 .edge-normal {{ stroke: #94a3b8; stroke-opacity: 0.15; }}
 .edge-violation {{ stroke: #ef4444; stroke-opacity: 0.3; stroke-width: 1.5; }}
+/* Edge accents by Issue kind (graph formats accent every edge-shaped Issue). */
+.edge-kind-coupling_violation {{ stroke: #eab308; stroke-opacity: 0.55; stroke-width: 1.5; }}
+.edge-kind-rule_violation {{ stroke: #dc2626; stroke-opacity: 0.7; stroke-width: 2.2; }}
+.edge-kind-layer_violation {{ stroke: #b91c1c; stroke-opacity: 0.7; stroke-width: 2.2; stroke-dasharray: 6 3; }}
+.edge-kind-stability_violation {{ stroke: #0ea5e9; stroke-opacity: 0.6; stroke-width: 1.5; stroke-dasharray: 2 3; }}
+.edge-kind-cycle {{ stroke: #ef4444; stroke-opacity: 0.55; stroke-width: 2; }}
+.edge-baselined {{ stroke: #94a3b8 !important; stroke-opacity: 0.35 !important; }}
 .edge-cycle {{ stroke: #ef4444; stroke-opacity: 0.55; stroke-width: 2; }}
 .edge-cycle-weakest {{ stroke: #dc2626; stroke-opacity: 0.95; stroke-width: 3.5; }}
 .edge:hover {{ stroke-opacity: 1 !important; stroke-width: 3 !important; }}
@@ -93,8 +100,12 @@ footer {{ margin-top: 1.5rem; font-size: 0.65rem; color: #cbd5e1; }}
     <span><span class="legend-dot" style="background:#eab308"></span> warning (&ge;70)</span>
     <span><span class="legend-dot" style="background:#ef4444"></span> needs attention</span>
     <span><span class="legend-dot" style="background:#94a3b8"></span> dependency</span>
-    <span><span class="legend-dot" style="background:#ef4444; opacity:0.6"></span> violation</span>
-    <span><span class="legend-dot" style="background:#dc2626"></span> cycle (break this)</span>
+    <span><span class="legend-dot" style="background:#eab308"></span> Coupling Violation</span>
+    <span><span class="legend-dot" style="background:#dc2626"></span> Rule Violation</span>
+    <span><span class="legend-dot" style="background:#b91c1c"></span> Layer Violation (dashed)</span>
+    <span><span class="legend-dot" style="background:#0ea5e9"></span> Stability Violation (dotted)</span>
+    <span><span class="legend-dot" style="background:#ef4444"></span> Cycle (weakest hop bright: break this)</span>
+    <span><span class="legend-dot" style="background:#94a3b8; opacity:0.5"></span> baselined (muted)</span>
 </div>
 
 <footer>{version}</footer>
@@ -104,7 +115,9 @@ footer {{ margin-top: 1.5rem; font-size: 0.65rem; color: #cbd5e1; }}
 const rawData = {json};
 const tooltip = document.getElementById("tooltip");
 const allDeps = rawData.deps;
-const violationDeps = rawData.violation_deps;
+const issueEdges = rawData.issue_edges;
+// Drawing precedence when several Issues land on one arc-to-arc edge.
+const KIND_RANK = {{ cycle: 5, rule_violation: 4, layer_violation: 3, coupling_violation: 2, stability_violation: 1 }};
 const allCycles = rawData.cycles || [];
 let currentBeta = 0.85;
 let showViolationsOnly = false;
@@ -320,8 +333,25 @@ function drawEdges() {{
     if (children.length === 0) {{ edgeGroup.selectAll("path").remove(); return; }}
 
     const normalEdges = aggregateEdges(allDeps, children);
-    const vEdges = aggregateEdges(violationDeps, children);
-    const vSet = new Set(vEdges.map(e => e.from.fullPath + "|" + e.to.fullPath));
+    // Aggregate Issue edges per visible arc pair, keeping the most
+    // structural kind and muting only when every Issue on it is baselined.
+    const vMap = new Map();
+    for (const ie of issueEdges) {{
+        const from = findOwner(ie.from, children);
+        const to = findOwner(ie.to, children);
+        if (!from || !to || from === to) continue;
+        const key = from.fullPath + "|" + to.fullPath;
+        const cur = vMap.get(key);
+        if (!cur) {{
+            vMap.set(key, {{ from, to, count: 1, kind: ie.kind, kindName: ie.kind_name, baselined: ie.baselined }});
+        }} else {{
+            cur.count++;
+            if ((KIND_RANK[ie.kind] || 0) > (KIND_RANK[cur.kind] || 0)) {{ cur.kind = ie.kind; cur.kindName = ie.kind_name; }}
+            cur.baselined = cur.baselined && ie.baselined;
+        }}
+    }}
+    const vEdges = Array.from(vMap.values());
+    const vByKey = new Map(vEdges.map(e => [e.from.fullPath + "|" + e.to.fullPath, e]));
 
     // Build a set of cycle edge keys so we can suppress duplicate normal/violation
     // rendering of the same arc-to-arc edge — cycle edges take priority and are
@@ -339,10 +369,10 @@ function drawEdges() {{
     if (showViolationsOnly) {{
         displayEdges = vEdges.map(e => ({{ ...e, isViolation: true }}));
     }} else {{
-        displayEdges = normalEdges.map(e => ({{
-            ...e,
-            isViolation: vSet.has(e.from.fullPath + "|" + e.to.fullPath)
-        }}));
+        displayEdges = normalEdges.map(e => {{
+            const v = vByKey.get(e.from.fullPath + "|" + e.to.fullPath);
+            return v ? {{ ...e, isViolation: true, kind: v.kind, kindName: v.kindName, baselined: v.baselined }} : {{ ...e, isViolation: false }};
+        }});
     }}
     // Drop normal/violation edges that will be re-rendered as red cycle edges.
     displayEdges = displayEdges.filter(e =>
@@ -371,14 +401,14 @@ function drawEdges() {{
     edgeGroup.selectAll("path.edge-base")
         .data(displayEdges)
         .join("path")
-        .attr("class", d => "edge edge-base " + (d.isViolation ? "edge-violation" : "edge-normal"))
+        .attr("class", d => "edge edge-base " + (d.isViolation ? `edge-violation edge-kind-${{d.kind}}${{d.baselined ? " edge-baselined" : ""}}` : "edge-normal"))
         .attr("d", edgePath)
         .attr("stroke-width", d => Math.min(1 + Math.log2(d.count + 1), 4))
         .style("pointer-events", "stroke")
         .on("mouseover", (event, d) => {{
             const fromName = d.from.data.name;
             const toName = d.to.data.name;
-            const type = d.isViolation ? '<span style="color:#ef4444">violation</span>' : "dependency";
+            const type = d.isViolation ? `<span style="color:#ef4444">${{d.kindName}}${{d.baselined ? " (baselined)" : ""}}</span>` : "dependency";
             tooltip.innerHTML = `<strong>${{fromName}}</strong> &rarr; <strong>${{toName}}</strong><br>${{d.count}} import${{d.count !== 1 ? "s" : ""}} &middot; ${{type}}`;
             tooltip.style.opacity = 1;
         }})

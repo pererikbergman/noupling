@@ -36,11 +36,24 @@ struct CycleAtLevel {
     hops: Vec<CycleHop>,
 }
 
+/// An edge-shaped Issue projected onto two report-relative paths, with
+/// the kind that styles it (`edge-kind-<kind>` in the template).
+#[derive(Serialize)]
+struct IssueEdgeOut {
+    from: String,
+    to: String,
+    kind: &'static str,
+    kind_name: &'static str,
+    baselined: bool,
+}
+
 #[derive(Serialize)]
 struct BundleData {
     tree: SunburstNode,
     deps: Vec<DepEdge>,
-    violation_deps: Vec<DepEdge>,
+    /// Every edge of every edge-shaped Issue (ADR: graph formats accent
+    /// edge-shaped Issues). Node-shaped Issues are not drawn.
+    issue_edges: Vec<IssueEdgeOut>,
     cycles: Vec<CycleAtLevel>,
 }
 
@@ -223,26 +236,27 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
         }
     }
 
-    // Violation-specific edges
-    let mut violation_deps: Vec<DepEdge> = Vec::new();
-    let mut v_seen: HashSet<(String, String)> = HashSet::new();
-    for v in &result.violations {
-        if !v.is_circular {
-            let f = strip_path_prefix(&v.from_module, &common);
-            let t = strip_path_prefix(&v.to_module, &common);
-            if v_seen.insert((f.clone(), t.clone())) {
-                violation_deps.push(DepEdge { from: f, to: t });
-            }
-        } else {
-            for (from_file, to_file, _) in &v.cycle_hop_files {
-                if !from_file.is_empty() && !to_file.is_empty() {
-                    let f = strip_path_prefix(from_file, &common);
-                    let t = strip_path_prefix(to_file, &common);
-                    if v_seen.insert((f.clone(), t.clone())) {
-                        violation_deps.push(DepEdge { from: f, to: t });
-                    }
-                }
-            }
+    // Accented edges, one per edge-shaped Issue. Cycle hops use the hop
+    // files when known (they aggregate onto the ring's directories at any
+    // zoom level), otherwise the directory pair.
+    let mut issue_edges: Vec<IssueEdgeOut> = Vec::new();
+    let mut seen: HashSet<(String, String, &'static str)> = HashSet::new();
+    for e in super::graph::issue_edges(result) {
+        let (f, t) = (
+            strip_path_prefix(&e.from, &common),
+            strip_path_prefix(&e.to, &common),
+        );
+        if f.is_empty() || t.is_empty() {
+            continue;
+        }
+        if seen.insert((f.clone(), t.clone(), e.kind.id())) {
+            issue_edges.push(IssueEdgeOut {
+                from: f,
+                to: t,
+                kind: e.kind.id(),
+                kind_name: e.kind.name(),
+                baselined: e.baselined,
+            });
         }
     }
 
@@ -279,7 +293,7 @@ fn build_data(modules: &[Module], dependencies: &[Dependency], result: &AuditRes
     BundleData {
         tree,
         deps,
-        violation_deps,
+        issue_edges,
         cycles,
     }
 }
@@ -454,4 +468,76 @@ fn strip_path_prefix(path: &str, prefix: &str) -> String {
     }
     let with_slash = format!("{}/", prefix);
     path.strip_prefix(&with_slash).unwrap_or(path).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use noupling_core::analyzer::{AuditResultBuilder, RuleViolation, StabilityViolation};
+    use noupling_core::core::ModuleType;
+
+    fn file(path: &str) -> Module {
+        Module {
+            id: path.into(),
+            snapshot_id: "snap".into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: 2,
+        }
+    }
+
+    /// Every edge-shaped Issue reaches the bundle as an accented edge with
+    /// its kind, so the drawing can style each kind distinctly.
+    #[test]
+    fn bundle_data_carries_issue_edges_with_kinds() {
+        let modules = vec![
+            file("src/plugins/exporter.rs"),
+            file("src/legacy/compat.rs"),
+            file("src/stable/s.rs"),
+            file("src/volatile/v.rs"),
+        ];
+        let result = AuditResultBuilder::new()
+            .with_total_modules(4)
+            .with_rule_violations(vec![RuleViolation {
+                from_module: "src/plugins/exporter.rs".into(),
+                to_module: "src/legacy/compat.rs".into(),
+                line_number: 2,
+                message: "no".into(),
+            }])
+            .with_stability_violations(vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/volatile".into(),
+                from_instability: 0.5,
+                to_instability: 0.67,
+            }])
+            .build();
+        let data = build_data(&modules, &[], &result);
+        let json = serde_json::to_value(&data).unwrap();
+        let edges = json["issue_edges"].as_array().expect("issue_edges");
+        assert!(
+            edges
+                .iter()
+                .any(|e| e["kind"] == "rule_violation" && e["from"] == "plugins/exporter.rs"),
+            "{edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e["kind"] == "stability_violation" && e["from"] == "stable"),
+            "{edges:?}"
+        );
+        let out = tempfile::tempdir().unwrap().path().join("bundle.html");
+        generate_bundle_report(&modules, &[], &result, &out).unwrap();
+        let html = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            html.contains("edge-kind-rule_violation"),
+            "per-kind CSS class: {html}"
+        );
+        assert!(
+            html.contains("Stability Violation"),
+            "legend names the kind"
+        );
+    }
 }

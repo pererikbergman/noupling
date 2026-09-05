@@ -28,7 +28,15 @@ use std::process::Command;
 // trigger it. Add an `upward` marker here when the detector does.
 
 const KINDS: &[(&str, &[&str])] = &[
-    ("coupling_violation", &["sibling", "\u{2194}"]),
+    (
+        "coupling_violation",
+        &[
+            "coupling violation",
+            "coupling_violation",
+            "sibling",
+            "\u{2194}",
+        ],
+    ),
     ("cycle", &["circular", "cycle", "\u{21bb}"]),
     (
         "rule_violation",
@@ -75,6 +83,16 @@ fn all_kinds() -> Vec<&'static str> {
 /// Sentinel for an `EXPECTED` row that covers every kind.
 const ALL_KINDS: &[&str] = &["*"];
 
+/// What a graph format must carry: every edge-shaped kind (`CONTEXT.md`
+/// § Graph format). Node-shaped kinds may be omitted from a drawing.
+const EDGE_SHAPED_KINDS: &[&str] = &[
+    "coupling_violation",
+    "cycle",
+    "rule_violation",
+    "layer_violation",
+    "stability_violation",
+];
+
 // ── Expected coverage per format ─────────────────────────────────────────
 //
 // One row per format. Flip a row to `ALL_KINDS` when its ticket lands.
@@ -89,11 +107,11 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("md", ALL_KINDS),
     ("html", ALL_KINDS),
     ("dashboard", ALL_KINDS),
-    ("bundle", &["coupling_violation", "cycle"]),
+    ("bundle", EDGE_SHAPED_KINDS),
     ("pr", ALL_KINDS),
     ("briefing", ALL_KINDS),
-    ("mermaid", &["cycle"]),
-    ("dot", &[]),
+    ("mermaid", EDGE_SHAPED_KINDS),
+    ("dot", EDGE_SHAPED_KINDS),
     ("strategy", &[]),
     (
         "explorer",
