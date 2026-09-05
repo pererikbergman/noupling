@@ -689,6 +689,7 @@ fn monorepo_audit_matches_report_module_and_renders_issue_cards() {
         single_out.contains(&format!("Issues ({report_issues})")),
         "audit --module must list the same {report_issues} Issues:\n{single_out}"
     );
+}
 
 // ── inference hysteresis (#355) ──────────────────────────────────────────
 

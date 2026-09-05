@@ -122,11 +122,18 @@ const KEYWORDS: &[(&str, &[&str])] = &[
 /// 30% does not flip between layered and unlayered with every commit.
 const KEEP_COVERAGE_PERCENT: f64 = MIN_COVERAGE_PERCENT / 2.0;
 
-/// [`detect_layers`] with hysteresis: when the previous snapshot inferred
-/// `prior` layers and they still cover at least [`KEEP_COVERAGE_PERCENT`]
-/// of the current files, return them unchanged. Otherwise (no prior, an
-/// empty prior, or a prior that no longer fits) run a fresh detection.
+/// [`detect_layers`] with hysteresis. A fresh detection wins whenever it
+/// finds layers, so a project that grows new layer directories or renames
+/// one picks that up immediately. Only when the fresh detection comes back
+/// empty does the previous snapshot's `prior` set stay in force — and only
+/// while it still covers at least [`KEEP_COVERAGE_PERCENT`] of the current
+/// files. That is the one-way stickiness #355 asks for: inference switches
+/// on at 30% and does not switch off until coverage halves.
 pub fn detect_layers_with_prior(modules: &[Module], prior: Option<&[Layer]>) -> Vec<Layer> {
+    let fresh = detect_layers(modules);
+    if !fresh.is_empty() {
+        return fresh;
+    }
     if let Some(prior) = prior.filter(|p| !p.is_empty()) {
         let files: Vec<&Module> = modules
             .iter()
@@ -148,7 +155,7 @@ pub fn detect_layers_with_prior(modules: &[Module], prior: Option<&[Layer]>) -> 
             }
         }
     }
-    detect_layers(modules)
+    Vec::new()
 }
 
 /// Detect a sensible layer set from the given source modules.
@@ -385,6 +392,21 @@ mod tests {
             .collect();
         modules.push(file("app/ui/leftover.kt"));
         assert!(detect_layers_with_prior(&modules, Some(&prior)).is_empty());
+    }
+
+    /// New layer directories are picked up even while the old set still fits:
+    /// the prior only fills in when a fresh detection finds nothing.
+    #[test]
+    fn a_fresh_detection_that_finds_layers_beats_the_prior() {
+        let prior = detect_layers(
+            &(0..3)
+                .map(|i| file(&format!("app/ui/s{i}.kt")))
+                .collect::<Vec<_>>(),
+        );
+        let mut modules: Vec<Module> = (0..3).map(|i| file(&format!("app/ui/s{i}.kt"))).collect();
+        modules.extend((0..3).map(|i| file(&format!("app/data/r{i}.kt"))));
+        let now = detect_layers_with_prior(&modules, Some(&prior));
+        assert_eq!(now.len(), 2, "ui and data: {now:?}");
     }
 
     #[test]

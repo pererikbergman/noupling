@@ -40,7 +40,7 @@ Shared domain types used by all modules: `Module`, `ModuleType`, `Dependency`, `
 **Stage 2: Store.** SQLite persistence in `.noupling/history.db`.
 
 - `db.rs` - `Database` struct. Auto-creates schema on first access. Schema:
-  - `snapshots` — one row per scan. Columns: `id`, `timestamp`, `root_path`, `suppressed_count`, `diff_base`, `diff_changed_files`.
+  - `snapshots` — one row per scan. Columns: `id`, `timestamp`, `root_path`, `suppressed_count`, `diff_base`, `diff_changed_files`, plus three written when the snapshot is audited: `health_score`, `issue_kind_counts` (JSON, kind → count, #349) and `inferred_layers` (JSON array of the layers inference produced, `[]` when none; the next audit reads the previous snapshot's set for hysteresis, #355).
   - `modules` — one row per discovered source file.
   - `dependencies` — one row per resolved import edge.
   - `snapshot_external_deps` — one row per module per snapshot for external (unresolved) import counts.
