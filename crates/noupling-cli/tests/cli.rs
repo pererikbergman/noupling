@@ -620,3 +620,67 @@ fn examples_demonstrate_their_documented_issue_kinds() {
         "kotlin-circular must show a Cycle: {circular:?}"
     );
 }
+
+// ── monorepo mode (#357) ─────────────────────────────────────────────────
+
+/// `audit` in monorepo mode audits each module through the same pipeline as
+/// `report --module X`: same score, same Issues, layer rules applied, and
+/// the summary renders each module's Issue cards.
+#[test]
+fn monorepo_audit_matches_report_module_and_renders_issue_cards() {
+    let fixture = create_unlayered_by_settings_fixture();
+    let project = fixture.path();
+    let root = project.to_str().unwrap();
+    scan(project);
+    // One module covering src/, with declared layers so that the fixture's
+    // data → ui import is an upward Layer Violation inside that module.
+    let settings = r#"{
+      "modules": [
+        { "name": "app", "path": "src", "depends_on": [] }
+      ],
+      "layers": [
+        { "name": "ui", "pattern": "**/ui/**" },
+        { "name": "domain", "pattern": "**/domain/**" },
+        { "name": "data", "pattern": "**/data/**" }
+      ]
+    }"#;
+    std::fs::write(project.join(".noupling/settings.json"), settings).unwrap();
+
+    let summary = run_noupling(&["audit", root]);
+    assert!(
+        summary.status.success(),
+        "{}",
+        String::from_utf8_lossy(&summary.stderr)
+    );
+    let summary_out = String::from_utf8_lossy(&summary.stdout).into_owned();
+    assert!(summary_out.contains("Overall Score:"), "{summary_out}");
+    assert!(
+        summary_out.contains("Layer Violation:"),
+        "monorepo summary must render the module's Issue cards, layers applied:\n{summary_out}"
+    );
+
+    let single = run_noupling(&["audit", root, "--module", "app"]);
+    let single_out = String::from_utf8_lossy(&single.stdout).into_owned();
+    let audit_score = health_score_line(&single_out).to_string();
+
+    let report = run_noupling(&["report", root, "--module", "app", "--format", "json"]);
+    assert!(
+        report.status.success(),
+        "{}",
+        String::from_utf8_lossy(&report.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(project.join(".noupling/report.json")).unwrap(),
+    )
+    .unwrap();
+    let report_score = json["score"].as_f64().unwrap();
+    assert!(
+        audit_score.contains(&format!("{report_score:.1}")),
+        "audit --module says `{audit_score}`, report --module says {report_score:.1}"
+    );
+    let report_issues = json["issues"].as_array().unwrap().len();
+    assert!(
+        single_out.contains(&format!("Issues ({report_issues})")),
+        "audit --module must list the same {report_issues} Issues:\n{single_out}"
+    );
+}

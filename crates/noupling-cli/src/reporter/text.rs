@@ -364,8 +364,23 @@ pub fn format_monorepo_text(monorepo: &noupling_core::analyzer::MonorepoResult) 
             name,
             result.score,
             result.total_modules,
-            result.violations.len(),
+            result.violation_count(),
         ));
+    }
+
+    // Every module's Issues as Issue cards — the same cards `audit --module`
+    // and `report --module` print for it (#357). A module with none says so.
+    for (name, result) in &monorepo.module_results {
+        output.push_str(&format!("\n== {} ==\n", name));
+        if result.layers_auto_detected {
+            output.push_str("Layers: inferred from path names\n");
+        }
+        let cards = format_issue_cards(result);
+        if cards.trim().is_empty() {
+            output.push_str("No Issues.\n");
+        } else {
+            output.push_str(&cards);
+        }
     }
 
     if !monorepo.cross_module_violations.is_empty() {

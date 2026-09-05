@@ -28,10 +28,14 @@ pub fn run(
 
     // Monorepo mode: multiple configured modules
     if !project_settings.modules.is_empty() {
+        // Same inputs the single-module pipeline uses, so every module is
+        // audited exactly as `audit --module` / `report --module` audit it (#357).
+        let type_counts = noupling_core::scanner::recompute_type_counts(Path::new(path), &modules);
         let monorepo = noupling_core::analyzer::audit_modules(
             &modules,
             &dependencies,
-            &project_settings.modules,
+            &type_counts,
+            &project_settings,
         );
 
         if let Some(name) = module_filter {
