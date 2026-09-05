@@ -10,6 +10,8 @@ import { ScoreDialog } from "./components/ScoreDialog";
 import type { Issue } from "./components/SidePanel";
 import {
   useExplorerStore,
+  homeScope,
+  clampScope,
   useNodeFilter,
   inScope,
   shouldHighlightViolations,
@@ -36,7 +38,19 @@ export function App({ data }: AppProps) {
     setTheme(next);
   }
 
-  const state = useExplorerStore(data);
+  const store = useExplorerStore(data);
+  // The stored scope "" means "home": the first level of the tree that
+  // branches (#397). Every consumer sees the resolved scope, and a
+  // request to go above home lands on home.
+  const home = useMemo(() => homeScope(data), [data]);
+  const state = useMemo(() => {
+    const scope = clampScope(store.scope, home);
+    const setState: typeof store.setState = (patch) =>
+      store.setState(
+        patch.scope === undefined ? patch : { ...patch, scope: clampScope(patch.scope, home) },
+      );
+    return { ...store, scope, setState };
+  }, [store, home]);
   const filterFn = useNodeFilter(data, state);
 
   const visibleData = useMemo(

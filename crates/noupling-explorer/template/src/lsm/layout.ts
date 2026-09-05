@@ -4,6 +4,8 @@
  * component so the layout is unit-testable and deterministic.
  */
 import type { DataContract, EdgeEntry, LayerEntry, NodeEntry } from "../types";
+// Explicit extension: the unit tests run this file under node --experimental-strip-types.
+import { displayLabel } from "../state/labels.ts";
 
 export interface PositionedNode {
   id: string;
@@ -19,6 +21,22 @@ export interface PositionedNode {
   fileCount: number;
 }
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * How an edge is routed (#398):
+ * - `direct`: source and target sit in adjacent tiers — a curve through
+ *   the node-free gap between them;
+ * - `lane`: the edge spans more than one tier (or points upward), so it
+ *   leaves the source, runs down a vertical lane to the right of the
+ *   nodes, and comes back in to the target — never through a node;
+ * - `arc`: both ends are in the same tier — an arc below the nodes.
+ */
+export type EdgeRoute = "direct" | "lane" | "arc";
+
 export interface PositionedEdge {
   from: string;
   to: string;
@@ -26,7 +44,12 @@ export interface PositionedEdge {
   isCycle: boolean;
   isViolation: boolean;
   violationMessage: string | null;
-  // Endpoint coordinates (centered on the source's bottom and the target's top).
+  kind: EdgeRoute;
+  /** Polyline the renderer smooths; first point leaves the source, last
+   *  point lands on the target (top edge for downward routes, bottom
+   *  edge for arcs and upward lanes). */
+  points: Point[];
+  // Endpoint coordinates, kept for callers that only need the ends.
   x1: number;
   y1: number;
   x2: number;
@@ -53,12 +76,24 @@ export interface LSMLayout {
   bands: LayerBand[];
 }
 
-const TIER_HEIGHT = 200;
-const TIER_PADDING_TOP = 40;
+const TIER_PADDING_TOP = 36;
+/** Room under the last row of a tier for edge stubs and same-tier arcs. */
+const TIER_PADDING_BOTTOM = 62;
+/** Cards per row before a tier wraps. */
+const MAX_PER_ROW = 6;
+const ROW_GAP = 40;
 const NODE_LEAF_W = 170;
 const NODE_LEAF_H = 78;
 const NODE_PADDING = 32;
 const SIDE_PADDING = 32;
+/** Vertical clearance an edge keeps from a node before turning. */
+const EDGE_STUB = 16;
+/** Gap between the right-most node and the first lane; step per lane. */
+const LANE_GUTTER = 28;
+const LANE_STEP = 12;
+/** First same-tier arc dips this far below the nodes; each further arc a bit more. */
+const ARC_DIP = 26;
+const ARC_STEP = 10;
 const UNLAYERED_LABEL = "(unlayered)";
 
 /**
@@ -76,63 +111,161 @@ export function computeLSMLayout(data: DataContract): LSMLayout {
   // canvas at the current scope (#255).
   const tiers = buildTiers(data.nodes, data.layers);
 
-  // 3. Compute SVG width: widest tier.
-  const widestTier = Math.max(
-    ...tiers.map((t) => t.nodes.length * (NODE_LEAF_W + NODE_PADDING) + NODE_PADDING),
+  // 3. Rows: a tier wider than MAX_PER_ROW cards wraps onto further rows
+  //    so a busy directory grows downward and stays legible when the
+  //    canvas fits it, instead of becoming a 30%-zoom ribbon (#399).
+  const rowsOf = (t: Tier) => Math.max(1, Math.ceil(t.nodes.length / MAX_PER_ROW));
+  const tierHeightOf = (t: Tier) =>
+    TIER_PADDING_TOP + rowsOf(t) * NODE_LEAF_H + (rowsOf(t) - 1) * ROW_GAP + TIER_PADDING_BOTTOM;
+  const widestRow = Math.max(
+    ...tiers.map((t) => Math.min(t.nodes.length, MAX_PER_ROW) * (NODE_LEAF_W + NODE_PADDING) + NODE_PADDING),
     600,
   );
-  const width = widestTier + SIDE_PADDING * 2;
-  const height = tiers.length * TIER_HEIGHT;
+  const width = widestRow + SIDE_PADDING * 2;
+  const height = tiers.reduce((acc, t) => acc + tierHeightOf(t), 0);
 
   // 4. Position nodes.
   const nodes: PositionedNode[] = [];
   const bands: LayerBand[] = [];
-  tiers.forEach((tier, tierIdx) => {
-    const y0 = tierIdx * TIER_HEIGHT;
+  let y0 = 0;
+  tiers.forEach((tier) => {
     const layer = tier.layer;
+    const tierHeight = tierHeightOf(tier);
+    const filesInTier = tier.nodes.reduce(
+      (acc, n) => acc + (typeof n.metrics.file_count === "number" ? n.metrics.file_count : 1),
+      0,
+    );
     bands.push({
       name: layer?.name ?? tier.syntheticName ?? UNLAYERED_LABEL,
       index: layer?.index ?? -1,
       y: y0,
-      height: TIER_HEIGHT,
+      height: tierHeight,
       violationRate: layer ? violationRateFor(layer, data) : 0,
-      fileCount: layer?.file_count ?? tier.nodes.length,
+      fileCount: layer?.file_count ?? filesInTier,
       afferent: layer?.afferent ?? 0,
       efferent: layer?.efferent ?? 0,
       instability: layer?.instability ?? null,
     });
 
-    // Left-align nodes within each tier so the first N nodes of every
-    // tier are immediately visible. Wider tiers extend off to the
-    // right and the canvas scrolls.
+    // Left-align nodes within each row so the first N nodes of every
+    // tier are immediately visible.
     const xOffset = SIDE_PADDING;
     tier.nodes.forEach((n, i) => {
+      const row = Math.floor(i / MAX_PER_ROW);
+      const col = i % MAX_PER_ROW;
       const nodeW = nodeWidthFor(n);
       const nodeH = NODE_LEAF_H;
       nodes.push({
         id: n.id,
-        label: basename(n.id),
+        label: displayLabel(n),
         sublabel: n.id,
         kind: n.kind,
         layer: n.layer,
         layerIndex: layer?.index ?? -1,
-        x: xOffset + i * (NODE_LEAF_W + NODE_PADDING) + (NODE_LEAF_W - nodeW) / 2,
-        y: y0 + TIER_PADDING_TOP,
+        x: xOffset + col * (NODE_LEAF_W + NODE_PADDING) + (NODE_LEAF_W - nodeW) / 2,
+        y: y0 + TIER_PADDING_TOP + row * (NODE_LEAF_H + ROW_GAP),
         width: nodeW,
         height: nodeH,
         fileCount: typeof n.metrics.file_count === "number" ? n.metrics.file_count : 1,
       });
     });
+    y0 += tierHeight;
   });
 
-  // 5. Position edges between nodes (skip edges that touch a missing node).
+  // 5. Route edges between nodes (skip edges that touch a missing node).
   const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const tierOf = new Map<string, number>();
+  const rowOf = new Map<string, number>();
+  tiers.forEach((tier, i) =>
+    tier.nodes.forEach((n, j) => {
+      tierOf.set(n.id, i);
+      rowOf.set(n.id, Math.floor(j / MAX_PER_ROW));
+    }),
+  );
+  const lastRowOf = (tierIdx: number) => rowsOf(tiers[tierIdx]) - 1;
   const cycleEdgeSet = buildCycleEdgeSet(data);
+  const drawable = data.edges.filter((e) => byId.has(e.from) && byId.has(e.to));
+  const slots = assignSlots(drawable, byId);
+  // Right edge of the widest node per tier: a lane hugs the tiers its
+  // edge actually spans instead of the widest tier on the canvas.
+  const tierRight = tiers.map((_, i) =>
+    Math.max(
+      SIDE_PADDING,
+      ...nodes.filter((n) => tierOf.get(n.id) === i).map((n) => n.x + n.width),
+    ),
+  );
+  const spanRight = (lo: number, hi: number) =>
+    Math.max(...tierRight.slice(Math.min(lo, hi), Math.max(lo, hi) + 1));
+
+  let lanes = 0;
+  let laneRight = 0;
+  const arcsPerTier = new Map<number, number>();
   const edges: PositionedEdge[] = [];
-  for (const e of data.edges) {
-    const a = byId.get(e.from);
-    const b = byId.get(e.to);
-    if (!a || !b) continue;
+  for (const e of drawable) {
+    const a = byId.get(e.from)!;
+    const b = byId.get(e.to)!;
+    const ta = tierOf.get(e.from) ?? 0;
+    const tb = tierOf.get(e.to) ?? 0;
+    const sx = slots.out.get(edgeKey(e)) ?? a.x + a.width / 2;
+    const tx = slots.in.get(edgeKey(e)) ?? b.x + b.width / 2;
+    const aBottom = a.y + a.height;
+    const bBottom = b.y + b.height;
+
+    let kind: EdgeRoute;
+    let points: Point[];
+    if (ta === tb) {
+      // Same tier: arc below both nodes into the target's bottom edge.
+      const n = arcsPerTier.get(ta) ?? 0;
+      arcsPerTier.set(ta, n + 1);
+      const dipY = Math.max(aBottom, bBottom) + ARC_DIP + n * ARC_STEP;
+      kind = "arc";
+      points = [
+        { x: sx, y: aBottom },
+        { x: sx, y: dipY },
+        { x: tx, y: dipY },
+        { x: tx, y: bBottom },
+      ];
+    } else if (
+      tb === ta + 1 &&
+      rowOf.get(e.from) === lastRowOf(ta) &&
+      rowOf.get(e.to) === 0
+    ) {
+      // Adjacent tiers, bottom row to top row: the gap between them
+      // holds no node.
+      kind = "direct";
+      points = [
+        { x: sx, y: aBottom },
+        { x: tx, y: b.y },
+      ];
+    } else {
+      // Spans tiers, or points upward: out to a lane beside the nodes.
+      const laneX = spanRight(ta, tb) + LANE_GUTTER + lanes * LANE_STEP;
+      lanes += 1;
+      laneRight = Math.max(laneRight, laneX);
+      kind = "lane";
+      if (tb > ta) {
+        points = [
+          { x: sx, y: aBottom },
+          { x: sx, y: aBottom + EDGE_STUB },
+          { x: laneX, y: aBottom + EDGE_STUB },
+          { x: laneX, y: b.y - EDGE_STUB },
+          { x: tx, y: b.y - EDGE_STUB },
+          { x: tx, y: b.y },
+        ];
+      } else {
+        points = [
+          { x: sx, y: aBottom },
+          { x: sx, y: aBottom + EDGE_STUB },
+          { x: laneX, y: aBottom + EDGE_STUB },
+          { x: laneX, y: bBottom + EDGE_STUB },
+          { x: tx, y: bBottom + EDGE_STUB },
+          { x: tx, y: bBottom },
+        ];
+      }
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
     edges.push({
       from: e.from,
       to: e.to,
@@ -140,14 +273,54 @@ export function computeLSMLayout(data: DataContract): LSMLayout {
       isViolation: e.violates_rule !== null,
       violationMessage: e.violates_rule,
       isCycle: cycleEdgeSet.has(edgeKey(e)),
-      x1: a.x + a.width / 2,
-      y1: a.y + a.height,
-      x2: b.x + b.width / 2,
-      y2: b.y,
+      kind,
+      points,
+      x1: first.x,
+      y1: first.y,
+      x2: last.x,
+      y2: last.y,
     });
   }
 
-  return { width, height, nodes, edges, bands };
+  // Lanes live to the right of the nodes; make room for them.
+  const finalWidth = Math.max(width, laneRight + SIDE_PADDING);
+
+  return { width: finalWidth, height, nodes, edges, bands };
+}
+
+/**
+ * Spread the edges leaving and entering each node along its bottom and top
+ * edge, so several edges into one node do not collapse onto one point.
+ * Outgoing slots are ordered by the target's x, incoming by the source's,
+ * which keeps the fan from crossing itself.
+ */
+function assignSlots(
+  edges: EdgeEntry[],
+  byId: Map<string, PositionedNode>,
+): { out: Map<string, number>; in: Map<string, number> } {
+  const out = new Map<string, number>();
+  const inn = new Map<string, number>();
+  const outgoing = new Map<string, EdgeEntry[]>();
+  const incoming = new Map<string, EdgeEntry[]>();
+  for (const e of edges) {
+    (outgoing.get(e.from) ?? outgoing.set(e.from, []).get(e.from)!).push(e);
+    (incoming.get(e.to) ?? incoming.set(e.to, []).get(e.to)!).push(e);
+  }
+  const centerX = (id: string) => {
+    const n = byId.get(id)!;
+    return n.x + n.width / 2;
+  };
+  for (const [id, list] of outgoing) {
+    const n = byId.get(id)!;
+    list.sort((p, q) => centerX(p.to) - centerX(q.to));
+    list.forEach((e, i) => out.set(edgeKey(e), n.x + (n.width * (i + 1)) / (list.length + 1)));
+  }
+  for (const [id, list] of incoming) {
+    const n = byId.get(id)!;
+    list.sort((p, q) => centerX(p.from) - centerX(q.from));
+    list.forEach((e, i) => inn.set(edgeKey(e), n.x + (n.width * (i + 1)) / (list.length + 1)));
+  }
+  return { out, in: inn };
 }
 
 function findLayerIndex(layer: string | null, layers: LayerEntry[]): number {
@@ -274,10 +447,6 @@ function violationRateFor(layer: LayerEntry, data: DataContract): number {
 
 function nodeWidthFor(n: NodeEntry): number {
   return n.kind === "package" ? NODE_LEAF_W + 30 : NODE_LEAF_W;
-}
-
-function basename(id: string): string {
-  return id.split("/").filter(Boolean).pop() ?? id;
 }
 
 function buildCycleEdgeSet(data: DataContract): Set<string> {

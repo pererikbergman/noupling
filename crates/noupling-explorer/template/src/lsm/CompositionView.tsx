@@ -1,4 +1,5 @@
 import type { NodeEntry, EdgeEntry } from "../types";
+import { displayLabel } from "../state/labels";
 
 /**
  * Composition view (PRD §10.8). Answers "what *kind* of thing is
@@ -71,7 +72,7 @@ function ContainerCard({
       >
         <div className="mb-1 flex items-baseline justify-between gap-2">
           <span className="truncate font-mono text-[13px] font-semibold text-text">
-            {basename(node.id)}
+            {displayLabel(node)}
           </span>
           {node.layer && (
             <span
@@ -134,8 +135,4 @@ function layerChipClass(layer: string): string {
   if (layer.includes("infra")) return "bg-accent-infra/20 text-accent-infra";
   if (layer.includes("domain")) return "bg-accent-domain/20 text-accent-domain";
   return "bg-muted/20 text-muted";
-}
-
-function basename(p: string): string {
-  return p.split("/").filter(Boolean).pop() ?? p;
 }

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { DataContract, NodeEntry } from "../types";
 import type { HighlightPolicy } from "../state/highlightPolicy";
+import { displayLabel } from "../state/labels";
 
 export interface MatrixProps {
   data: DataContract;
@@ -19,6 +20,8 @@ export interface MatrixProps {
   /** Fired when a populated cell is clicked. Diagonal and empty
    *  cells stay inert. */
   onEdgeClick?: (from: string, to: string) => void;
+  /** Cell edge in px; the canvas sizes it to the available width (#399). */
+  cellSize?: number;
 }
 
 /**
@@ -46,8 +49,11 @@ export function Matrix({
   onNodeDoubleClick,
   highlight,
   onEdgeClick,
+  cellSize = 14,
 }: MatrixProps) {
   const selectedEdge = highlight.selectedEdge;
+  const labelSize = cellSize >= 24 ? 11 : 9;
+  const headerHeight = cellSize >= 24 ? 110 : 80;
   const layout = useMemo(() => computeMatrixLayout(data), [data]);
 
   if (layout.nodes.length === 0) {
@@ -99,7 +105,7 @@ export function Matrix({
                 onClick={() => onNodeClick?.(n.id)}
                 onDoubleClick={() => onNodeDoubleClick?.(n.id)}
                 className="sticky top-0 z-10 cursor-pointer border-b border-r border-border bg-card-header p-0 text-muted transition-colors hover:bg-canvas/60 hover:text-text"
-                style={{ width: 14, height: 80 }}
+                style={{ width: cellSize, height: headerHeight }}
               >
                 <div
                   className="flex items-end justify-center"
@@ -109,7 +115,7 @@ export function Matrix({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  <span className="truncate text-[9px]">{basename(n.id)}</span>
+                  <span className="truncate" style={{ fontSize: labelSize }}>{displayLabel(n)}</span>
                 </div>
               </th>
             ))}
@@ -125,7 +131,7 @@ export function Matrix({
                 className="sticky left-0 z-10 cursor-pointer truncate border-b border-r border-border bg-card p-1.5 text-left text-[11px] text-text transition-colors hover:bg-canvas/60 hover:text-text"
                 style={{ maxWidth: 220, width: 220 }}
               >
-                {basename(row.id)}
+                {displayLabel(row)}
               </th>
               {layout.nodes.map((col, j) => {
                 const cell = layout.cells[i * layout.nodes.length + j];
@@ -150,8 +156,8 @@ export function Matrix({
                         : "border-border")
                     }
                     style={{
-                      width: 14,
-                      height: 14,
+                      width: cellSize,
+                      height: cellSize,
                       background: cellFill(cell, isDiagonal),
                       cursor: clickable ? "pointer" : "default",
                     }}
@@ -228,8 +234,4 @@ function cellFill(cell: MatrixCell | null, isDiagonal: boolean): string {
   // log-scale intensity 0.15 → 0.85 across weights 1 → 32.
   const alpha = Math.min(0.85, 0.15 + Math.log2(cell.weight + 1) * 0.18);
   return `rgb(var(--accent-domain) / ${alpha})`;
-}
-
-function basename(p: string): string {
-  return p.split("/").filter(Boolean).pop() ?? p;
 }

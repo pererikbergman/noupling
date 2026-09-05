@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && mv dist/index.html dist/explorer.html && rm -rf dist/samples",
     "preview": "vite preview",
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mts",
     "test:e2e": "playwright test --project=chromium tests/e2e/smoke.spec.ts",
     "test:e2e:android": "playwright test --project=chromium tests/e2e/android.spec.ts"
   },

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DataContract } from "../types";
 import type { EdgeAccent, HighlightPolicy } from "../state/highlightPolicy";
 import { computeLSMLayout, type LayerBand, type PositionedEdge, type PositionedNode } from "./layout";
@@ -34,6 +34,9 @@ export function LSM({
   const layerOverlay = highlight.layerOverlay;
   const layout = useMemo(() => computeLSMLayout(data), [data]);
   const [hovered, setHovered] = useState<string | null>(null);
+  // A drill or filter replaces the cards under the pointer; the old hover
+  // must not keep dimming the new ones (#405).
+  useEffect(() => setHovered(null), [data]);
 
   const directDeps = useMemo(() => {
     if (!hovered) return null;
@@ -209,8 +212,7 @@ function EdgePath({
         : 0.55;
   const baseWidth = 1 + Math.min(edge.weight, 4) * 0.4;
   const strokeWidth = isPriority ? baseWidth + 1.5 : baseWidth;
-  const midY = (edge.y1 + edge.y2) / 2;
-  const d = `M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`;
+  const d = edgePathD(edge);
   return (
     <g
       style={onClick ? { cursor: "pointer" } : undefined}
@@ -249,6 +251,39 @@ function EdgePath({
       )}
     </g>
   );
+}
+
+/**
+ * SVG path for a routed edge (#398). Adjacent-tier edges keep the
+ * S-curve; lane and arc routes follow their polyline with rounded
+ * corners so the eye can trace a long edge past the nodes it skips.
+ */
+function edgePathD(edge: PositionedEdge): string {
+  const pts = edge.points;
+  if (edge.kind === "direct" || pts.length < 3) {
+    const midY = (edge.y1 + edge.y2) / 2;
+    return `M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`;
+  }
+  const r = 10;
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = pts[i - 1];
+    const cur = pts[i];
+    const next = pts[i + 1];
+    // Stop `r` short of the corner, then quadratic-curve through it.
+    const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+    const outLen = Math.hypot(next.x - cur.x, next.y - cur.y);
+    const ri = Math.min(r, inLen / 2);
+    const ro = Math.min(r, outLen / 2);
+    const ax = cur.x - ((cur.x - prev.x) / (inLen || 1)) * ri;
+    const ay = cur.y - ((cur.y - prev.y) / (inLen || 1)) * ri;
+    const bx = cur.x + ((next.x - cur.x) / (outLen || 1)) * ro;
+    const by = cur.y + ((next.y - cur.y) / (outLen || 1)) * ro;
+    d += ` L ${ax} ${ay} Q ${cur.x} ${cur.y} ${bx} ${by}`;
+  }
+  const last = pts[pts.length - 1];
+  d += ` L ${last.x} ${last.y}`;
+  return d;
 }
 
 const ACCENT_STROKE: Record<EdgeAccent, string> = {
