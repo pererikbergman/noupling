@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
-import type { DataContract, IssueEntry, IssueKindId, NodeEntry } from "../types";
-import { buildSourceUrl } from "../sourceLink";
+import type { DataContract, IssueEntry, IssueKindId, NodeEntry } from "../shared/types";
+import { buildSourceUrl } from "../shared/sourceLink";
 import {
   cyclesInvolving,
   incomingOf,
@@ -9,7 +9,7 @@ import {
   outgoingOf,
   violationsFor,
 } from "../state/queries";
-import { KIND_DESCRIPTIONS } from "../verdictExplainers";
+import { KIND_DESCRIPTIONS } from "../shared/verdictExplainers";
 import { bandClass, subjectFull, subjectShort } from "./sidepanel/IssuesTab";
 
 export interface DetailsPanelProps {

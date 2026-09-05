@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DataContract } from "../types";
+import type { DataContract } from "../shared/types";
 import { totalIssueCount } from "../state/queries";
 import { FilesTab } from "./sidepanel/FilesTab";
 import { InfoTab } from "./sidepanel/InfoTab";

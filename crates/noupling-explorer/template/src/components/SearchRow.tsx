@@ -1,4 +1,4 @@
-import type { DataContract } from "../types";
+import type { DataContract } from "../shared/types";
 import type { SearchMode } from "../state/explorerState";
 
 export interface SearchRowProps {

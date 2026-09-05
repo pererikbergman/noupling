@@ -1,5 +1,4 @@
-import type { DataContract } from "../types";
-import type { Issue } from "../components/sidepanel/IssuesTab";
+import type { DataContract, IssueEntry } from "../shared/types";
 
 /**
  * Canvas-level focus driven by an Issue selection. `App.tsx` keeps
@@ -33,7 +32,7 @@ export interface IssueFocus {
  * scoping the view to `focus.lca` after consuming the value.
  */
 export function computeIssueFocus(
-  issue: Issue,
+  issue: IssueEntry,
   key: string,
   data: DataContract,
 ): IssueFocus {
@@ -63,7 +62,7 @@ export function computeIssueFocus(
  * an edge, every member of a ring, the well plus the modules pulling on
  * it, the directory of a directory-shaped Issue.
  */
-function participantsOf(it: Issue, _data: DataContract): string[] {
+function participantsOf(it: IssueEntry, _data: DataContract): string[] {
   return it.participants.length > 0 ? it.participants : [];
 }
 

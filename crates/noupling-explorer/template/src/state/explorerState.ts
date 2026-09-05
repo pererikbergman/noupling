@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { DataContract, NodeEntry } from "../types";
+import type { DataContract, NodeEntry } from "../shared/types";
 
 /**
  * Explorer-wide UI state. Single owner so every consumer (canvas, side

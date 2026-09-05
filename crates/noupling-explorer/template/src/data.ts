@@ -1,4 +1,4 @@
-import type { DataContract } from "./types";
+import type { DataContract } from "./shared/types";
 
 /**
  * Read the Data Contract from the inlined `<script id="noupling-data">` tag.

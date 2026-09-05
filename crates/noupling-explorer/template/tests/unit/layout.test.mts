@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeLSMLayout, type PositionedEdge, type PositionedNode } from "../../src/lsm/layout.ts";
-import type { DataContract, LayerEntry, NodeEntry } from "../../src/types.ts";
+import type { DataContract, LayerEntry, NodeEntry } from "../../src/shared/types.ts";
 
 // ── fixtures ──────────────────────────────────────────────────────────
 

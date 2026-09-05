@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { DataContract, ScoreContributor } from "../types";
+import type { DataContract, ScoreContributor } from "../shared/types";
 
 export interface ScoreDialogProps {
   data: DataContract;

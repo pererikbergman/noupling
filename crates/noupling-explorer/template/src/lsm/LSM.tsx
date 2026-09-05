@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DataContract } from "../types";
+import type { DataContract } from "../shared/types";
 import type { EdgeAccent, HighlightPolicy } from "../state/highlightPolicy";
 import { computeLSMLayout, type LayerBand, type PositionedEdge, type PositionedNode } from "./layout";
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { DataContract, EdgeEntry } from "../types";
+import type { DataContract, EdgeEntry } from "../shared/types";
 import type { EdgeSelection } from "../state/explorerState";
 import {
   cycleContainingEdge,

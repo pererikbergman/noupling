@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { homeScope, clampScope } from "../../src/state/explorerState.ts";
-import { displayLabel, collapsedLabel } from "../../src/labels.ts";
-import type { DataContract, NodeEntry } from "../../src/types.ts";
+import { displayLabel, collapsedLabel } from "../../src/shared/labels.ts";
+import type { DataContract, NodeEntry } from "../../src/shared/types.ts";
 
 const node = (id: string, kind: NodeEntry["kind"], parent: string | null): NodeEntry =>
   ({ id, kind, parent, layer: null, metrics: {} });
