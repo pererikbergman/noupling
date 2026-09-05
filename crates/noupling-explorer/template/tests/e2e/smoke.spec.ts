@@ -114,6 +114,23 @@ test.describe("Explorer — acme-payments sample", () => {
     }
   });
 
+  test("Rules tab: one layer-order card for the whole stack, dependency rules show both globs (#404)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Rules')").click();
+    // Three layers used to produce three pairwise "may not depend on" rows.
+    const stack = page.locator("[data-testid='layer-order']");
+    await expect(stack).toHaveCount(1);
+    await expect(stack).toContainText("ui");
+    await expect(stack).toContainText("domain");
+    await expect(stack).toContainText("infra");
+    expect(await page.locator("text=/may not depend on layer/").count()).toBe(0);
+    // The explicit rule shows source and target on their own lines, untruncated.
+    const rule = page.locator("[data-testid='dependency-rule']").first();
+    await expect(rule.locator("[data-role='rule-from']")).toHaveText("**/ui/**");
+    await expect(rule.locator("[data-role='rule-to']")).toHaveText("**/infra/**");
+  });
+
   test("Composition surfaces LLM enrichment when the data carries an llm block (#280)", async ({
     page,
   }) => {
