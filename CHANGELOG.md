@@ -7,13 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-05
+
+**The Explorer earns its keep, and the analyzer stops contradicting itself.** A visual review of the Explorer on noupling's own code produced nine tickets; all are fixed here, and the Force view is gone. Five analyzer bugs that made scores and Issues depend on things they should not (pipeline order, the coverage threshold, monorepo mode, class-only abstractness, parent/child stability) are fixed. noupling now audits itself at 100.0 with zero violations.
+
 ### Upgrade notes
 
+Work through these top to bottom after upgrading.
+
+1. **One score formula.** Every project is scored on TRI: layer filtering decides which violations count, then `Score = 100 × (1 − TRI / (modules × max_weight))`. Projects with declared or inferred layers used to be re-scored on the severity sum after the layer filter (#354); their score changes on upgrade, usually upward, and `--diff-base` runs follow the same formula. `reduced_sibling_weight` on `allow_sibling` layers now actually affects the score, and Gravity Wells / Red Flags are computed after layer filtering, so a sanctioned downward pair no longer feeds them. Re-check any `--fail-below` threshold.
+2. **Abstractness counts functions.** Module-level functions (TypeScript declared/arrow, Rust free `fn`, Kotlin top-level `fun`) are concrete (#413). Directories of React or Compose components stop being "100% abstract" Zone-of-Uselessness flags; directories of only functions that are also stable (`utils/`, `helpers/`) may gain a Zone-of-Pain flag they did not have. Baselined Zone Flags that disappear show as resolved.
+3. **Fewer Stability Violations.** A directory is no longer compared with its own ancestor or descendant (#414): `lib.rs → analyzer/`, `App.tsx → components/` and a package reading a leaf type from its parent are composition, not peer dependencies. Baselined ones show as resolved.
+4. **Monorepo scores change.** `noupling audit` with `modules` configured runs the same pipeline per module as `--module X` and `report --module X` (#357): risk weights, your layers and rules, inference. Module scores move from the severity sum to TRI and the summary now lists each module's Issue cards.
+5. **Layer inference is sticky.** The layers a snapshot infers are recorded on it (`snapshots.inferred_layers`), and the next audit keeps them while a fresh detection finds nothing and they still cover 15% of files (#355). A fresh database (CI runners) has no history and detects from scratch. Schema migration is automatic.
 - **Explorer Data Contract is `format_version` 3.** The `clusters` array is gone; nothing else in the embedded `noupling-data` JSON changed. Anything reading the contract that keyed on `clusters` or on `format_version == 2` needs updating.
+
+### Fixed
+
+- **Explorer** (#397–#405, #334, #335): opens at the first level of the tree that branches (a lone `crates/` no longer yields a one-node canvas) and labels collapsed chains `noupling-cli / src`; edges are routed around nodes in lanes beside the tiers, with fan-out slots and arcs for same-tier edges, and wide tiers wrap into rows; the canvas fits its content on every scope or view change, the zoom stack has a gutter, Matrix cells scale; Composition shows the focused participants and dims the rest (the filter was inverted); the LSM dims non-participants under issue focus and the banner says so; one set of numbers per scope (directory metrics come from the audit, files and LOC roll up, header says directories · files); critical and high band chips are coloured; the Rules tab shows the layer stack once instead of pairwise rows and never truncates a rule's target; filters keep the path to a deep match; polish (banner wording, scope-aware Info card, short subjects with full-path titles, container metrics, hover-dim reset).
+- **Score formula** (#354), **abstractness** (#413), **Stability Violations** (#414), **monorepo pipeline** (#357), **inference hysteresis** (#355): see the upgrade notes.
+- **noupling on itself** (#412): the Explorer template's `components ↔ state` cycle is broken and its layers are declared (`explorer-app` > `explorer-ui` > `explorer-views` > `explorer-state` > `explorer-shared`), so the repo's own audit is 100.0 with no violations and CI enforces the order.
 
 ### Removed
 
 - **Explorer force-directed cluster view** (#396): the Force view and the label-propagation clustering behind it. It showed nothing the LSM, Matrix or Composition views do not, its layout changed on every render, and it carried no Issue or Metric a user could act on. The top bar now offers LSM, Matrix and Composition; `d3-force` is no longer a template dependency.
+
+### Internal
+
+- Explorer template gains `pnpm test:unit` (node `--experimental-strip-types`) for layout and state, wired into CI; Node 22 in the template jobs. The Playwright smoke suite is at 38 specs.
 
 ## [0.9.1] - 2026-09-05
 
