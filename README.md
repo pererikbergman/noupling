@@ -9,6 +9,12 @@
     <img src="https://img.shields.io/badge/rust-2021-orange.svg" alt="Rust 2021">
     <img src="https://img.shields.io/badge/languages-16-green.svg" alt="16 Languages">
   </p>
+  <p align="center">
+    <a href="https://pererikbergman.github.io/noupling/"><strong>Website</strong></a> &middot;
+    <a href="https://pererikbergman.github.io/noupling/docs.html">Documentation</a> &middot;
+    <a href="https://pererikbergman.github.io/noupling/changelog.html">Changelog</a> &middot;
+    <a href="https://github.com/pererikbergman/noupling/releases">Releases</a>
+  </p>
 </p>
 
 ---
@@ -19,10 +25,12 @@ Most linters check code style. **noupling checks architecture.**
 
 It scans your project, builds a dependency graph from actual import statements, and quantifies how coupled your modules are using risk-weighted scoring (RRI/TRI). It finds:
 
-- **Coupling violations** - sibling modules that depend on each other, breaking architectural boundaries
-- **Circular dependencies** - dependency chains that form loops (A -> B -> C -> A), preventing independent development and testing
+- **Coupling Violations** - sibling modules that depend on each other, breaking architectural boundaries
+- **Cycles** - dependency rings (A -> B -> C -> A) that prevent independent development and testing
+- **Rule and Layer Violations** - imports your `dependency_rules` or layer order forbid
+- **Gravity Wells, Red Flags, Stability Violations, Zone Flags, Low Cohesion** - the structural smells behind them
 
-Every violation gets a **risk score (RRI)** based on dependency direction and density: upward and circular dependencies carry higher risk weights than downward ones. The result is a single **health score (0-100)** you can track over time and gate in CI.
+Every Issue is an **Issue card**: kind, severity band, subject, a one-sentence reason with its numbers, a recommendation, and its **score impact**. The same Issues, with the same wording, appear in every report format. Scoring Issues carry a **risk score (RRI)** based on dependency direction and density, and the result is a single **health score (0-100)** you can track over time and gate in CI.
 
 ### Key Features
 
@@ -324,7 +332,11 @@ Works with `//`, `#`, and `--` comment styles. Disable with `"allow_inline_suppr
 
    **Health Score** = `100 × (1 - TRI / (total_modules × max_weight))`
 
-See [docs/architecture.md](docs/architecture.md) for the full technical details.
+   > **Note (0.9.0):** the TRI formula applies when the project has no `layers`. When layers are configured or inferred, the layer-filtering step recomputes the score from the depth-based severity sum instead (`100 × (1 − Σ severity / total_modules)`), so a layered project's score is not comparable to an unlayered one's. Unifying the two is tracked in [#354](https://github.com/pererikbergman/noupling/issues/354). Either way, every scoring Issue's **score impact** sums to the points lost, so the breakdown each report prints adds up.
+
+5. **Report**: every format renders the same Issues from one audit — Issue-listing formats (text, json, xml, sonar, md, html, dashboard, pr, briefing, explorer) carry all nine kinds, graph formats (mermaid, dot, bundle) accent every edge-shaped Issue, and strategy trends the counts per kind.
+
+See [docs/architecture.md](docs/architecture.md) for the full technical details, [CONTEXT.md](CONTEXT.md) for the vocabulary, and the [documentation site](https://pererikbergman.github.io/noupling/docs.html) for the full reference.
 
 ---
 
