@@ -123,11 +123,9 @@ function EnrichmentBanner() {
       className="rounded-md border border-accent-ui/40 bg-accent-ui/10 p-3 text-[11px] leading-relaxed"
     >
       <strong className="text-accent-ui">Composition</strong> shows what
-      each module <em>is</em>. v1 displays derived metadata (name, file
-      count, dominant language, layer). LLM-generated purpose labels
-      light up automatically once you run the{" "}
-      <code className="font-mono">noupling-describe-modules</code> skill
-      against the codebase (#280).
+      each module <em>is</em>: name, file count, dominant language, layer.
+      When <code className="font-mono">.noupling/enrichment/modules.json</code>{" "}
+      carries a summary per module, it is shown on the card.
     </div>
   );
 }

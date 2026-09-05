@@ -10,7 +10,7 @@ import {
   violationsFor,
 } from "../state/queries";
 import { KIND_DESCRIPTIONS } from "../verdictExplainers";
-import { bandClass, subjectFull } from "./sidepanel/IssuesTab";
+import { bandClass, subjectFull, subjectShort } from "./sidepanel/IssuesTab";
 
 export interface DetailsPanelProps {
   data: DataContract;
@@ -194,6 +194,26 @@ export function DetailsPanel({
 function Metrics({ node }: { node: NodeEntry }) {
   const m = node.metrics;
   const entries: Array<[string, string]> = [];
+  // A container (only subdirectories) has no coupling metrics of its own —
+  // the audit computes Ca/Ce/I/cohesion per package — so list only what is
+  // defined for it (#405).
+  if (node.kind === "container") {
+    if (typeof m.file_count === "number") entries.push(["Files below", String(m.file_count)]);
+    if (typeof m.loc === "number" && m.loc > 0) entries.push(["LOC", String(m.loc)]);
+    if (entries.length === 0) return null;
+    return (
+      <Section title="Metrics">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
+          {entries.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-muted">{k}</dt>
+              <dd className="text-right font-mono text-text">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </Section>
+    );
+  }
   if (typeof m.afferent === "number") entries.push(["Ca", String(m.afferent)]);
   if (typeof m.efferent === "number") entries.push(["Ce", String(m.efferent)]);
   if (typeof m.instability === "number")
@@ -268,7 +288,12 @@ function AboutThisVerdict({ issues }: { issues: IssueEntry[] }) {
                       >
                         {i.severity}
                       </span>
-                      <span className="truncate font-mono text-[10px] text-muted">{subjectFull(i.subject)}</span>
+                      <span
+                        className="truncate font-mono text-[10px] text-muted"
+                        title={subjectFull(i.subject)}
+                      >
+                        {subjectShort(i.subject)}
+                      </span>
                       {i.baselined && (
                         <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted">
                           accepted
