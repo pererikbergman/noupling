@@ -179,8 +179,9 @@ pub enum Commands {
         /// pr        - Tight Markdown summary for posting as a PR comment.
         /// briefing  - Sprint planning Markdown report with top 10 ROI-ranked refactorings.
         /// strategy  - Multi-snapshot HTML trend report for executive review (use --last N).
-        /// all       - Generate every format above into .noupling/ in one command.
-        #[arg(long)]
+        /// explorer  - Self-contained interactive Explorer app (see --output, --editor, --title, --no-history).
+        /// all       - Generate every format above, explorer included, into .noupling/ in one command.
+        #[arg(long, verbatim_doc_comment)]
         format: String,
 
         /// Generate report for a specific module only (monorepo mode).

@@ -181,13 +181,17 @@ fn report_format_all_emits_files_for_each_format() {
 
     let dir = project.join(".noupling");
     // A representative subset of stable single-file formats. We don't
-    // enumerate all 12 outputs here to avoid coupling the test to the
+    // enumerate every output here to avoid coupling the test to the
     // exact format roster (markdown/html produce *directories*, not files).
+    // explorer.html and strategy.html are the two bespoke arms; `all`
+    // must include them because the help promises "every format" (#382).
     let expected = [
         "report.json",
         "report.xml",
         "report.dot",
         "noupling-sonar.json",
+        "strategy.html",
+        "explorer.html",
     ];
     for name in &expected {
         let path = dir.join(name);
