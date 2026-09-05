@@ -97,6 +97,20 @@ pub fn run(path: &str, diff_base: Option<&str>) -> anyhow::Result<()> {
     };
     snap_repo.save_meta(&snapshot.id, &scan_meta)?;
 
+    // Audit the fresh snapshot once so its score and per-kind Issue counts
+    // are on record for trends (#349), whether or not the user ever runs
+    // `audit` or `report`. Best-effort: a failure here is not a scan failure.
+    if let Ok(outcome) =
+        crate::audit_pipeline::AuditPipeline::new(project_path, &db, &scan_settings).run(
+            crate::audit_pipeline::PipelineOptions {
+                snapshot_id: Some(&snapshot.id),
+                ..Default::default()
+            },
+        )
+    {
+        crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &outcome.result);
+    }
+
     println!("Scan complete. Database: {}", db_path.display());
     Ok(())
 }

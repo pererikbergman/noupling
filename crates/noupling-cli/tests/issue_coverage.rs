@@ -112,7 +112,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("briefing", ALL_KINDS),
     ("mermaid", EDGE_SHAPED_KINDS),
     ("dot", EDGE_SHAPED_KINDS),
-    ("strategy", &[]),
+    ("strategy", ALL_KINDS),
     (
         "explorer",
         &["coupling_violation", "cycle", "gravity_well", "red_flag"],

@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Graph formats accent every edge-shaped Issue** (#348): `mermaid`, `dot` and `bundle` now draw every edge of a Cycle ring and every Coupling, Rule, Layer and Stability Violation edge with a distinct style per kind (mermaid: one arrow shape per kind plus `linkStyle` colours; dot: per-kind style/arrowhead/colour; bundle: `edge-kind-<kind>` CSS classes) and a legend. Baselined edges use a muted grey variant. Node-shaped Issues are not drawn. Previously all three accented only coupling and cycles.
 
+- **strategy trends Issue counts per kind** (#349): snapshots gain an `issue_kind_counts` column (additive migration, like `health_score`) recorded whenever a snapshot is audited — now also once at the end of `scan`, so a fresh snapshot has a record without running `audit`. The strategy report draws one line per kind ("Issues by Kind", with a clickable legend) next to the score line; snapshots taken before this change render as gaps marked "no record", never as zeros.
+
 ### Changed
 
 - **One audit per snapshot** (#341, ADR 0001): layer inference moved from `noupling-explorer` to `noupling-core` and into `audit_with_settings`; the audit result now records the effective `layers` and a `layers_auto_detected` flag. The Explorer no longer re-audits with its own settings, the text report prints a one-line "Layers: inferred from path names (…)" note, and the strategy report runs each snapshot through the same pipeline instead of its own ladder. Inferred layer globs now match the path segments that produced them (`**/{ui,screens}/**`) instead of the catalogue name (`**/presentation/**`), which matched nothing.

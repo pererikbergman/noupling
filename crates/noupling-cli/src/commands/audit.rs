@@ -128,9 +128,10 @@ pub fn run(
     result.violation_age =
         noupling_core::analyzer::compute_violation_age(&result.violations, &historical);
 
-    // Persist the score on the snapshot row so the Explorer's history
-    // scrubber (PRD §10.5) can render a trend over time.
-    let _ = snap_repo.save_health_score(&snapshot.id, result.score);
+    // Persist the score and per-kind Issue counts on the snapshot row so
+    // the Explorer's history scrubber and the strategy report can trend
+    // them without re-auditing.
+    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &result);
 
     print!("{}", crate::reporter::format_text(&result));
 

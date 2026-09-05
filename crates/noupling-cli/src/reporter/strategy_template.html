@@ -15,6 +15,11 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, s
 .headline {{ background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1px solid #bae6fd; border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 2rem; text-align: center; }}
 .headline h2 {{ font-size: 1.2rem; font-weight: 700; color: #0c4a6e; margin-bottom: 0.5rem; }}
 .headline .score {{ font-size: 2.5rem; font-weight: 800; color: #0284c7; }}
+.kind-legend {{ display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }}
+.kind-toggle {{ display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; padding: 0.2rem 0.55rem; border: 1px solid; border-radius: 999px; background: #fff; color: #334155; cursor: pointer; }}
+.kind-toggle.off {{ opacity: 0.35; }}
+.kind-toggle .dot {{ width: 8px; height: 8px; border-radius: 50%; display: inline-block; }}
+.kind-toggle .n {{ font-weight: 700; }}
 section {{ margin-bottom: 2.5rem; }}
 section h2 {{ font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }}
 .chart-box {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; }}
@@ -54,6 +59,16 @@ footer {{ text-align: center; font-size: 0.65rem; color: #cbd5e1; padding: 1rem;
     <h2>Score Trajectory</h2>
     <div class="chart-box">
         <div id="trajectory-chart"></div>
+    </div>
+</section>
+
+<!-- Issues by kind over time -->
+<section>
+    <h2>Issues by Kind</h2>
+    <div class="chart-box">
+        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.75rem">One line per Issue kind, counted when each snapshot was audited. Snapshots taken before per-kind counts were recorded show as gaps, not zeros. Click a legend entry to toggle its line.</p>
+        <div class="kind-legend" id="issue-kinds-legend"></div>
+        <div id="issue-kinds-chart"></div>
     </div>
 </section>
 
@@ -137,6 +152,57 @@ const tooltip = document.getElementById("tooltip");
     // Labels
     svg.append("text").attr("x", w / 2).attr("y", h - 5).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Snapshot");
     svg.append("text").attr("transform", "rotate(-90)").attr("x", -h / 2).attr("y", 12).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Health Score");
+}})();
+
+// ── Issues by kind over time ──
+(function() {{
+    const legend = document.getElementById("issue-kinds-legend");
+    const hidden = new Set();
+    const colorOf = Object.fromEntries(D.issue_kinds.map(k => [k.kind, k.color]));
+    legend.innerHTML = D.issue_kinds.map(k => {{
+        const latest = [...(D.issue_kind_series.find(s => s.kind === k.kind) || {{counts: []}}).counts].reverse().find(c => c !== null);
+        return `<button class="kind-toggle" data-kind="${{k.kind}}" style="border-color:${{k.color}}"><span class="dot" style="background:${{k.color}}"></span>${{k.kind_name}} <span class="n">${{latest === undefined ? "—" : latest}}</span></button>`;
+    }}).join("");
+
+    function draw() {{
+        const host = d3.select("#issue-kinds-chart");
+        host.selectAll("*").remove();
+        if (D.snapshots.length === 0) return;
+        const w = 1100, h = 280, pad = {{ top: 20, right: 30, bottom: 40, left: 50 }};
+        const svg = host.append("svg").attr("width", "100%").attr("height", h).attr("viewBox", `0 0 ${{w}} ${{h}}`);
+        const x = d3.scalePoint().domain(D.snapshots.map(s => s.id)).range([pad.left, w - pad.right]).padding(0.5);
+        const visible = D.issue_kind_series.filter(s => !hidden.has(s.kind));
+        const maxCount = d3.max(visible.flatMap(s => s.counts.filter(c => c !== null))) || 1;
+        const y = d3.scaleLinear().domain([0, maxCount]).nice().range([h - pad.bottom, pad.top]);
+        svg.append("g").attr("transform", `translate(0,${{h - pad.bottom}})`).call(d3.axisBottom(x)).selectAll("text").style("font-size", "10px");
+        svg.append("g").attr("transform", `translate(${{pad.left}},0)`).call(d3.axisLeft(y).ticks(5)).selectAll("text").style("font-size", "10px");
+        // Shade snapshots with no per-kind record so gaps read as "unknown".
+        D.snapshots.forEach((s, i) => {{
+            if (D.issue_kind_series.every(ser => ser.counts[i] === null)) {{
+                svg.append("rect").attr("x", x(s.id) - 12).attr("y", pad.top).attr("width", 24).attr("height", h - pad.top - pad.bottom).attr("fill", "#e2e8f0").attr("fill-opacity", 0.6);
+                svg.append("text").attr("x", x(s.id)).attr("y", pad.top + 10).attr("text-anchor", "middle").style("font-size", "9px").style("fill", "#94a3b8").text("no record");
+            }}
+        }});
+        visible.forEach(ser => {{
+            const pts = ser.counts.map((c, i) => ({{ id: D.snapshots[i].id, ts: D.snapshots[i].timestamp, c }}));
+            const line = d3.line().defined(d => d.c !== null).x(d => x(d.id)).y(d => y(d.c)).curve(d3.curveMonotoneX);
+            svg.append("path").datum(pts).attr("fill", "none").attr("stroke", colorOf[ser.kind]).attr("stroke-width", 2).attr("d", line);
+            svg.selectAll(`circle.k-${{ser.kind}}`).data(pts.filter(d => d.c !== null)).join("circle")
+                .attr("class", `k-${{ser.kind}}`).attr("cx", d => x(d.id)).attr("cy", d => y(d.c)).attr("r", 3.5).attr("fill", colorOf[ser.kind])
+                .on("mouseover", (e, d) => {{ tooltip.innerHTML = `<strong>${{ser.kind_name}}</strong><br>${{d.id}} · ${{d.ts}}<br>${{d.c}} issue${{d.c === 1 ? "" : "s"}}`; tooltip.style.opacity = 1; }})
+                .on("mousemove", e => {{ tooltip.style.left = (e.clientX + 10) + "px"; tooltip.style.top = (e.clientY - 10) + "px"; }})
+                .on("mouseout", () => {{ tooltip.style.opacity = 0; }});
+        }});
+        svg.append("text").attr("x", w / 2).attr("y", h - 5).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Snapshot");
+        svg.append("text").attr("transform", "rotate(-90)").attr("x", -h / 2).attr("y", 12).attr("text-anchor", "middle").style("font-size", "10px").style("fill", "#94a3b8").text("Issues");
+    }}
+    legend.querySelectorAll(".kind-toggle").forEach(btn => btn.addEventListener("click", () => {{
+        const k = btn.dataset.kind;
+        if (hidden.has(k)) hidden.delete(k); else hidden.add(k);
+        btn.classList.toggle("off", hidden.has(k));
+        draw();
+    }}));
+    draw();
 }})();
 
 // ── Velocity ──

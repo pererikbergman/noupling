@@ -1,6 +1,6 @@
 //! Executive strategy report: multi-snapshot trends and trajectory.
 
-use noupling_core::analyzer::{audit_with_settings, AuditResult};
+use noupling_core::analyzer::{audit_with_settings, AuditResult, IssueKind};
 use noupling_core::core::{Dependency, Module, Snapshot};
 use noupling_core::settings::Settings;
 use noupling_core::storage::repository::{
@@ -19,6 +19,40 @@ pub struct StrategyData {
     pub risk_concentration: Vec<RiskModule>,
     pub headline: String,
     pub current_score: f64,
+    /// Every Issue kind, in canonical order, with its series colour.
+    pub issue_kinds: Vec<IssueKindMeta>,
+    /// One series per kind: a count per snapshot (same order as
+    /// `snapshots`), `null` where the snapshot predates per-kind counts.
+    pub issue_kind_series: Vec<IssueKindSeries>,
+}
+
+#[derive(Serialize)]
+pub struct IssueKindMeta {
+    pub kind: &'static str,
+    pub kind_name: &'static str,
+    pub color: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct IssueKindSeries {
+    pub kind: &'static str,
+    pub kind_name: &'static str,
+    pub counts: Vec<Option<usize>>,
+}
+
+/// Series colour per kind. Exhaustive so a new kind must pick one.
+fn kind_color(kind: IssueKind) -> &'static str {
+    match kind {
+        IssueKind::CouplingViolation => "#eab308",
+        IssueKind::Cycle => "#ef4444",
+        IssueKind::RuleViolation => "#dc2626",
+        IssueKind::LayerViolation => "#b91c1c",
+        IssueKind::GravityWell => "#8b5cf6",
+        IssueKind::RedFlag => "#db2777",
+        IssueKind::StabilityViolation => "#0ea5e9",
+        IssueKind::ZoneFlag => "#14b8a6",
+        IssueKind::LowCohesion => "#64748b",
+    }
 }
 
 #[derive(Serialize)]
@@ -145,6 +179,34 @@ pub fn generate_strategy_report(
     let headline = build_headline(&snapshot_points);
     let current_score = snapshot_points.last().map(|p| p.score).unwrap_or(0.0);
 
+    // Per-kind Issue counts come from what each snapshot recorded when it
+    // was audited (#349), not from the re-audit above: older snapshots
+    // cannot recompute type counts or the settings they were judged by.
+    // A snapshot without a record is a gap (`None`), never zero.
+    let recorded: Vec<Option<std::collections::BTreeMap<String, usize>>> = snapshots
+        .iter()
+        .map(|snap| snap_repo.get_issue_kind_counts(&snap.id).unwrap_or(None))
+        .collect();
+    let issue_kinds: Vec<IssueKindMeta> = IssueKind::ALL
+        .iter()
+        .map(|k| IssueKindMeta {
+            kind: k.id(),
+            kind_name: k.name(),
+            color: kind_color(*k),
+        })
+        .collect();
+    let issue_kind_series: Vec<IssueKindSeries> = IssueKind::ALL
+        .iter()
+        .map(|k| IssueKindSeries {
+            kind: k.id(),
+            kind_name: k.name(),
+            counts: recorded
+                .iter()
+                .map(|r| r.as_ref().map(|m| m.get(k.id()).copied().unwrap_or(0)))
+                .collect(),
+        })
+        .collect();
+
     let data = StrategyData {
         snapshots: snapshot_points,
         modules_trajectory,
@@ -152,6 +214,8 @@ pub fn generate_strategy_report(
         risk_concentration,
         headline,
         current_score,
+        issue_kinds,
+        issue_kind_series,
     };
     let json = serde_json::to_string(&data)?;
 
@@ -345,4 +409,94 @@ fn build_headline(points: &[SnapshotPoint]) -> String {
         n,
         if n == 1 { "" } else { "s" }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use noupling_core::analyzer::IssueKind;
+    use noupling_core::core::ModuleType;
+    use noupling_core::storage::Database;
+    use std::collections::BTreeMap;
+
+    fn module(id: &str, snap: &str, path: &str) -> Module {
+        Module {
+            id: id.into(),
+            snapshot_id: snap.into(),
+            parent_id: None,
+            name: path.rsplit('/').next().unwrap().into(),
+            path: path.into(),
+            module_type: ModuleType::File,
+            depth: 1,
+        }
+    }
+
+    /// Three snapshots: the oldest predates per-kind counts (a gap), the
+    /// two newer ones recorded them. Every kind gets a series; the gap
+    /// is `null`, never zero.
+    #[test]
+    fn strategy_draws_one_series_per_kind_with_gaps_for_pre_upgrade_snapshots() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".noupling")).unwrap();
+        let db = Database::open(&tmp.path().join(".noupling/history.db")).unwrap();
+        let snap_repo = SnapshotRepository::new(&db.conn);
+        let module_repo = ModuleRepository::new(&db.conn);
+        let dep_repo = DependencyRepository::new(&db.conn);
+
+        let mut ids = Vec::new();
+        for i in 0..3 {
+            let snap = snap_repo.create("/p").unwrap();
+            module_repo
+                .bulk_insert(&[module(&format!("m{i}"), &snap.id, "src/a/x.rs")])
+                .unwrap();
+            ids.push(snap.id);
+        }
+        let counts = |cycle: usize, low: usize| -> BTreeMap<String, usize> {
+            IssueKind::ALL
+                .iter()
+                .map(|k| {
+                    let n = match k {
+                        IssueKind::Cycle => cycle,
+                        IssueKind::LowCohesion => low,
+                        _ => 0,
+                    };
+                    (k.id().to_string(), n)
+                })
+                .collect()
+        };
+        snap_repo
+            .save_issue_kind_counts(&ids[1], &counts(2, 5))
+            .unwrap();
+        snap_repo
+            .save_issue_kind_counts(&ids[2], &counts(1, 4))
+            .unwrap();
+
+        let out = tmp.path().join("strategy.html");
+        generate_strategy_report(
+            &snap_repo,
+            &module_repo,
+            &dep_repo,
+            &Settings::default(),
+            10,
+            &out,
+        )
+        .unwrap();
+        let html = std::fs::read_to_string(&out).unwrap();
+        let start = html.find("const D = ").expect("data assignment") + "const D = ".len();
+        let end = start + html[start..].find(";\n").unwrap();
+        let data: serde_json::Value = serde_json::from_str(&html[start..end]).unwrap();
+
+        let kinds = data["issue_kinds"].as_array().expect("issue_kinds");
+        assert_eq!(kinds.len(), 9);
+        assert!(kinds.iter().any(|k| k["kind_name"] == "Zone Flag"));
+        let series = data["issue_kind_series"].as_array().expect("series");
+        let cycle = series.iter().find(|s| s["kind"] == "cycle").unwrap();
+        assert_eq!(cycle["counts"], serde_json::json!([null, 2, 1]));
+        let low = series.iter().find(|s| s["kind"] == "low_cohesion").unwrap();
+        assert_eq!(low["counts"], serde_json::json!([null, 5, 4]));
+        assert!(
+            html.contains("id=\"issue-kinds-chart\""),
+            "chart mount point"
+        );
+    }
 }

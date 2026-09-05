@@ -20,7 +20,7 @@ pub fn run(
 
     // The shared load → filter → audit → enrich → diff-filter ladder
     // is in the AuditPipeline (#304). This caller owns only the bits
-    // specific to `report` (save_health_score + format dispatch).
+    // specific to `report` (trend persistence + format dispatch).
     let pipeline =
         crate::audit_pipeline::AuditPipeline::new(Path::new(path), session.db(), &project_settings);
     let crate::audit_pipeline::PipelineOutcome {
@@ -35,10 +35,10 @@ pub fn run(
         baseline: use_baseline,
     })?;
 
-    // Persist the score on the snapshot row so the Explorer's history
-    // scrubber (PRD §10.5) can render a trend over time, even when the
-    // user only ever runs `noupling report` (and never `audit`).
-    let _ = snap_repo.save_health_score(&snapshot.id, result.score);
+    // Persist the score and per-kind Issue counts on the snapshot row so
+    // the Explorer's history scrubber and the strategy report can trend
+    // them, even when the user only ever runs `noupling report`.
+    crate::audit_pipeline::record_snapshot_trends(&snap_repo, &snapshot.id, &result);
 
     let report_dir = Path::new(path).join(".noupling");
     std::fs::create_dir_all(&report_dir)?;
