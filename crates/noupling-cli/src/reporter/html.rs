@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use noupling_core::analyzer::AuditResult;
+use noupling_core::analyzer::{AuditResult, Issue, IssueDetail, IssueKind};
 use noupling_core::core::Module;
 use noupling_core::settings::Settings;
 
@@ -21,22 +21,14 @@ struct DirNode {
     module_count: usize,
 }
 
+/// A violation (or informational coupling metric) filed under a
+/// directory. Since #346 the Issue cards carry the detail; this keeps
+/// only what the directory tables and the Coupling Metrics section read.
 #[derive(Debug, Clone)]
 struct ViolationInfo {
     from_module: String,
     to_module: String,
     severity: f64,
-    rri: f64,
-    direction: noupling_core::analyzer::DependencyDirection,
-    #[allow(dead_code)]
-    weight: usize,
-    is_circular: bool,
-    #[allow(dead_code)]
-    circular_direction: Option<String>,
-    cycle_path: Vec<String>,
-    cycle_hop_files: Vec<(String, String, i32)>,
-    cycle_order: usize,
-    cycle_hop_counts: Vec<usize>,
 }
 
 struct ReportData {
@@ -50,11 +42,15 @@ struct ReportData {
     total_xs: usize,
     score_green: f64,
     score_yellow: f64,
-    critical_severity: f64,
     abstractness: Vec<noupling_core::analyzer::AbstractnessMetric>,
     instability: Vec<noupling_core::analyzer::InstabilityMetric>,
-    stability_violations: Vec<noupling_core::analyzer::StabilityViolation>,
     distance: Vec<noupling_core::analyzer::DistanceMetric>,
+    /// Every Issue in `issues()` order; the root page lists them all.
+    issues: Vec<Issue>,
+    /// Indices into `issues`, keyed by the directory each Issue is anchored
+    /// under (`Issue::anchor_dir`, falling back to the root).
+    issues_per_dir: BTreeMap<String, Vec<usize>>,
+    baseline_applied: bool,
 }
 
 /// Generate static HTML report files in the given output directory.
@@ -193,15 +189,6 @@ fn build_report_data(
         dir.files.sort();
     }
 
-    // Count circular dependency directions for direction indicator
-    let mut circular_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
-    for v in &result.violations {
-        if v.is_circular {
-            let key = (v.dir_a.clone(), v.dir_b.clone());
-            *circular_counts.entry(key).or_insert(0) += 1;
-        }
-    }
-
     // Assign violations to directories
     for violation in &result.violations {
         // For circular violations, find the common ancestor of ALL dirs in the cycle
@@ -212,45 +199,10 @@ fn build_report_data(
             find_common_parent(&violation.dir_a, &violation.dir_b)
         };
 
-        let circular_direction = if violation.is_circular {
-            let forward = circular_counts
-                .get(&(violation.dir_a.clone(), violation.dir_b.clone()))
-                .unwrap_or(&0);
-            let reverse = circular_counts
-                .get(&(violation.dir_b.clone(), violation.dir_a.clone()))
-                .unwrap_or(&0);
-            if forward < reverse {
-                Some(format!(
-                    "{} -> {} (likely wrong direction, fewer couplings)",
-                    short_name(&violation.dir_a),
-                    short_name(&violation.dir_b)
-                ))
-            } else if reverse < forward {
-                Some(format!(
-                    "{} -> {} (likely wrong direction, fewer couplings)",
-                    short_name(&violation.dir_b),
-                    short_name(&violation.dir_a)
-                ))
-            } else {
-                Some("equal coupling in both directions".to_string())
-            }
-        } else {
-            None
-        };
-
         let info = ViolationInfo {
             from_module: violation.from_module.clone(),
             to_module: violation.to_module.clone(),
             severity: violation.severity,
-            rri: violation.rri,
-            direction: violation.direction.clone(),
-            weight: violation.weight,
-            is_circular: violation.is_circular,
-            circular_direction,
-            cycle_path: violation.cycle_path.clone(),
-            cycle_hop_files: violation.cycle_hop_files.clone(),
-            cycle_order: violation.cycle_order,
-            cycle_hop_counts: violation.cycle_hop_counts.clone(),
         };
 
         if let Some(dir) = dirs.get_mut(&parent) {
@@ -265,15 +217,6 @@ fn build_report_data(
             from_module: cm.from_module.clone(),
             to_module: cm.to_module.clone(),
             severity: cm.severity,
-            rri: cm.rri,
-            direction: cm.direction.clone(),
-            weight: cm.weight,
-            is_circular: false,
-            circular_direction: None,
-            cycle_path: Vec::new(),
-            cycle_hop_files: Vec::new(),
-            cycle_order: 0,
-            cycle_hop_counts: Vec::new(),
         };
         if let Some(dir) = dirs.get_mut(&parent) {
             dir.coupling_metrics_here.push(info);
@@ -332,6 +275,18 @@ fn build_report_data(
         }
     }
 
+    // File every Issue under the deepest directory containing its subject;
+    // anchors outside the tree (or above the root) go to the root page.
+    let issues = result.issues();
+    let mut issues_per_dir: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (idx, issue) in issues.iter().enumerate() {
+        let mut anchor = issue.anchor_dir();
+        if !dirs.contains_key(&anchor) {
+            anchor = root_path.clone();
+        }
+        issues_per_dir.entry(anchor).or_default().push(idx);
+    }
+
     ReportData {
         dirs,
         root_path,
@@ -343,11 +298,12 @@ fn build_report_data(
         total_xs: result.total_xs,
         score_green: settings.thresholds.score_green,
         score_yellow: settings.thresholds.score_yellow,
-        critical_severity: settings.thresholds.critical_severity,
         abstractness: result.abstractness.clone(),
         instability: result.instability.clone(),
-        stability_violations: result.stability_violations.clone(),
         distance: result.distance.clone(),
+        issues,
+        issues_per_dir,
+        baseline_applied: result.baseline.is_some(),
     }
 }
 
@@ -429,16 +385,6 @@ fn find_common_parent(path_a: &str, path_b: &str) -> String {
     }
 }
 
-fn short_name(path: &str) -> &str {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or(path)
-}
-
-/// Render a file path as `relative/path: file.ext` for display.
-/// `current_dir` is the directory of the page we're rendering — paths are
-/// shown relative to it so users can see where each file lives.
 fn module_label(path: &str, current_dir: &str) -> String {
     let p = std::path::Path::new(path);
     let file = p.file_name().and_then(|f| f.to_str()).unwrap_or(path);
@@ -468,29 +414,6 @@ fn module_label(path: &str, current_dir: &str) -> String {
             "<span class=\"module-tag\" title=\"{}\">{}</span> {}",
             parent, relative, file
         )
-    }
-}
-
-fn direction_badge(dir: &noupling_core::analyzer::DependencyDirection) -> &'static str {
-    match dir {
-        noupling_core::analyzer::DependencyDirection::Downward => {
-            "<span title=\"Downward dependency\" style=\"color:#22c55e\">\u{2193}</span>"
-        }
-        noupling_core::analyzer::DependencyDirection::Sibling => {
-            "<span title=\"Sibling dependency\" style=\"color:#eab308\">\u{2194}</span>"
-        }
-        noupling_core::analyzer::DependencyDirection::Upward => {
-            "<span title=\"Upward dependency\" style=\"color:#ef4444\">\u{2191}</span>"
-        }
-        noupling_core::analyzer::DependencyDirection::External => {
-            "<span title=\"External dependency\" style=\"color:#f97316\">\u{2197}</span>"
-        }
-        noupling_core::analyzer::DependencyDirection::Transitive => {
-            "<span title=\"Transitive dependency\" style=\"color:#a855f7\">\u{21dd}</span>"
-        }
-        noupling_core::analyzer::DependencyDirection::Circular => {
-            "<span title=\"Circular dependency\" style=\"color:#dc2626\">\u{21bb}</span>"
-        }
     }
 }
 
@@ -590,146 +513,21 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
 
     let mut violations_html = String::new();
 
-    // Separate circular and coupling violations
-    let circular_violations: Vec<&ViolationInfo> = dir
-        .violations_here
-        .iter()
-        .filter(|v| v.is_circular)
-        .collect();
-    let coupling_violations: Vec<&ViolationInfo> = dir
-        .violations_here
-        .iter()
-        .filter(|v| !v.is_circular)
-        .collect();
-
-    // Group circular by order
-    if !circular_violations.is_empty() {
-        let mut by_order: std::collections::BTreeMap<usize, Vec<&ViolationInfo>> =
-            std::collections::BTreeMap::new();
-        for v in &circular_violations {
-            by_order.entry(v.cycle_order).or_default().push(v);
-        }
-
-        violations_html.push_str("<h2>Circular Dependencies</h2>\n");
-        violations_html.push_str("<p class=\"section-hint\">Modules that depend on each other in a loop. These have the highest risk weight (10) because they break build isolation and make unit testing impossible. The <strong>RRI</strong> column shows the total risk for each cycle.</p>\n");
-        for (order, violations) in &by_order {
-            let label = match order {
-                2 => "Mutual Dependencies (Order 2)".to_string(),
-                3 => "Triangular Cycles (Order 3)".to_string(),
-                _ => format!("Cycles of Order {}", order),
-            };
-            violations_html.push_str(&format!(
-                "<h3>{} <small class=\"hop-file\">({} found)</small></h3>\n",
-                label,
-                violations.len()
-            ));
-            violations_html.push_str("<table class=\"violations\">\n");
-            violations_html.push_str("<tr><th title=\"Legacy severity metric\">Severity</th><th title=\"Relationship Risk Index = direction_weight × density\">RRI</th><th>Cycle</th></tr>\n");
-            for v in violations {
-                let sev_clr = "#ef4444";
-                // Render cycle inline
-                let cycle_content = render_cycle_details(v, data);
-                violations_html.push_str(&format!(
-                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{:.0}</td><td>{}</td></tr>\n",
-                    sev_clr, v.severity, v.rri, cycle_content,
-                ));
-            }
-            violations_html.push_str("</table>\n");
-        }
-    }
-
-    if !coupling_violations.is_empty() {
-        violations_html.push_str(&format!(
-            "<h2>Coupling Violations <small style=\"font-weight:400;color:#64748b\">({} total)</small></h2>\n",
-            coupling_violations.len()
-        ));
-
-        // Tier 1: Promoted (top 5 by severity, card layout)
-        let mut sorted = coupling_violations.clone();
-        sorted.sort_by(|a, b| {
-            b.severity
-                .partial_cmp(&a.severity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let promoted: Vec<&&ViolationInfo> = sorted.iter().take(5).collect();
-        let rest: Vec<&&ViolationInfo> = sorted.iter().skip(5).collect();
-
-        if !promoted.is_empty() {
-            violations_html.push_str("<div class=\"violations-promoted\">\n");
-            violations_html.push_str("<p class=\"section-hint\">Top 5 violations by severity &mdash; tackle these first for the biggest score impact. <strong>RRI</strong> = direction_weight &times; number_of_imports. <strong>Dir</strong> = dependency direction (&darr; downward, &harr; sibling, &uarr; upward, &#8635; circular).</p>\n");
-            for v in &promoted {
-                let sev_clr = if v.severity >= data.critical_severity {
-                    "#ef4444"
-                } else if v.severity >= 0.2 {
-                    "#eab308"
-                } else {
-                    "#6b7280"
-                };
-                let from_label = module_label(&v.from_module, dir_path);
-                let to_label = module_label(&v.to_module, dir_path);
-                let dir_badge = direction_badge(&v.direction);
-                let rri_label = if v.rri > 0.0 {
-                    format!(
-                        "<span style=\"color:#64748b;font-size:0.75rem\"> RRI:{:.0}</span>",
-                        v.rri
-                    )
-                } else {
-                    String::new()
-                };
-                violations_html.push_str(&format!(
-                    "<div class=\"violation-card\">
-                        <div class=\"violation-sev\" style=\"color:{}\">{:.2}{}</div>
-                        <div class=\"violation-body\">
-                            <div class=\"violation-title\">{} {} &rarr; {}</div>
-                            <div class=\"violation-detail\" title=\"{}\">{}</div>
-                            <div class=\"violation-detail\" title=\"{}\">{}</div>
-                        </div>
-                    </div>\n",
-                    sev_clr,
-                    v.severity,
-                    rri_label,
-                    dir_badge,
-                    from_label,
-                    to_label,
-                    v.from_module,
-                    v.from_module,
-                    v.to_module,
-                    v.to_module,
-                ));
-            }
-            violations_html.push_str("</div>\n");
-        }
-
-        // Show ALL remaining violations always (no hiding behind disclosure)
-        if !rest.is_empty() {
-            violations_html.push_str(&format!(
-                "<h3 style=\"font-size:0.95rem;color:#475569;margin:1.25rem 0 0.5rem\">All {} violations</h3>\n",
-                coupling_violations.len()
-            ));
-            violations_html.push_str("<table class=\"violations\">\n");
-            violations_html.push_str(
-                "<tr><th title=\"Legacy severity metric\">Severity</th><th title=\"Relationship Risk Index = direction_weight × number of imports\">RRI</th><th title=\"Dependency direction: ↓ downward, ↔ sibling, ↑ upward, ↻ circular\">Dir</th><th>From</th><th>To</th></tr>\n",
-            );
-            for v in &rest {
-                let sev_clr = if v.severity >= data.critical_severity {
-                    "#ef4444"
-                } else if v.severity >= 0.2 {
-                    "#eab308"
-                } else {
-                    "#6b7280"
-                };
-                let from_label = module_label(&v.from_module, dir_path);
-                let to_label = module_label(&v.to_module, dir_path);
-                let dir_badge = direction_badge(&v.direction);
-                violations_html.push_str(&format!(
-                    "<tr><td><span class=\"severity\" style=\"color:{}\">{:.2}</span></td><td>{:.0}</td><td>{}</td><td title=\"{}\">{}</td><td title=\"{}\">{}</td></tr>\n",
-                    sev_clr, v.severity, v.rri, dir_badge, v.from_module, from_label, v.to_module, to_label,
-                ));
-            }
-            violations_html.push_str("</table>\n");
-        }
-    }
+    // Issues: root lists every Issue with a kind-count summary; a
+    // directory page lists the Issues anchored under it.
+    let page_issues: Vec<&Issue> = if is_root {
+        data.issues.iter().collect()
+    } else {
+        data.issues_per_dir
+            .get(dir_path)
+            .map(|idxs| idxs.iter().map(|&i| &data.issues[i]).collect())
+            .unwrap_or_default()
+    };
+    violations_html.push_str(&render_issue_section(
+        &page_issues,
+        is_root,
+        data.baseline_applied,
+    ));
 
     // Coupling Metrics — informational sibling coupling pairs (not violations)
     if !dir.coupling_metrics_here.is_empty() {
@@ -810,21 +608,6 @@ fn render_page(data: &ReportData, dir_path: &str) -> String {
         violations_html.push_str("</table>\n");
     }
 
-    // Root-page only: Stable Dependencies Principle violations
-    if is_root && !data.stability_violations.is_empty() {
-        violations_html.push_str("<h2>Stability Violations</h2>\n");
-        violations_html.push_str("<p class=\"section-hint\">Martin's Stable Dependencies Principle: a more-stable directory (lower I) should not depend on a less-stable one (higher I). Stability should flow inward.</p>\n");
-        violations_html.push_str("<table>\n");
-        violations_html.push_str("<tr><th>From</th><th class=\"center\">I(from)</th><th>To</th><th class=\"center\">I(to)</th></tr>\n");
-        for v in data.stability_violations.iter().take(20) {
-            violations_html.push_str(&format!(
-                "<tr><td>{}</td><td class=\"center\">{:.2}</td><td>{}</td><td class=\"center\">{:.2}</td></tr>\n",
-                v.from_dir, v.from_instability, v.to_dir, v.to_instability,
-            ));
-        }
-        violations_html.push_str("</table>\n");
-    }
-
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -876,6 +659,23 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
 .score-hint {{ font-size: 0.75rem; color: #64748b; margin-top: 0.5rem; line-height: 1.4; }}
 .info-icon {{ color: #94a3b8; font-size: 0.7rem; cursor: help; margin-left: 0.15rem; }}
 .summary-card[title] {{ cursor: help; }}
+.issue-card {{ background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #94a3b8; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.6rem; }}
+.issue-card.band-critical {{ border-left-color: #dc2626; }}
+.issue-card.band-high {{ border-left-color: #f97316; }}
+.issue-card.band-medium {{ border-left-color: #eab308; }}
+.issue-card.band-low {{ border-left-color: #94a3b8; }}
+.issue-card.baselined {{ opacity: 0.6; }}
+.issue-title {{ font-weight: 600; font-size: 0.95rem; }}
+.issue-title code {{ font-weight: 500; font-size: 0.85rem; color: #334155; }}
+.band {{ display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; padding: 0.1rem 0.4rem; border-radius: 3px; color: #fff; background: #94a3b8; margin-right: 0.4rem; vertical-align: middle; }}
+.band-critical {{ background: #dc2626; }}
+.band-high {{ background: #f97316; }}
+.band-medium {{ background: #eab308; }}
+.band-low {{ background: #94a3b8; }}
+.issue-extra {{ font-size: 0.8rem; color: #64748b; margin-top: 0.2rem; }}
+.issue-reason, .issue-recommendation, .issue-impact {{ font-size: 0.85rem; margin-top: 0.3rem; }}
+.issue-reason strong, .issue-recommendation strong, .issue-impact strong {{ color: #475569; }}
+.baselined-tag {{ font-size: 0.7rem; color: #64748b; margin-left: 0.4rem; font-weight: 500; }}
 .violation-card {{ display: flex; align-items: center; gap: 1rem; background: #fff; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }}
 .violation-sev {{ font-weight: 800; font-size: 1.05rem; min-width: 50px; text-align: right; }}
 .violation-body {{ flex: 1; font-size: 0.85rem; }}
@@ -940,77 +740,126 @@ details[open] summary.cycle-path::before {{ transform: rotate(90deg); }}
     )
 }
 
-fn render_cycle_details(v: &ViolationInfo, _data: &ReportData) -> String {
-    if v.cycle_path.is_empty() {
-        return String::new();
+/// The Issues section: heading with counts, kind-count table (root only),
+/// and one card per Issue in `issues()` order. The match on `IssueDetail`
+/// is exhaustive so a new kind fails to compile until handled.
+fn render_issue_section(issues: &[&Issue], is_root: bool, baseline_applied: bool) -> String {
+    let mut html = String::new();
+    if issues.is_empty() {
+        if is_root {
+            html.push_str("<h2>Issues <small style=\"font-weight:400;color:#64748b\">(0)</small></h2>\n<p class=\"section-hint\">No Issues found.</p>\n");
+        }
+        return html;
+    }
+    let baselined = issues.iter().filter(|i| i.baselined).count();
+    let counts = if baseline_applied {
+        format!(
+            "({} &middot; {} new &middot; {} baselined)",
+            issues.len(),
+            issues.len() - baselined,
+            baselined
+        )
+    } else {
+        format!("({})", issues.len())
+    };
+    html.push_str(&format!(
+        "<h2>Issues <small style=\"font-weight:400;color:#64748b\">{}</small></h2>\n",
+        counts
+    ));
+    html.push_str("<p class=\"section-hint\">Every Issue the audit found, in canonical order: severity band, then kind, then subject. Each card says why it exists and what to do.</p>\n");
+
+    if is_root {
+        html.push_str("<table style=\"margin-bottom:1rem\">\n<tr><th>Kind</th><th class=\"center\">Count</th></tr>\n");
+        for kind in IssueKind::ALL {
+            let n = issues.iter().filter(|i| i.kind() == kind).count();
+            if n > 0 {
+                html.push_str(&format!(
+                    "<tr><td>{}</td><td class=\"center\">{}</td></tr>\n",
+                    kind, n
+                ));
+            }
+        }
+        html.push_str("</table>\n");
     }
 
-    // Short cycle display with file names
-    let mut hops = String::new();
-    for (i, dir) in v.cycle_path.iter().enumerate() {
-        if i > 0 {
-            hops.push_str(" &#8594; ");
-        }
-        let dir_short = std::path::Path::new(dir)
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or(dir);
-        hops.push_str(&format!("<strong title=\"{}\">{}</strong>", dir, dir_short));
-        if i < v.cycle_hop_files.len() {
-            let (from_file, _, _) = &v.cycle_hop_files[i];
-            let file_short = std::path::Path::new(from_file)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(from_file);
-            hops.push_str(&format!(
-                " <small class=\"hop-file\">({})</small>",
-                file_short
-            ));
-        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-            let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-            let file_short = std::path::Path::new(to_file)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(to_file);
-            hops.push_str(&format!(
-                " <small class=\"hop-file\">({})</small>",
-                file_short
-            ));
-        }
-    }
-
-    // Full path details — one line per hop with XS count
-    let mut full_paths = String::new();
-    for (i, dir) in v.cycle_path.iter().enumerate() {
-        let dir_short = std::path::Path::new(dir)
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or(dir);
-        let xs_label = if i < v.cycle_hop_counts.len() {
-            let count = v.cycle_hop_counts[i];
-            format!(" <small class=\"hop-file\">(XS {})</small>", count)
-        } else {
-            String::new()
+    for issue in issues {
+        let band = issue.severity().name();
+        let extra: Option<String> = match &issue.detail {
+            IssueDetail::CouplingViolation(v) => Some(format!(
+                "{} &lt;&gt; {} &mdash; depth {}, line {}",
+                esc(&v.dir_a),
+                esc(&v.dir_b),
+                v.depth,
+                v.line_number
+            )),
+            IssueDetail::Cycle(v) => v
+                .weakest_link
+                .as_ref()
+                .map(|wl| format!("Weakest link: {}", esc(wl))),
+            IssueDetail::RuleViolation(r) => Some(format!("line {}", r.line_number)),
+            IssueDetail::LayerViolation(l) => Some(format!(
+                "{} &rarr; {} (line {})",
+                esc(&l.from_layer),
+                esc(&l.to_layer),
+                l.line_number
+            )),
+            IssueDetail::GravityWell(g) => Some(format!(
+                "RRI {:.0} across {} relationships",
+                g.total_rri, g.relationship_count
+            )),
+            IssueDetail::RedFlag(f) => Some(format!("RRI {:.0}", f.rri)),
+            IssueDetail::StabilityViolation(s) => Some(format!(
+                "I={:.2} &rarr; I={:.2}",
+                s.from_instability, s.to_instability
+            )),
+            IssueDetail::ZoneFlag(d) => Some(format!(
+                "D={:.2} (A={:.2}, I={:.2})",
+                d.distance, d.abstractness, d.instability
+            )),
+            IssueDetail::LowCohesion(c) => Some(format!(
+                "{} children, {} internal deps",
+                c.n_children, c.internal_deps
+            )),
         };
-        if i < v.cycle_hop_files.len() {
-            let (from_file, _, _) = &v.cycle_hop_files[i];
-            full_paths.push_str(&format!(
-                "<strong>{}</strong>: {} &#8594;{}<br>",
-                dir_short, from_file, xs_label
-            ));
-        } else if i == v.cycle_path.len() - 1 && !v.cycle_hop_files.is_empty() {
-            let (_, to_file, _) = &v.cycle_hop_files[v.cycle_hop_files.len() - 1];
-            full_paths.push_str(&format!("<strong>{}</strong>: {}<br>", dir_short, to_file));
-        } else {
-            full_paths.push_str(&format!("<strong>{}</strong><br>", dir_short));
+        html.push_str(&format!(
+            "<div class=\"issue-card band-{band}{baselined}\">\n  <div class=\"issue-title\"><span class=\"band band-{band}\">{band_upper}</span> {kind}: <code>{subject}</code>{tag}</div>\n",
+            band = band,
+            band_upper = band.to_uppercase(),
+            baselined = if issue.baselined { " baselined" } else { "" },
+            kind = issue.kind(),
+            subject = esc(&issue.subject().to_string()),
+            tag = if issue.baselined {
+                "<span class=\"baselined-tag\">baselined</span>"
+            } else {
+                ""
+            },
+        ));
+        if let Some(extra) = extra {
+            html.push_str(&format!("  <div class=\"issue-extra\">{}</div>\n", extra));
         }
+        html.push_str(&format!(
+            "  <div class=\"issue-reason\"><strong>Reason:</strong> {}</div>\n  <div class=\"issue-recommendation\"><strong>Recommendation:</strong> {}</div>\n",
+            esc(&issue.reason()),
+            esc(&issue.recommendation()),
+        ));
+        let impact = issue.score_impact();
+        html.push_str(&format!(
+            "  <div class=\"issue-impact\"><strong>Score impact:</strong> {}</div>\n</div>\n",
+            if impact > 0.0 {
+                format!("{:.1}", impact)
+            } else {
+                "0 (does not score)".to_string()
+            }
+        ));
     }
+    html
+}
 
-    format!(
-        "<details><summary class=\"cycle-path\">{}</summary>\
-        <div class=\"full-paths\">{}</div></details>",
-        hops, full_paths
-    )
+fn esc(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn build_breadcrumbs(current_path: &str, root_path: &str) -> String {
@@ -1077,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn html_root_renders_stability_violations_section() {
+    fn html_root_renders_stability_violation_as_an_issue_card() {
         use noupling_core::analyzer::StabilityViolation;
         let modules = vec![make_module("a", "src/api/mod.rs")];
         let result = AuditResultBuilder::new()
@@ -1093,9 +942,101 @@ mod tests {
         let settings = Settings::default();
         generate_html_report(&modules, &result, "snap-sv", dir.path(), &settings).unwrap();
         let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
-        assert!(html.contains("Stability Violations"), "missing header");
-        assert!(html.contains("src/stable"), "missing from_dir");
-        assert!(html.contains("src/unstable"), "missing to_dir");
+        assert!(
+            html.contains("<h2>Issues <small"),
+            "missing Issues heading: {html}"
+        );
+        assert!(
+            html.contains("<span class=\"band band-medium\">MEDIUM</span> Stability Violation"),
+            "missing card header: {html}"
+        );
+        assert!(
+            html.contains("src/stable -&gt; src/unstable"),
+            "missing subject"
+        );
+        assert!(html.contains("class=\"issue-reason\""), "missing reason");
+        assert!(
+            html.contains("class=\"issue-recommendation\""),
+            "missing recommendation"
+        );
+        // Kind-count summary on the root page.
+        assert!(
+            html.contains("<td>Stability Violation</td><td class=\"center\">1</td>"),
+            "{html}"
+        );
+        // Old section is gone.
+        assert!(!html.contains("<h2>Stability Violations</h2>"));
+    }
+
+    /// Directory pages list only the Issues anchored under them; the root
+    /// lists everything.
+    #[test]
+    fn html_directory_pages_show_only_their_own_issues() {
+        use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};
+        let modules = vec![
+            make_module("a", "src/loose/x/x1.rs"),
+            make_module("b", "src/loose/y/y1.rs"),
+            make_module("c", "src/bag/a.rs"),
+            make_module("d", "src/bag/b.rs"),
+            make_module("e", "src/bag/c.rs"),
+        ];
+        let result = AuditResultBuilder::new()
+            .with_total_modules(5)
+            .with_violations(vec![CouplingViolation {
+                dir_a: "src/loose/x".to_string(),
+                dir_b: "src/loose/y".to_string(),
+                from_module: "src/loose/x/x1.rs".to_string(),
+                to_module: "src/loose/y/y1.rs".to_string(),
+                depth: 2,
+                severity: 0.33,
+                direction: noupling_core::analyzer::DependencyDirection::Sibling,
+                rri: 4.0,
+                is_circular: false,
+                cycle_path: Vec::new(),
+                cycle_hop_files: Vec::new(),
+                cycle_order: 0,
+                cycle_hop_counts: Vec::new(),
+                weakest_link: None,
+                break_cost: 0,
+                score_impact: 1.5,
+                line_number: 2,
+                weight: 1,
+            }])
+            .with_cohesion(vec![CohesionMetrics {
+                dir: "src/bag".into(),
+                kind: DirectoryKind::Package,
+                n_children: 3,
+                internal_deps: 0,
+                cohesion: Some(0.0),
+            }])
+            .build();
+        let dir = tempfile::tempdir().unwrap();
+        generate_html_report(
+            &modules,
+            &result,
+            "snap-d",
+            dir.path(),
+            &Settings::default(),
+        )
+        .unwrap();
+
+        let root = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
+        assert!(root.contains("Coupling Violation"), "{root}");
+        assert!(root.contains("Low Cohesion"), "{root}");
+
+        let loose = std::fs::read_to_string(dir.path().join("loose/index.html")).unwrap();
+        assert!(
+            loose.contains("band-high\">HIGH</span> Coupling Violation"),
+            "{loose}"
+        );
+        assert!(
+            !loose.contains("Low Cohesion"),
+            "bag's Issue leaked into loose: {loose}"
+        );
+
+        let bag = std::fs::read_to_string(dir.path().join("bag/index.html")).unwrap();
+        assert!(bag.contains("band-low\">LOW</span> Low Cohesion"), "{bag}");
+        assert!(!bag.contains("Coupling Violation"), "{bag}");
     }
 
     #[test]
@@ -1235,7 +1176,10 @@ mod tests {
         generate_html_report(&modules, &result, "snap-1", dir.path(), &settings).unwrap();
 
         let html = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
-        assert!(html.contains("Coupling Violations"));
-        assert!(html.contains("mod.rs"));
+        assert!(html.contains("Coupling Violation"), "{html}");
+        assert!(
+            html.contains("src/scanner/mod.rs -&gt; src/storage/mod.rs"),
+            "{html}"
+        );
     }
 }

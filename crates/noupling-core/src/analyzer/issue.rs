@@ -508,6 +508,34 @@ impl Issue {
         }
     }
 
+    /// The deepest directory that contains the whole subject: where a
+    /// directory-tree report (html, md) files this Issue. Directory-shaped
+    /// subjects anchor at themselves; file edges at the common parent of
+    /// the two files; rings at the common parent of every member.
+    pub fn anchor_dir(&self) -> String {
+        match &self.detail {
+            IssueDetail::CouplingViolation(v) => common_parent_dir(&[&v.dir_a, &v.dir_b]),
+            IssueDetail::Cycle(v) => {
+                let members: Vec<&str> = v.cycle_path.iter().map(String::as_str).collect();
+                common_parent_dir(&members)
+            }
+            IssueDetail::RuleViolation(r) => {
+                common_parent_dir(&[parent_dir(&r.from_module), parent_dir(&r.to_module)])
+            }
+            IssueDetail::LayerViolation(l) => {
+                common_parent_dir(&[parent_dir(&l.from_module), parent_dir(&l.to_module)])
+            }
+            IssueDetail::GravityWell(g) => parent_dir(&g.module_path).to_string(),
+            IssueDetail::RedFlag(f) => {
+                let parents: Vec<&str> = f.modules.iter().map(|m| parent_dir(m)).collect();
+                common_parent_dir(&parents)
+            }
+            IssueDetail::StabilityViolation(s) => common_parent_dir(&[&s.from_dir, &s.to_dir]),
+            IssueDetail::ZoneFlag(d) => d.dir.clone(),
+            IssueDetail::LowCohesion(c) => c.dir.clone(),
+        }
+    }
+
     /// Stable identity for the baseline: `<kind id>:<subject>`. Two Issues
     /// with the same fingerprint are the same Issue across audits.
     pub fn fingerprint(&self) -> String {
@@ -753,6 +781,29 @@ impl AuditResult {
         issues.sort_by(Issue::canonical_cmp);
         issues
     }
+}
+
+/// The directory a file path lives in (`""` for a bare file name).
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(idx) => &path[..idx],
+        None => "",
+    }
+}
+
+/// The deepest directory that is each of `dirs` or an ancestor of it.
+/// `""` when they share no prefix.
+fn common_parent_dir(dirs: &[&str]) -> String {
+    let Some(first) = dirs.first() else {
+        return String::new();
+    };
+    let mut common = first.to_string();
+    for dir in &dirs[1..] {
+        while !(common.is_empty() || *dir == common || dir.starts_with(&format!("{}/", common))) {
+            common = parent_dir(&common).to_string();
+        }
+    }
+    common
 }
 
 /// The index of the detected cycle that `v` is a hop of (in either
@@ -1035,6 +1086,42 @@ mod tests {
         assert!(
             (sum - 100.0).abs() < 1e-6,
             "sum {sum} must equal the 100 points lost"
+        );
+    }
+
+    // ── anchor_dir (#346) ──
+
+    #[test]
+    fn anchor_dir_is_the_deepest_directory_containing_the_whole_subject() {
+        let issues = fixture_issues();
+        let anchor_of = |kind: IssueKind, needle: &str| {
+            issues
+                .iter()
+                .find(|i| i.kind() == kind && i.subject().to_string().contains(needle))
+                .unwrap_or_else(|| panic!("no {kind} about {needle}"))
+                .anchor_dir()
+        };
+        // Edge between src/loose/x and src/loose/y lives under src/loose.
+        assert_eq!(
+            anchor_of(IssueKind::CouplingViolation, "src/loose/x"),
+            "src/loose"
+        );
+        // The ring alpha ↔ beta lives under src/ring.
+        assert_eq!(anchor_of(IssueKind::Cycle, "src/ring/alpha"), "src/ring");
+        // A file-level rule violation across top-level dirs anchors at src.
+        assert_eq!(anchor_of(IssueKind::RuleViolation, "src/plugins"), "src");
+        // Directory-shaped Issues anchor at the directory itself.
+        assert_eq!(anchor_of(IssueKind::LowCohesion, "src/bag"), "src/bag");
+        assert_eq!(
+            anchor_of(IssueKind::ZoneFlag, "src/concrete"),
+            "src/concrete"
+        );
+        // A gravity well is a file: its parent directory.
+        assert_eq!(anchor_of(IssueKind::GravityWell, "l1.rs"), "src/fused/left");
+        // Stability violation between src/stable and src/volatile: src.
+        assert_eq!(
+            anchor_of(IssueKind::StabilityViolation, "src/stable"),
+            "src"
         );
     }
 }
