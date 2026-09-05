@@ -285,7 +285,17 @@ export function CanvasArea({
         </div>
       )}
 
-      {viewMode === "lsm" && (
+      {lsmData.nodes.length === 0 && (
+        <p
+          role="status"
+          className={`m-0 ${CANVAS_GUTTER_CLASS} ${canvasTop} pr-4 text-[12px] text-muted`}
+        >
+          Nothing at this level matches the{" "}
+          {spotFilter === "all" ? "search" : "filter"}. Drill out, clear the
+          filter, or search for a path.
+        </p>
+      )}
+      {viewMode === "lsm" && lsmData.nodes.length > 0 && (
         <div className={`h-full w-full overflow-auto pr-4 pb-16 ${CANVAS_GUTTER_CLASS} ${canvasTop}`}>
           {/* The outer box takes the scaled size so the scroll extent matches
               what is drawn; the inner box carries the transform. */}

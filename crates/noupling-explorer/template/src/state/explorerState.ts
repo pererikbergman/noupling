@@ -354,7 +354,7 @@ export function compileSearch(term: string, mode: SearchMode): (n: NodeEntry) =>
 export function applySpotFilter(filter: SpotFilter, data: DataContract): Set<string> | null {
   if (filter === "all" || filter === "hide-violations") return null;
   if (filter === "in-cycles") {
-    return new Set(data.cycles.flatMap((c) => c.members));
+    return withAncestors(new Set(data.cycles.flatMap((c) => c.members)));
   }
   if (filter === "with-violations") {
     const ids = new Set<string>();
@@ -362,7 +362,7 @@ export function applySpotFilter(filter: SpotFilter, data: DataContract): Set<str
       ids.add(v.edge.from);
       ids.add(v.edge.to);
     }
-    return ids;
+    return withAncestors(ids);
   }
   if (filter === "gravity-wells") {
     // The well modules themselves — the first participant of each Gravity
@@ -371,7 +371,7 @@ export function applySpotFilter(filter: SpotFilter, data: DataContract): Set<str
     for (const i of data.issues) {
       if (i.kind === "gravity_well" && i.participants[0]) ids.add(i.participants[0]);
     }
-    return ids;
+    return withAncestors(ids);
   }
   // "clean" — nodes that participate in no Issue of any kind.
   const dirty = new Set<string>();
@@ -384,6 +384,23 @@ export function applySpotFilter(filter: SpotFilter, data: DataContract): Set<str
   const ids = new Set<string>();
   for (const n of data.nodes) if (!dirty.has(n.id)) ids.add(n.id);
   return ids;
+}
+
+/**
+ * A match deep in the tree is reached through its ancestors: keep every
+ * directory on the way, so a filter applied at a shallow scope shows the
+ * containers that lead to the match instead of an empty canvas (#402).
+ */
+function withAncestors(ids: Set<string>): Set<string> {
+  const out = new Set(ids);
+  for (const id of ids) {
+    let p = parentDir(id);
+    while (p !== "") {
+      out.add(p);
+      p = parentDir(p);
+    }
+  }
+  return out;
 }
 
 /**

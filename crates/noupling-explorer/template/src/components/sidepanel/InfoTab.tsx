@@ -258,7 +258,9 @@ function WelcomeCard({
         Welcome to {codebaseTitle}
       </h4>
       <p className="m-0 text-[12px] leading-relaxed text-muted">
-        {data.codebase.module_count} modules across {data.layers.length} layers.
+        {data.codebase.file_count} files in{" "}
+        {data.nodes.filter((n) => n.kind !== "file").length} directories across{" "}
+        {data.layers.length} layers.
         Health{" "}
         <ScoreButton score={data.health_score} onClick={onScoreClick} />
         .{" "}
@@ -299,8 +301,10 @@ function Stats({
             <strong data-bind={`summary_counts.by_kind.${k.kind}`}>{k.count}</strong>
           </StatRow>
         ))}
-      <StatRow label="Modules">
-        <strong data-bind="codebase.module_count">{data.codebase.module_count}</strong>
+      <StatRow label="Directories">
+        <strong data-bind="nodes.directories">
+          {data.nodes.filter((n) => n.kind !== "file").length}
+        </strong>
       </StatRow>
       <StatRow label="Files">
         <strong data-bind="codebase.file_count">{data.codebase.file_count}</strong>

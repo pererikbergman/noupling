@@ -51,8 +51,10 @@ export function SearchRow({
           </ModeBtn>
         </div>
       </div>
-      <span className="text-[12px] text-muted">
-        {plural(data.codebase.module_count, "module")} · {plural(data.codebase.file_count, "file")}
+      {/* Scoped counts: what the canvas can show at this level (#402). */}
+      <span className="text-[12px] text-muted" data-testid="scope-counts">
+        {plural(data.nodes.filter((n) => n.kind !== "file").length, "directory", "directories")} ·{" "}
+        {plural(data.codebase.file_count, "file")}
       </span>
     </div>
   );
@@ -80,6 +82,6 @@ function ModeBtn({
   );
 }
 
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+function plural(n: number, noun: string, nouns = `${noun}s`): string {
+  return `${n} ${n === 1 ? noun : nouns}`;
 }
