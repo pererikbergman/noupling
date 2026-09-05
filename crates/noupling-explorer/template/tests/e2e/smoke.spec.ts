@@ -341,6 +341,24 @@ test.describe("Explorer — acme-payments sample", () => {
     ).toBeVisible();
   });
 
+  test("focusing a gravity well shows the well and the modules pulling on it (#333)", async ({
+    page,
+  }) => {
+    await page.locator("button:has-text('Issues')").click();
+    await page.locator("[data-issue-kind='gravity_well']").click();
+    await expect(page.locator("text=Issue focused").first()).toBeVisible();
+    // The well (db.rs) and its contributors are all on the canvas — not one
+    // lonely card.
+    for (const name of ["db.rs", "CheckoutForm.tsx", "payment.rs"]) {
+      await expect(page.locator(`svg text:has-text('${name}')`).first()).toBeVisible();
+    }
+    const cards = page.locator("svg g[role='button']");
+    expect(await cards.count()).toBeGreaterThanOrEqual(2);
+    // The contributing edges are the highlighted (priority) ones.
+    const focused = page.locator("svg path[data-accent='minCut'][data-edge*='db.rs']");
+    expect(await focused.count()).toBeGreaterThanOrEqual(1);
+  });
+
   test("Levels tab: containers only, double-click drills shared scope (#274)", async ({
     page,
   }) => {
