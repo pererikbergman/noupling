@@ -81,19 +81,9 @@ const ALL_KINDS: &[&str] = &["*"];
 
 const EXPECTED: &[(&str, &[&str])] = &[
     ("text", ALL_KINDS),
-    (
-        "json",
-        &[
-            "coupling_violation",
-            "cycle",
-            "gravity_well",
-            "red_flag",
-            "stability_violation",
-            "zone_flag",
-        ],
-    ),
-    ("xml", &["coupling_violation", "cycle"]),
-    ("sonar", &["cycle"]),
+    ("json", ALL_KINDS),
+    ("xml", ALL_KINDS),
+    ("sonar", ALL_KINDS),
     ("md", &["coupling_violation", "cycle"]),
     (
         "html",

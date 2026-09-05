@@ -702,6 +702,159 @@ mod tests {
         assert!(!text.contains("Issues ("), "{text}");
     }
 
+    /// The shared `issues` array (ADR 0002): one Issue card per Issue,
+    /// header fields plus a per-kind `detail` payload.
+    #[test]
+    fn json_report_issues_array_carries_the_card_header_and_a_detail_payload() {
+        use noupling_core::analyzer::{CouplingViolation, DependencyDirection, StabilityViolation};
+        let cycle = CouplingViolation {
+            dir_a: "src/p".into(),
+            dir_b: "src/q".into(),
+            from_module: "src/p".into(),
+            to_module: "src/q".into(),
+            line_number: 0,
+            depth: 1,
+            weight: 0,
+            severity: 0.6,
+            direction: DependencyDirection::Circular,
+            rri: 20.0,
+            is_circular: true,
+            cycle_path: vec!["src/p".into(), "src/q".into(), "src/p".into()],
+            cycle_hop_files: vec![("src/p/a.rs".into(), "src/q/b.rs".into(), 3)],
+            cycle_order: 2,
+            cycle_hop_counts: vec![1, 3],
+            weakest_link: Some("src/p -> src/q (1 import)".into()),
+            break_cost: 1,
+            score_impact: 12.0,
+        };
+        let result = AuditResultBuilder::new()
+            .with_total_modules(5)
+            .with_violations(vec![cycle])
+            .with_stability_violations(vec![StabilityViolation {
+                from_dir: "src/stable".into(),
+                to_dir: "src/unstable".into(),
+                from_instability: 0.17,
+                to_instability: 0.83,
+            }])
+            .build();
+
+        let json = JsonReport::from_audit(&[], &result, "snap-i")
+            .to_json()
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let issues = parsed["issues"].as_array().expect("issues array");
+        assert_eq!(issues.len(), 2);
+
+        let cycle = &issues[0];
+        assert_eq!(cycle["kind"], "cycle");
+        assert_eq!(cycle["kind_name"], "Cycle");
+        assert_eq!(cycle["severity"], "critical");
+        assert_eq!(cycle["subject"]["type"], "ring");
+        assert_eq!(cycle["subject"]["members"][1], "src/q");
+        assert!(cycle["reason"].as_str().unwrap().contains("cheapest break"));
+        assert!(cycle["recommendation"]
+            .as_str()
+            .unwrap()
+            .starts_with("Cut the cycle"));
+        assert_eq!(cycle["score_impact"], 12.0);
+        assert_eq!(cycle["baselined"], false);
+        assert_eq!(cycle["fingerprint"], "cycle:src/p -> src/q -> src/p");
+        assert_eq!(cycle["detail"]["break_cost"], 1);
+        assert_eq!(cycle["detail"]["hops"][0]["from_file"], "src/p/a.rs");
+
+        let stability = &issues[1];
+        assert_eq!(stability["kind"], "stability_violation");
+        assert_eq!(stability["severity"], "medium");
+        assert_eq!(stability["subject"]["type"], "edge");
+        assert_eq!(stability["subject"]["from"], "src/stable");
+        assert_eq!(stability["score_impact"], 0.0);
+        assert_eq!(stability["detail"]["from_instability"], 0.17);
+    }
+
+    fn result_with_a_zone_flag_and_a_rule_violation() -> noupling_core::analyzer::AuditResult {
+        use noupling_core::analyzer::{DistanceMetric, RuleViolation, Zone};
+        AuditResultBuilder::new()
+            .with_total_modules(5)
+            .with_rule_violations(vec![RuleViolation {
+                from_module: "src/plugins/x.rs".into(),
+                to_module: "src/legacy/y.rs".into(),
+                line_number: 7,
+                message: "plugins must not reach into legacy".into(),
+            }])
+            .with_distance(vec![DistanceMetric {
+                dir: "src/concrete".into(),
+                abstractness: 0.0,
+                instability: 0.0,
+                distance: 1.0,
+                zone: Zone::Pain,
+            }])
+            .build()
+    }
+
+    /// XML derives its `<issues>` from the same cards as JSON.
+    #[test]
+    fn xml_report_lists_every_issue_from_the_shared_array() {
+        let xml = format_xml(
+            &[],
+            &result_with_a_zone_flag_and_a_rule_violation(),
+            "snap-x",
+        );
+        assert!(xml.contains("<issues count=\"2\">"), "{xml}");
+        assert!(
+            xml.contains("<issue kind=\"rule_violation\" severity=\"high\" baselined=\"false\" scoreImpact=\"0.0\""),
+            "{xml}"
+        );
+        assert!(
+            xml.contains(
+                "<subject type=\"edge\" from=\"src/plugins/x.rs\" to=\"src/legacy/y.rs\"/>"
+            ),
+            "{xml}"
+        );
+        assert!(xml.contains("<issue kind=\"zone_flag\""), "{xml}");
+        assert!(
+            xml.contains("<subject type=\"module\" path=\"src/concrete\"/>"),
+            "{xml}"
+        );
+        assert!(
+            xml.contains("<reason>src/concrete is in the Zone of Pain"),
+            "{xml}"
+        );
+        assert!(xml.contains("<recommendation>"), "{xml}");
+        assert!(
+            xml.contains(
+                "<detail abstractness=\"0.0\" distance=\"1.0\" instability=\"0.0\" zone=\"pain\"/>"
+            ),
+            "detail attributes: {xml}"
+        );
+    }
+
+    /// Sonar emits one generic issue per Issue, for every kind, with the
+    /// band mapped to a Sonar severity.
+    #[test]
+    fn sonar_report_emits_one_issue_per_issue_for_every_kind() {
+        let sonar = format_sonar(&result_with_a_zone_flag_and_a_rule_violation());
+        let parsed: serde_json::Value = serde_json::from_str(&sonar).unwrap();
+        let issues = parsed["issues"].as_array().unwrap();
+        assert_eq!(issues.len(), 2);
+        let rule = issues
+            .iter()
+            .find(|i| i["ruleId"] == "noupling:rule_violation")
+            .expect("rule violation issue");
+        assert_eq!(rule["severity"], "MAJOR");
+        assert_eq!(rule["primaryLocation"]["filePath"], "src/plugins/x.rs");
+        assert_eq!(rule["primaryLocation"]["textRange"]["startLine"], 7);
+        assert!(rule["primaryLocation"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Rule Violation: "));
+        let zone = issues
+            .iter()
+            .find(|i| i["ruleId"] == "noupling:zone_flag")
+            .expect("zone flag issue");
+        assert_eq!(zone["severity"], "MINOR");
+        assert_eq!(zone["primaryLocation"]["filePath"], "src/concrete");
+    }
+
     #[test]
     fn json_report_cohesion_array_includes_kind_and_nullable_cohesion() {
         use noupling_core::analyzer::{CohesionMetrics, DirectoryKind};
